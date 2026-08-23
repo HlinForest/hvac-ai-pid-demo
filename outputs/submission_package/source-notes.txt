@@ -1,0 +1,19 @@
+本次提交包的图表和数值均来自本地项目输出：
+- outputs/holdout_summary.csv
+- outputs/dynamic_metrics.csv
+- outputs/case_metrics.csv
+- outputs/dynamic_timeseries.csv
+- outputs/global_bayesian_tuning.csv
+- outputs/dynamic_comparison.png
+- outputs/case_studies.png
+- outputs/algorithm_reports/*_initial_cooling.png
+- outputs/algorithm_reports/*_setpoint_step.png
+- outputs/algorithm_reports/*_sustained_heat.png
+
+方法、训练与部署说明来自本地项目源码和说明文档：
+- hvac_pid/plant.py, hvac_pid/controllers.py, hvac_pid/tuning.py, hvac_pid/ai_controllers.py
+- embedded/hvac_pid_controller.hpp, embedded/testbench.cpp
+- modelica/HVACAI/PrecisionCabinetCooling.mo
+- outputs/algorithm_reports/*.html（每种算法均含三种独立工况、指标和代码）
+
+没有使用外部图片或外部研究结论。Modelica 基准模型文件存在，但当前提交中的数值结果来自 Python 2R2C/FOPDT 仿真；本机尚未运行 OpenModelica 交叉验证。

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "author": "HVAC AI-PID",
+  "editor": "wokwi",
+  "parts": [
+    { "type": "board-stm32-bluepill", "id": "mcu", "top": -20, "left": 40, "attrs": {} },
+    { "type": "wokwi-potentiometer", "id": "setpoint", "top": -160, "left": -130, "attrs": { "value": "512" } },
+    { "type": "wokwi-pushbutton", "id": "door", "top": 100, "left": -105, "attrs": { "color": "green", "label": "开门扰动", "bounce": "0" } },
+    { "type": "wokwi-led", "id": "pwm", "top": -130, "left": 270, "attrs": { "color": "blue", "label": "制冷PWM" } },
+    { "type": "wokwi-resistor", "id": "r1", "top": -65, "left": 270, "attrs": { "value": "220" } },
+    { "type": "wokwi-led", "id": "fallback", "top": 60, "left": 270, "attrs": { "color": "red", "label": "安全回退" } },
+    { "type": "wokwi-resistor", "id": "r2", "top": 125, "left": 270, "attrs": { "value": "220" } }
+  ],
+  "connections": [
+    [ "setpoint:VCC", "mcu:3V3.1", "red", [] ], [ "setpoint:GND", "mcu:GND.1", "black", [] ],
+    [ "setpoint:SIG", "mcu:A0", "green", [] ], [ "door:1.l", "mcu:B11", "green", [] ],
+    [ "door:2.r", "mcu:GND.3", "black", [] ], [ "mcu:B0", "pwm:A", "blue", [] ],
+    [ "pwm:C", "r1:1", "blue", [] ], [ "r1:2", "mcu:GND.2", "black", [] ],
+    [ "mcu:B1", "fallback:A", "red", [] ], [ "fallback:C", "r2:1", "red", [] ],
+    [ "r2:2", "mcu:GND.2", "black", [] ],
+    [ "mcu:A10", "$serialMonitor:TX", "green", [] ], [ "mcu:A9", "$serialMonitor:RX", "green", [] ]
+  ],
+  "serialMonitor": { "display": "plotter", "newline": "lf" },
+  "dependencies": {}
+}

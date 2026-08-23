@@ -1,0 +1,7 @@
+getVersion();
+getModelicaPath();
+getAvailableLibraries();
+loadModel(Modelica);
+getErrorString();
+loadModel(Buildings);
+getErrorString();

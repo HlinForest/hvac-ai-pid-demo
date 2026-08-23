@@ -1,0 +1,17 @@
+loadFile("M:/modelica_runtime/omlibrary/Complex.mo");
+loadFile("M:/modelica_runtime/omlibrary/ModelicaServices/package.mo");
+loadFile("M:/modelica_runtime/omlibrary/Modelica/package.mo");
+loadFile("M:/modelica/HVACAI/package.mo");
+loadFile("M:/modelica/HVACAI/PrecisionCabinetCooling.mo");
+checkModel(HVACAI.PrecisionCabinetCooling);
+cd("M:/outputs/modelica");
+simulate(
+  HVACAI.PrecisionCabinetCooling,
+  startTime=0,
+  stopTime=43200,
+  numberOfIntervals=7200,
+  tolerance=1e-8,
+  method="dassl",
+  outputFormat="csv",
+  fileNamePrefix="PrecisionCabinetCooling"
+);

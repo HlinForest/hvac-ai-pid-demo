@@ -1,0 +1,149 @@
+{"kind":"slide","id":"sl/z1mq45","slide":1,"title":"变频精密/机柜空调","textShapes":5}
+{"kind":"textbox","id":"sh/edwfyxkz","slide":1,"textChars":24,"textLines":2}
+{"kind":"shape","id":"sh/1gnytc3q","slide":1,"bbox":[42,236,128,6]}
+{"kind":"textbox","id":"sh/gfexk725","slide":1,"textChars":42,"textLines":1}
+{"kind":"textbox","id":"sh/3i5gvmlw","slide":1,"textChars":55,"textLines":2}
+{"kind":"shape","id":"sh/2hwzmhkb","slide":1,"bbox":[648,42,590,582]}
+{"kind":"shape","id":"sh/ojehor2h","slide":1,"bbox":[42,660,1196,1]}
+{"kind":"textbox","id":"sh/b6pgzmls","slide":1,"textChars":18,"textLines":1}
+{"kind":"textbox","id":"sh/q5gzqhk7","slide":1,"textChars":1,"textLines":1}
+{"kind":"image","id":"im/c7ip47m9","slide":1,"name":"","geometry":"roundRect","alt":"混合动态工况下的温度、压缩机指令和 Kp/Ki 中文曲线","bbox":[665,61,556,546]}
+{"kind":"notes","id":"nt/z1mq45","slide":1,"text":"开场：这不是直接控制真实空调，而是先在可重复的虚拟机房里比较控制器。右图三条通道依次对应温度跟踪、压缩机容量、在线 PI 增益。数据源：outputs/d..."}
+{"kind":"slide","id":"sl/a76kya","slide":2,"title":"先有直觉：这套仿真在解决什么？","textShapes":16}
+{"kind":"textbox","id":"sh/14r29cbq","slide":2,"textChars":15,"textLines":1}
+{"kind":"textbox","id":"sh/eh0jexsz","slide":2,"textChars":47,"textLines":1}
+{"kind":"shape","id":"sh/fi9k72tk","slide":2,"bbox":[42,198,570,190]}
+{"kind":"shape","id":"sh/sfi1cna9","slide":2,"bbox":[64,222,44,5]}
+{"kind":"textbox","id":"sh/dgr25sbu","slide":2,"textChars":7,"textLines":1}
+{"kind":"textbox","id":"sh/qdgjads3","slide":2,"textChars":18,"textLines":1}
+{"kind":"textbox","id":"sh/repk3ito","slide":2,"textChars":33,"textLines":1}
+{"kind":"shape","id":"sh/4by18nax","slide":2,"bbox":[656,198,582,190]}
+{"kind":"shape","id":"sh/5c721sbi","slide":2,"bbox":[678,222,44,5]}
+{"kind":"textbox","id":"sh/dcfyhw76","slide":2,"textChars":11,"textLines":1}
+{"kind":"textbox","id":"sh/sb6x8rql","slide":2,"textChars":18,"textLines":1}
+{"kind":"textbox","id":"sh/raxgfmp0","slide":2,"textChars":44,"textLines":1}
+{"kind":"shape","id":"sh/q9of6h8f","slide":2,"bbox":[42,421,570,190]}
+{"kind":"shape","id":"sh/58vydc7u","slide":2,"bbox":[64,445,44,5]}
+{"kind":"textbox","id":"sh/47mx4rq9","slide":2,"textChars":9,"textLines":1}
+{"kind":"textbox","id":"sh/36dgbmpo","slide":2,"textChars":21,"textLines":1}
+{"kind":"textbox","id":"sh/il4f2h8j","slide":2,"textChars":41,"textLines":1}
+{"kind":"shape","id":"sh/hkvy9c7y","slide":2,"bbox":[656,421,582,190]}
+{"kind":"shape","id":"sh/gjmx07qd","slide":2,"bbox":[678,445,44,5]}
+{"kind":"textbox","id":"sh/8zqpcb25","slide":2,"textChars":7,"textLines":1}
+{"kind":"textbox","id":"sh/t0jq5gjq","slide":2,"textChars":19,"textLines":1}
+{"kind":"textbox","id":"sh/6x87a1kf","slide":2,"textChars":34,"textLines":1}
+{"kind":"shape","id":"sh/7yho3610","slide":2,"bbox":[42,660,1196,1]}
+{"kind":"textbox","id":"sh/kbqp8r29","slide":2,"textChars":18,"textLines":1}
+{"kind":"textbox","id":"sh/lcz61w3u","slide":2,"textChars":1,"textLines":1}
+{"kind":"notes","id":"nt/a76kya","slide":2,"text":"不需要先记住 2R2C 或 FOPDT 名词。核心直觉是：房间与墙体储热、空调有迟滞，扰动一直存在；所以控制算法必须在速度、稳态误差和机械平稳性之间取平衡..."}
+{"kind":"slide","id":"sl/txeixw","slide":3,"title":"方法 1/5｜经典固定参数","textShapes":12}
+{"kind":"textbox","id":"sh/ni5oj25c","slide":3,"textChars":13,"textLines":1}
+{"kind":"textbox","id":"sh/8je5s76x","slide":3,"textChars":19,"textLines":1}
+{"kind":"textbox","id":"sh/94n6lcni","slide":3,"textChars":45,"textLines":1}
+{"kind":"textbox","id":"sh/a5gnuho3","slide":3,"textChars":4,"textLines":1}
+{"kind":"shape","id":"sh/v6ponm5o","slide":3,"bbox":[42,255,500,3]}
+{"kind":"textbox","id":"sh/w7y5wrm9","slide":3,"textChars":52,"textLines":3}
+{"kind":"textbox","id":"sh/x876pwne","slide":3,"textChars":4,"textLines":1}
+{"kind":"shape","id":"sh/i9g7yh4z","slide":3,"bbox":[42,432,500,2]}
+{"kind":"textbox","id":"sh/japorm5k","slide":3,"textChars":47,"textLines":3}
+{"kind":"shape","id":"sh/ry9g3mpo","slide":3,"bbox":[42,558,510,72]}
+{"kind":"textbox","id":"sh/qx0zuho3","slide":3,"textChars":26,"textLines":1}
+{"kind":"shape","id":"sh/d0ry5w7u","slide":3,"bbox":[610,210,628,350]}
+{"kind":"textbox","id":"sh/3upgz2pc","slide":3,"textChars":8,"textLines":1}
+{"kind":"textbox","id":"sh/itgzqxor","slide":3,"textChars":55,"textLines":1}
+{"kind":"shape","id":"sh/5w7y1c7i","slide":3,"bbox":[42,660,1196,1]}
+{"kind":"textbox","id":"sh/4vyhs76x","slide":3,"textChars":18,"textLines":1}
+{"kind":"textbox","id":"sh/nqtgb6pw","slide":3,"textChars":1,"textLines":1}
+{"kind":"image","id":"im/jyhgfa50","slide":3,"name":"","geometry":"roundRect","alt":"Z-N 在初次快速降温工况下的温度、PWM、Kp Ki 曲线","bbox":[628,224,592,322]}
+{"kind":"notes","id":"nt/txeixw","slide":3,"text":"Z-N 的 Kp、Ki 曲线平直不是漏画。它在每个工况开始前完成整定，运行中使用固定 PI。前两工况的公式结果被安全上限截住，因此参数相同；完整公式前后值..."}
+{"kind":"slide","id":"sl/af5zru","slide":4,"title":"方法 2/5｜经典固定参数","textShapes":12}
+{"kind":"textbox","id":"sh/98rutkzy","slide":4,"textChars":13,"textLines":1}
+{"kind":"textbox","id":"sh/ml0vi50n","slide":4,"textChars":21,"textLines":1}
+{"kind":"textbox","id":"sh/769crahs","slide":4,"textChars":41,"textLines":1}
+{"kind":"textbox","id":"sh/wb2dozip","slide":4,"textChars":4,"textLines":1}
+{"kind":"shape","id":"sh/hcbex4za","slide":4,"bbox":[42,255,500,3]}
+{"kind":"textbox","id":"sh/u90vmp0j","slide":4,"textChars":50,"textLines":3}
+{"kind":"textbox","id":"sh/va9cvuh4","slide":4,"textChars":4,"textLines":1}
+{"kind":"shape","id":"sh/4f2dszil","slide":4,"bbox":[42,432,500,2]}
+{"kind":"textbox","id":"sh/5gbe14z6","slide":4,"textChars":48,"textLines":3}
+{"kind":"shape","id":"sh/xg3u5g3i","slide":4,"bbox":[42,558,510,72]}
+{"kind":"textbox","id":"sh/wfutwb2x","slide":4,"textChars":20,"textLines":1}
+{"kind":"shape","id":"sh/be1c36lc","slide":4,"bbox":[610,210,628,350]}
+{"kind":"textbox","id":"sh/lk3u9gje","slide":4,"textChars":8,"textLines":1}
+{"kind":"textbox","id":"sh/kjud0b29","slide":4,"textChars":59,"textLines":1}
+{"kind":"shape","id":"sh/jilc7qlo","slide":4,"bbox":[42,660,1196,1]}
+{"kind":"textbox","id":"sh/yhcvylk3","slide":4,"textChars":18,"textLines":1}
+{"kind":"textbox","id":"sh/1ojuxw3a","slide":4,"textChars":1,"textLines":1}
+{"kind":"image","id":"im/x4re9sjm","slide":4,"name":"","geometry":"roundRect","alt":"IMC PI 在持续热扰动工况下的温度、PWM、Kp Ki 曲线","bbox":[628,224,592,322]}
+{"kind":"notes","id":"nt/af5zru","slide":4,"text":"IMC 的固定增益也应画成水平线。它的参数明显小于 Z-N，因此输出平滑，但恢复速度可能更慢。完整三工况见 02_imc.html。"}
+{"kind":"slide","id":"sl/nliwto","slide":5,"title":"方法 3/5｜AI 自动整定","textShapes":12}
+{"kind":"textbox","id":"sh/vq50j2pw","slide":5,"textChars":14,"textLines":1}
+{"kind":"textbox","id":"sh/wre1s76h","slide":5,"textChars":20,"textLines":1}
+{"kind":"textbox","id":"sh/hc7ilc72","slide":5,"textChars":48,"textLines":1}
+{"kind":"textbox","id":"sh/idgjuhon","slide":5,"textChars":4,"textLines":1}
+{"kind":"shape","id":"sh/jep0n258","slide":5,"bbox":[42,255,500,3]}
+{"kind":"textbox","id":"sh/4fy1w76t","slide":5,"textChars":57,"textLines":3}
+{"kind":"textbox","id":"sh/5g72pcny","slide":5,"textChars":4,"textLines":1}
+{"kind":"shape","id":"sh/6hgjyhoj","slide":5,"bbox":[42,432,500,2]}
+{"kind":"textbox","id":"sh/ripkrm54","slide":5,"textChars":50,"textLines":3}
+{"kind":"shape","id":"sh/7i1cjq5k","slide":5,"bbox":[42,558,510,72]}
+{"kind":"textbox","id":"sh/6hsvaloz","slide":5,"textChars":23,"textLines":1}
+{"kind":"shape","id":"sh/tkjul0nq","slide":5,"bbox":[610,210,628,350]}
+{"kind":"textbox","id":"sh/jehcfq58","slide":5,"textChars":8,"textLines":1}
+{"kind":"textbox","id":"sh/id8v6lo3","slide":5,"textChars":42,"textLines":1}
+{"kind":"shape","id":"sh/5gzuhgne","slide":5,"bbox":[42,660,1196,1]}
+{"kind":"textbox","id":"sh/kfqd8b6t","slide":5,"textChars":18,"textLines":1}
+{"kind":"textbox","id":"sh/3alwra5s","slide":5,"textChars":1,"textLines":1}
+{"kind":"image","id":"im/fa9kj2d4","slide":5,"name":"","geometry":"roundRect","alt":"贝叶斯自动整定固定 PI 在设定温度突变工况下的曲线","bbox":[628,224,592,322]}
+{"kind":"notes","id":"nt/nliwto","slide":5,"text":"这是 Auto-tuning，不是 Self-tuning。训练结束后参数冻结。完整三工况与寻优代码见 03_bayesian_auto_tune.html。"}
+{"kind":"slide","id":"sl/flw2jt","slide":6,"title":"方法 4/5｜AI 在线自整定","textShapes":12}
+{"kind":"textbox","id":"sh/94ji9wfy","slide":6,"textChars":15,"textLines":1}
+{"kind":"textbox","id":"sh/m18jy1w7","slide":6,"textChars":25,"textLines":1}
+{"kind":"textbox","id":"sh/72h076xs","slide":6,"textChars":49,"textLines":1}
+{"kind":"textbox","id":"sh/kzq1wreh","slide":6,"textChars":4,"textLines":1}
+{"kind":"shape","id":"sh/l0zi5wf2","slide":6,"bbox":[42,255,500,3]}
+{"kind":"textbox","id":"sh/yd8juhwb","slide":6,"textChars":61,"textLines":3}
+{"kind":"textbox","id":"sh/zeh03mxw","slide":6,"textChars":4,"textLines":1}
+{"kind":"shape","id":"sh/4vu18bel","slide":6,"bbox":[42,432,500,2]}
+{"kind":"textbox","id":"sh/5w32hgf6","slide":6,"textChars":49,"textLines":3}
+{"kind":"shape","id":"sh/p8ni98zy","slide":6,"bbox":[42,558,510,72]}
+{"kind":"textbox","id":"sh/o7e1g3yt","slide":6,"textChars":26,"textLines":1}
+{"kind":"shape","id":"sh/n6507yh8","slide":6,"bbox":[610,210,628,350]}
+{"kind":"textbox","id":"sh/1kni5oz2","slide":6,"textChars":8,"textLines":1}
+{"kind":"textbox","id":"sh/gje1c3yh","slide":6,"textChars":63,"textLines":1}
+{"kind":"shape","id":"sh/fi503yhw","slide":6,"bbox":[42,660,1196,1]}
+{"kind":"textbox","id":"sh/ehcjatgb","slide":6,"textChars":18,"textLines":1}
+{"kind":"textbox","id":"sh/lg72hsz6","slide":6,"textChars":1,"textLines":1}
+{"kind":"image","id":"im/tgzuhwzq","slide":6,"name":"","geometry":"roundRect","alt":"FNN 在线自整定在设定温度突变工况下的动态增益曲线","bbox":[628,224,592,322]}
+{"kind":"notes","id":"nt/flw2jt","slide":6,"text":"FNN 不是免训练：先用离线优化标签构造规则表。运行阶段才根据 e、Δe 动态插值 Kp/Ki。完整三工况见 04_fnn_self_tuning.html。"}
+{"kind":"slide","id":"sl/7stcqr","slide":7,"title":"方法 5/5｜AI 在线自整定","textShapes":12}
+{"kind":"textbox","id":"sh/it87qdwf","slide":7,"textChars":15,"textLines":1}
+{"kind":"textbox","id":"sh/5wzqlsv6","slide":7,"textChars":26,"textLines":1}
+{"kind":"textbox","id":"sh/4vqpsnel","slide":7,"textChars":45,"textLines":1}
+{"kind":"textbox","id":"sh/vqh8fix4","slide":7,"textChars":4,"textLines":1}
+{"kind":"shape","id":"sh/upo7mdwj","slide":7,"bbox":[42,255,500,3]}
+{"kind":"textbox","id":"sh/hszqh8fu","slide":7,"textChars":57,"textLines":3}
+{"kind":"textbox","id":"sh/grqpo3e9","slide":7,"textChars":4,"textLines":1}
+{"kind":"shape","id":"sh/72xobyxs","slide":7,"bbox":[42,432,500,2]}
+{"kind":"textbox","id":"sh/61o7itw7","slide":7,"textChars":58,"textLines":3}
+{"kind":"shape","id":"sh/sra58b29","slide":7,"bbox":[42,558,510,72]}
+{"kind":"textbox","id":"sh/tsjm1g3u","slide":7,"textChars":28,"textLines":1}
+{"kind":"shape","id":"sh/6p8n6lk3","slide":7,"bbox":[610,210,628,350]}
+{"kind":"textbox","id":"sh/4nq54b2x","slide":7,"textChars":8,"textLines":1}
+{"kind":"textbox","id":"sh/5ozmxg3i","slide":7,"textChars":50,"textLines":1}
+{"kind":"shape","id":"sh/il8n21k7","slide":7,"bbox":[42,660,1196,1]}
+{"kind":"textbox","id":"sh/jmh4v6lc","slide":7,"textChars":18,"textLines":1}
+{"kind":"textbox","id":"sh/oju5gv2h","slide":7,"textChars":1,"textLines":1}
+{"kind":"image","id":"im/cfmxk7ap","slide":7,"name":"","geometry":"roundRect","alt":"RL 在线自整定在持续热扰动工况下的动态增益曲线","bbox":[628,224,592,322]}
+{"kind":"notes","id":"nt/7stcqr","slide":7,"text":"RL 不是一下子得到结果：这是轻量表格 Q-learning，训练规模约 30,000 环境步，不是大型深度 RL。当前结果仅用于展示流程，不能据此宣称 ..."}
+{"kind":"slide","id":"sl/hamhk4","slide":8,"title":"每种方法都要过三道独立试题，再讨论优劣","textShapes":18}
+{"kind":"textbox","id":"sh/t8nytgva","slide":8,"textChars":19,"textLines":1}
+{"kind":"textbox","id":"sh/65czi1wj","slide":8,"textChars":38,"textLines":1}
+{"kind":"textbox","id":"sh/r6lgr6d4","slide":8,"textChars":2,"textLines":1}
+{"kind":"shape","id":"sh/43uhgbet","slide":8,"bbox":[42,268,350,2]}
+{"kind":"textbox","id":"sh/543ypwvy","slide":8,"textChars":6,"textLines":1}
+{"kind":"textbox","id":"sh/ihcze1wn","slide":8,"textChars":11,"textLines":1}
+{"kind":"textbox","id":"sh/j2lgn6d8","slide":8,"textChars":15,"textLines":1}
+{"kind":"textbox","id":"sh/ozyhsvux","slide":8,"textChars":2,"textLines":1}
+{"kind":"shape","id":"sh/p07i10vi","slide":8,"bbox":[448,268,350,2]}
+{"kind":"notice","message":"Truncated: omitted 15 lines. Increase maxChars or narrow target."}

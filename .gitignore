@@ -1,0 +1,30 @@
+# Python caches and local environments
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+
+# Local OpenModelica runtime and temporary artifact-tool workspaces
+modelica_runtime/
+tmp/
+tmp_submission/
+
+# Generated inspection payloads: the actual Excel/PPT deliverables are retained.
+outputs/**/*.inspect.ndjson
+
+# OpenModelica C build intermediates; retain the response CSV used by validation.
+outputs/modelica/*
+!outputs/modelica/PrecisionCabinetCooling_res.csv
+
+# Rendered slide previews duplicate the actual PowerPoint deliverable.
+outputs/submission_package/slides_preview_v2/
+outputs/submission_package/slides_rendered/
+
+# Native testbench binaries are rebuilt from the supplied C++ source.
+embedded/*.exe
+
+# Editor and operating-system files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

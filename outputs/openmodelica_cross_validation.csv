@@ -1,0 +1,2 @@
+﻿validation,case,samples,rmse_c,max_abs_error_c,final_abs_error_c,threshold,passed,modelica_result
+OpenModelica DASSL vs Python DOP853连续方程,12小时混合动态开环验证,7211,7.1595376067170685e-06,1.3062322349099986e-05,4.3680082697505895e-06,RMSE≤0.01°C且最大绝对误差≤0.03°C,1,C:\Users\厉飞雨\Documents\New project\hvac_ai_pid_demo\outputs\modelica\PrecisionCabinetCooling_res.csv

@@ -1,0 +1,10 @@
+getVersion();
+getHomeDirectoryPath();
+getModelicaPath();
+loadFile("N:/modelica_runtime/omlibrary/Complex.mo");
+loadFile("N:/modelica_runtime/omlibrary/ModelicaServices/package.mo");
+loadFile("N:/modelica_runtime/omlibrary/Modelica/package.mo");
+loadFile("N:/modelica/HVACAI/package.mo");
+loadFile("N:/modelica/HVACAI/PrecisionCabinetCooling.mo");
+checkModel(HVACAI.PrecisionCabinetCooling);
+getErrorString();
