@@ -20,6 +20,10 @@ outputs/modelica/*
 outputs/submission_package/slides_preview_v2/
 outputs/submission_package/slides_rendered/
 
+# Local document QA renders and audit JSON; final DOCX files remain tracked.
+outputs/docx_qa/
+outputs/documents/*_a11y.json
+
 # Native testbench binaries are rebuilt from the supplied C++ source.
 embedded/*.exe
 
