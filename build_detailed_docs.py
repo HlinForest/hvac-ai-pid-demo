@@ -143,6 +143,52 @@ def code(doc, text, caption=None):
         runfmt(p.add_run(line), font=CODE, size=8.2, color="263238")
     doc.add_paragraph().paragraph_format.space_after=Pt(2)
 
+def _math_run(text):
+    run = OxmlElement("m:r")
+    rpr = OxmlElement("m:rPr")
+    style = OxmlElement("m:sty")
+    style.set(qn("m:val"), "p")
+    rpr.append(style); run.append(rpr)
+    node = OxmlElement("m:t")
+    node.set(qn("xml:space"), "preserve")
+    node.text = str(text)
+    run.append(node)
+    return run
+
+def _math_seq(parent, pieces):
+    for piece in pieces:
+        if isinstance(piece, str):
+            parent.append(_math_run(piece)); continue
+        kind = piece[0]
+        if kind in ("sub", "sup"):
+            node = OxmlElement("m:sSub" if kind == "sub" else "m:sSup")
+            base = OxmlElement("m:e"); sub = OxmlElement("m:sub" if kind == "sub" else "m:sup")
+            _math_seq(base, [piece[1]] if isinstance(piece[1], str) else piece[1])
+            _math_seq(sub, [piece[2]] if isinstance(piece[2], str) else piece[2])
+            node.extend([base, sub]); parent.append(node)
+        elif kind == "frac":
+            node = OxmlElement("m:f")
+            num = OxmlElement("m:num"); den = OxmlElement("m:den")
+            _math_seq(num, piece[1]); _math_seq(den, piece[2])
+            node.extend([num, den]); parent.append(node)
+        elif kind == "supsub":
+            node = OxmlElement("m:sSubSup")
+            base = OxmlElement("m:e"); sub = OxmlElement("m:sub"); sup = OxmlElement("m:sup")
+            _math_seq(base, [piece[1]]); _math_seq(sub, [piece[2]]); _math_seq(sup, [piece[3]])
+            node.extend([base, sub, sup]); parent.append(node)
+        elif kind == "int":
+            parent.append(_math_run("∫"))
+            _math_seq(parent, [piece[1]])
+
+def equation(doc, pieces, caption=None):
+    if caption: para(doc, caption, color=MUTED, italic=True, align=WD_ALIGN_PARAGRAPH.CENTER, after=2)
+    p = doc.add_paragraph(); p.alignment = WD_ALIGN_PARAGRAPH.CENTER
+    p.paragraph_format.space_before = Pt(3); p.paragraph_format.space_after = Pt(8)
+    omath_para = OxmlElement("m:oMathPara")
+    omath = OxmlElement("m:oMath")
+    _math_seq(omath, pieces)
+    omath_para.append(omath); p._p.append(omath_para)
+
 def callout(doc, label, text, fill=CALLOUT):
     t=doc.add_table(rows=1, cols=1); geometry(t,[9360])
     trpr=t.rows[0]._tr.get_or_add_trPr(); hdr=OxmlElement("w:tblHeader"); hdr.set(qn("w:val"),"true"); trpr.append(hdr)
@@ -194,7 +240,10 @@ def common(doc, beginner=False):
     para(doc,"把房间想成一个会慢慢升温、也会慢慢降温的大盒子。空调不会瞬间改变温度；控制器每次看“现在离目标差多少”，再决定制冷指令增加还是减少。" if beginner else "所有控制器都放在同一个闭环环境中比较：3R2C 热模型加执行器延迟/惯性，Modelica 负责物理参考，FOPDT 负责控制整定代理。")
     heading(doc,"1.1 3R2C 热模型：两个蓄热体和三条换热通道",2)
     para(doc,"室内空气/设备是响应快的热容，墙体/机柜是响应慢的热容；室外到室内、室外到墙体、墙体到室内是三条热阻通道。")
-    code(doc,"Cz*dTz/dt = (To-Tz)/Roz + (Tw-Tz)/Rzw + Qint - Qcool\nCw*dTw/dt = (To-Tw)/Row + (Tz-Tw)/Rzw\nQcool = actuator(u) * Qmax\nactuator = 5 min dead time + 4 min first-order lag","3R2C 与 ThermalPlant3R2C.step() 的对应方程")
+    equation(doc,[("sub","C","z"),"·",("frac",["d",("sub","T","z")],["dt"])," = ",("frac",[("sub","T","o"),"−",("sub","T","z")],[("sub","R","oz")])," + ",("frac",[("sub","T","w"),"−",("sub","T","z")],[("sub","R","zw")])," + ",("sub","Q","int")," − ",("sub","Q","cool")],"室内空气能量平衡方程")
+    equation(doc,[("sub","C","w"),"·",("frac",["d",("sub","T","w")],["dt"])," = ",("frac",[("sub","T","o"),"−",("sub","T","w")],[("sub","R","ow")])," + ",("frac",[("sub","T","z"),"−",("sub","T","w")],[("sub","R","zw")])],"墙体/机柜能量平衡方程")
+    equation(doc,[("sub","Q","cool")," = actuator(","u",")·",("sub","Q","max")],"制冷量与执行器状态")
+    code(doc,"# 离散实现：5 min dead time + 4 min first-order lag","ThermalPlant3R2C.step() 中的执行器实现")
     table(doc,["参数","名义值","单位","含义"],[
         ["Cz","1.8e6","J/K","室内空气/设备快热容"],["Cw","12.0e6","J/K","墙体/机柜慢热容"],
         ["Roz","0.012","K/W","室外到室内热阻"],["Rzw","0.006","K/W","室内与墙体热阻"],
@@ -205,7 +254,8 @@ def common(doc, beginner=False):
         ["场景生成器","To、Tsp、内部/开门热负荷","时间序列","1 min"],["AI整定器","e=Tz-Tsp、Δe、可选工况","Kp、Ki","2 s"],
         ["PI内环","e、Kp、Ki、积分状态","u=0-1","目标100 ms"],["热对象","u、To、Qint","Tz、Tw、Qcool","1 min代理"],
     ],[1800,3000,2700,1860],8.6)
-    para(doc,"PI 公式：u_raw=Kp*e+Ki*积分(e)；u=clip(u_raw,0,1)。积分采用条件抗饱和：输出饱和且误差仍把输出推向边界时停止积分。")
+    equation(doc,[("sub","u","raw")," = ",("sub","K","p"),"·e + ",("sub","K","i"),"·",("int","e dt"),"；  u = clip(",("sub","u","raw"),", 0, 1)"],"并联 PI 控制律")
+    para(doc,"积分采用条件抗饱和：输出饱和且误差仍把输出推向边界时停止积分。")
     heading(doc,"1.3 三类场景",2)
     table(doc,["场景","初始/设定","扰动","时长"],[
         ["初次快速降温","31.5°C -> 24°C；To=35°C","室外±2°C；内部650 W","4 h"],
@@ -214,13 +264,20 @@ def common(doc, beginner=False):
     ],[2100,3100,3100,1060],8.4)
     heading(doc,"1.4 FOPDT：控制器使用的简化地图",2)
     para(doc,"FOPDT 不是更真实的房间，而是把阶跃响应压缩成三个控制参数：K=指令改变后的最终温降比例，L=开始响应前的等待，tau=响应有多慢。")
-    code(doc,"G(s) = -K*exp(-L*s)/(tau*s+1)\nT_hat(t)=T0-A*(1-exp(-(t-L)/tau)), t>L\nK=A/delta_u","FOPDT 代理公式")
+    equation(doc,["G(s) = −",("frac",["K·",("sup","e","−Ls")],["τs + 1"])],"FOPDT 传递函数")
+    equation(doc,[("sub","T","hat"),"(t) = ",("sub","T","0")," − A[1 − ",("sup","e","−(t−L)/τ"),"]，  t > L"],"FOPDT 阶跃响应")
+    equation(doc,["K = ",("frac","A","Δu")],"过程增益")
     table(doc,["量","本次结果","来源/意义"],[
         ["delta_u","0.12","名义制冷指令增加12个百分点"],["A","6.61978°C","168 h 阶跃拟合的最终温降"],
         ["K","55.164866 °C/指令","A/delta_u"],["tau","911.080121 min","有界最小二乘联合拟合"],
         ["L","5 min","执行器延迟与拟合结果"],["RMSE","0.381828°C","44次残差函数评价后的全曲线误差"],
         ["诊断交点","t28=104 min；t63=786 min","仅作诊断，不把截尾末点当 t63"],
     ],[1800,2200,5360],8.5)
+    heading(doc,"1.5 由 FOPDT 得到 Z-N 与 IMC 的 Kp、Ki",2)
+    equation(doc,[("sup",[("sub","K","p")],"ZN")," = 0.9",("frac","τ","KL")],"Ziegler-Nichols 比例增益")
+    equation(doc,["T",("sub","i","ZN")," = 3.33L；  ",("sup",[("sub","K","i")],"ZN")," = ",("frac",[("sup",[("sub","K","p")],"ZN")],["T",("sub","i","ZN")])],"Ziegler-Nichols 积分参数")
+    equation(doc,["λ = max(τ/3, 3L, 12 min)；  ",("sup",[("sub","K","p")],"IMC")," = ",("frac","τ","K(λ+L)")],"IMC 闭环速度与比例增益")
+    equation(doc,["T",("sub","i","IMC")," = min[τ, 4(λ+L)]；  ",("sup",[("sub","K","i")],"IMC")," = ",("frac",[("sup",[("sub","K","p")],"IMC")],["T",("sub","i","IMC")])],"IMC 积分参数")
     callout(doc,"重要纠正","旧版12 h试验只达到最终温降约59.3%，没有越过63.2%，却把末点当t63。当前版本用168 h长阶跃+有界最小二乘，并保存每个候选参数和RMSE。","FFF4E5")
 
 def bayes(doc, beginner=False):
@@ -232,7 +289,7 @@ def bayes(doc, beginner=False):
         ["坐标","log(Kp)、log(Ki)","Ki跨数量级，避免线性采样浪费"],["训练工况","20个随机场景，每个5 h/1 min","覆盖热容、热阻、容量和延迟变化"],
         ["一次评估","完整rollout+objective","不能只看一个时刻"],
     ],[1800,3500,4060],8.7)
-    code(doc,"objective=2*IAE+1.5*ITAE+10*comfort_violation\n         +3*max_undershoot+0.35*settling_time\n         +0.08*control_movement+0.7*command_variance\n         +0.015*cooling_energy","统一评价目标")
+    equation(doc,["J = 2·IAE + 1.5·ITAE + 10·",("sub","V","comfort")," + 3·",("sub","ΔT","under")," + 0.35·",("sub","t","settle")," + 0.08·",("sub","M","u")," + 0.7·Var(u) + 0.015·",("sub","E","cool")],"统一评价目标：J 越小越好")
     heading(doc,"2.2 输入到输出的12步",2)
     for s in [
         "生成随机训练工况，输出To、Tsp、Qint和3R2C参数。",
@@ -282,6 +339,7 @@ def fnn(doc, beginner=False):
         "计算log RMSE、覆盖率、最大规则变化，记录每批快照。",
         "在线用4个相邻规则插值，再经过边界和25%变化率限制输出Kp、Ki。",
     ]: step(doc,s)
+    equation(doc,[("sub","K","p")," = Σ",("sub","i,j","N(e,Δe)")," w",("sub","ij",""),("sub","K","p,ij"),"；  ",("sub","K","i")," = Σ w",("sub","ij",""),("sub","K","i,ij")],"FNN 双线性插值：只激活相邻4条规则")
     code(doc,"e0,e1,ew=_active(error_c,centers)\nd0,d1,dw=_active(delta_error_c,delta_centers)\nfor ei,we in ((e0,1-ew),(e1,ew)):\n  for di,wd in ((d0,1-dw),(d1,dw)):\n    rule_kp,rule_ki=rule_table[ei,di]\n    kp += we*wd*rule_kp\n    ki += we*wd*rule_ki\nreturn kp,ki","FNNGainController._propose：25条规则中每次只计算4条")
     heading(doc,"3.3 20个训练场景中规则表如何变化",2)
     fn=rows("outputs/fnn_training_history.csv")
@@ -321,6 +379,8 @@ def rl(doc, beginner=False):
         "target=r+gamma*max(Q(next_state))；Q=Q+alpha*(target-Q)。",
         "回合结束记录reward、20回合均值、TD、覆盖率、策略变化和Kp/Ki；500回合后冻结argmax。",
     ]: step(doc,s)
+    equation(doc,["r = −|e'| − 0.18·",("sub","||a||","1")," − 0.04|",("sub","s","p"),"−1| − 0.03u"],"RL 即时奖励")
+    equation(doc,["target = r + γ ",("sub","max","a")," Q(s',a)；  Q(s,a) ← Q(s,a) + α[target − Q(s,a)]"],"RL TD 目标与 Q-learning 更新")
     code(doc,"action=epsilon_random_or_argmax(q[state])\nkp_scale=clip(kp_scale*(1+gain_move[0]),0.5,1.8)\nki_scale=clip(ki_scale*(1+gain_move[1]),0.5,1.8)\ncontroller.kp=clip(fallback_kp*kp_scale,0.002,1.5)\ncontroller.ki=clip(fallback_ki*ki_scale,1e-5,0.08)\nreward=-(abs(next_error)+0.18*abs(gain_move).sum()+0.04*abs(kp_scale-1)+0.03*command)\ntarget=reward+gamma*max(q[next_state])\nq[state+(action,)]+=alpha*(target-q[state+(action,)])","train_offline_q_policy 核心更新")
     heading(doc,"4.3 训练轨迹和参数变化",2)
     rr=rows("outputs/rl_training_history.csv"); data=[]
