@@ -1,0 +1,5 @@
+﻿method,wall_seconds,evaluations
+IMC lambda tuning,0.8826916001271456,13
+ordinary Bayesian optimization,0.9184848999138921,10
+RaGoOSE-style risk-aware safe BO,1.4082911000587046,7
+LLM supervisor: physics heuristic (not an LLM),0.656470000045374,4

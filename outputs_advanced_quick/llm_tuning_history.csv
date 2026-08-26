@@ -1,0 +1,4 @@
+﻿round,provider,raw_kp,raw_ki,candidate_kp,candidate_ki,diagnosis,rationale,confidence,risk_objective,safety_margin,safe,improvement_fraction,accepted,decision
+1,physics heuristic (not an LLM),0.4221614161211334,0.0044410980778422605,0.4221614161211334,0.0044410980778422605,冷过冲偏大，降低比例和积分作用,离线流程连通性演示；该结果不能称为大模型实验,1.0,35.89254830139613,-0.27908757765831627,1,0.02908757765831626,1,accepted: safe and risk objective improved
+2,physics heuristic (not an LLM),0.3715020461865974,0.0035528784622738084,0.3715020461865974,0.0035528784622738084,冷过冲偏大，降低比例和积分作用,离线流程连通性演示；该结果不能称为大模型实验,1.0,33.56836553212579,-0.3419579512948768,1,0.0647539079631172,1,accepted: safe and risk objective improved
+3,physics heuristic (not an LLM),0.3269218006442057,0.0028423027698190467,0.3269218006442057,0.0028423027698190467,冷过冲偏大，降低比例和积分作用,离线流程连通性演示；该结果不能称为大模型实验,1.0,36.82863581346702,-0.2537659151718109,1,-0.09712329539015134,0,rejected: insufficient risk-adjusted improvement

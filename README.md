@@ -1,5 +1,7 @@
 # HVAC AI–PI 自动整定演示
 
+> 新增风险感知安全 BO，以及“LLM 只提议、仿真和安全门裁决”的高级 PI 调参实现。详见 [SOTA_LLM_PI_TUNING.md](SOTA_LLM_PI_TUNING.md)，入口为 `run_advanced_tuning_benchmark.py`。Q-learning 保留为教学/对照方法，不称为 SOTA。
+
 ## 当前版本：变频精密/机柜空调仿真平台
 
 本项目实现双层模型：`modelica/HVACAI` 是 OpenModelica + Modelica Standard Library 的可执行物理参考模型（Modelica Buildings 留作后续高保真扩展）；`hvac_pid` 是可批量运行的 3R2C/FOPDT 快速控制代理。3R2C 的直觉是“室内空气”和“墙体/机柜”两个蓄热体，通过室外到空气、室外到慢热质、慢热质到空气三条换热通道交换热量。前者用于可追溯的热物理校验，后者用于控制算法寻优与可视化。
