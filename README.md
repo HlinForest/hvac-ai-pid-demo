@@ -6,7 +6,7 @@
 
 五种控制算法的逐段中文代码解析见 [ALGORITHM_GUIDE.md](ALGORITHM_GUIDE.md)。
 
-已实现五类控制器：Z-N、IMC、全局贝叶斯优化固定 PI、25 规则（每次激活 4 条）的 FNN 自整定 PI、以及安全屏蔽的增量式 RL 自整定 PI。
+已实现五类控制器：Z-N、只在训练集整定 λ 的 IMC、全局贝叶斯优化固定 PI、25 规则（每次激活 4 条）的 FNN 自整定 PI、以及安全屏蔽的表格 RL 自整定 PI。RL 使用 5×5 热状态、3 档实际容量模式和 9 个相对 IMC 的绝对增益目标；不再递归累乘隐藏的当前增益。所有方法共用 0/最低稳定频率、量化、运行斜率、最小启停驻留、传感器噪声与滤波约束。
 
 “自动整定”和“在线自整定”严格分开：贝叶斯优化在运行前搜索一组固定 `Kp/Ki`；FNN 先由 BO 标签离线训练规则表、RL 先在相同的虚拟房间中离线训练 Q 表，二者只在运行中低频微调参数，绝不在真实设备上探索。
 
@@ -16,12 +16,15 @@
 cd "C:\Users\厉飞雨\Documents\New project\hvac_ai_pid_demo"
 python -m pip install -r requirements.txt
 python main.py --quick
+python run_tuning_benchmark.py
 streamlit run streamlit_app.py
 # 只重渲染已有实验结果为可打印 HTML 报告
 python render_report.py outputs
 ```
 
 `streamlit run` 启动的是持续运行的本地 Web 服务：终端显示 URL 后，请在浏览器打开 `http://localhost:8501`；需要停止时按 `Ctrl+C`。
+
+`run_tuning_benchmark.py` 使用同一个受约束机柜空调问题实际计时 Z-N、IMC λ 搜索、贝叶斯固定 PI、FNN 标签/规则训练和 RL 训练，输出 PC 墙钟时间、等效虚拟对象时间、最终增益、控制指标与部署验收结果。PC 时间不是 MCU WCET；真实设备辨识时间和目标板周期需单独实测。
 
 第二阶段 MCU 软件在环与 Wokwi 工程：
 
@@ -32,7 +35,7 @@ python embedded/wokwi/prepare_projects.py
 
 STM32F103C8T6 与 ESP32 的验证入口、接线图、验收证据和当前完成边界见 [embedded/README.md](embedded/README.md)。当前已完成 PC 软件在环；两种 MCU 的完整代码也已在 Wokwi 在线编译并进入运行态，但串口曲线、ROM/RAM 与最坏周期尚未取得可信留证。不能用 PC 结果代替这些目标数据。
 
-结果目录包含贝叶斯每次试验、FNN 每批拟合、RL 每回合训练的完整历史 CSV，以及三类独立场景的 `case_metrics.csv` 与完整 `engineering_report.html`。报告先解释直觉，再展示整定/训练轨迹，并列出 ITAE、调节时间、最大过冷、压缩机指令方差、AI 推理时间和回退事件。快速模式当前只能证明流程跑通：贝叶斯出现明确更优候选；FNN 只激活过 5/25 条规则，RL 虽访问 25/25 个粗网格状态但奖励仍有明显波动，因此两者都不能宣称充分收敛。
+结果目录包含 IMC λ 候选、贝叶斯每次试验、FNN 每批拟合、RL 每回合训练与训练后部署验收的完整历史 CSV，以及三类独立场景结果。FNN/RL 若在离线回放中明显劣于已调 IMC，产物会自动退回安全基线；因此“生成了表”不等于“训练已收敛”。
 
 这是一个可直接运行的 Python 仿真项目。它用单区域 **3R2C 建筑热模型**模拟空调制冷，自动生成不同工况下的最优 `Kp`、`Ki` 标签，训练“误差状态 → PI 参数”的 FNN/RL 增益调度器，并与固定 PI、Ziegler–Nichols（ZN）和 IMC PI 比较。
 
@@ -94,7 +97,7 @@ PI 控制器输入：
 
 PI 控制器输出：
 
-- `u ∈ [0, 1]`，代表 0%–100% 制冷指令；包含条件积分抗饱和。
+- PI 先生成 `u_request ∈ [0,1]`；执行器层再施加默认 25% 最低运行容量、1% 量化、5%/min 运行斜率及最小启停驻留，得到实际 `u`。
 
 AI 调度器上下文（输入特征）：
 
@@ -106,7 +109,7 @@ AI 输出：
 
 - `Kp`、`Ki`。二者是动作/参数，不是 context。
 
-评价指标：ITAE、RMSE、IAE、舒适区违规度时、最大过冷、进入舒适带时间、制冷能耗代理量、控制动作总变化、压缩机输出方差和稳定率。综合目标越低越好，权重集中写在 `hvac_pid/metrics.py`，便于按项目要求调整。
+评价指标：ITAE、RMSE、IAE、舒适区违规度时、最大过冷、进入舒适带时间、制冷能耗代理量、控制动作总变化、容量指令方差、启停次数、运行斜率违规数和稳定率。综合目标越低越好，权重集中写在 `hvac_pid/metrics.py`。
 
 ## 生成文件
 
@@ -114,10 +117,14 @@ AI 输出：
 
 - `training_labels.csv`：训练数据、`Kp/Ki` 标签、ZN/IMC 对照分数；
 - `global_bayesian_tuning.csv`：跨训练工况搜索得到的一套固定全局 `Kp/Ki`；
+- `imc_lambda_tuning.csv`：IMC 在训练工况上评价的全部 λ 候选及最终选择；
 - `bayesian_search_history.csv`：贝叶斯优化每一次候选、目标值、当前最优值与代理模型信息；
 - `fnn_rule_table.npy`：由 BO 标签学习的 5×5×2 FNN 规则后件表；
 - `fnn_training_history.csv`：FNN 每批样本、规则覆盖率、拟合误差和规则参数变化；
-- `rl_q_table.npy`：仅由仿真训练的 5×5×9 RL 增益增量策略表；
+- `rl_q_table.npy`：验收后可部署的 5×5×3×9 RL Q 表；若验收失败则为IMC不改增益回退表；
+- `rl_q_table_candidate.npy`：验收前候选Q表，用于审计而不直接部署；
+- `fnn_rule_table_candidate.npy`：验收前候选FNN规则表；
+- `training_scenarios.csv`、`fnn_training_samples.csv`、`rl_training_transitions.csv`、`holdout_scenarios.csv`：训练/验证所用工况、逐状态监督样本、逐步RL转移和独立留出工况；
 - `rl_training_history.csv`：RL 每回合奖励、TD 误差、探索率、状态覆盖率、策略变化和 Kp/Ki；
 - `classical_tuning_history.csv`：Z-N/IMC 共用的 168 h 虚拟阶跃逐分钟响应；
 - `fopdt_fit_history.csv`：有界最小二乘实际评价过的每一组 K、τ、L 候选与拟合误差；
@@ -125,7 +132,7 @@ AI 输出：
 - `holdout_metrics.csv`：逐测试工况、逐控制器指标；
 - `holdout_summary.csv`：留出集汇总；
 - `dynamic_metrics.csv`：动态 12 小时场景指标；
-- `dynamic_timeseries.csv`：五种算法的逐时间步温度、PWM、增益、扰动与安全事件；
+- `dynamic_timeseries.csv`：五种算法的逐时间步真实/测量温度、请求/实际容量指令、增益、扰动与安全事件；
 - `case_metrics.csv`：初次快速降温、设定温度突变、持续外界热扰动三类场景的独立指标；
 - `dynamic_comparison.png`：温度、控制量和综合目标对比；
 - `training_labels.png`：最优标签分布和相对 ZN 改善分布；
@@ -149,10 +156,11 @@ AI 输出：
 
 ```text
 main.py                    命令行入口
+run_tuning_benchmark.py    五种 PI 调参/训练方法的分阶段耗时基准
 hvac_pid/config.py         工况、动态天气/负荷与训练分布
 hvac_pid/plant.py          3R2C 热模型和执行器延迟/惯性
 hvac_pid/controllers.py    PI、抗饱和、ZN、IMC、FOPDT 辨识
-hvac_pid/ai_controllers.py FNN 与安全屏蔽的增量 RL 参数自整定
+hvac_pid/ai_controllers.py FNN 与安全屏蔽的表格 RL 参数自整定
 hvac_pid/tuning.py         贝叶斯优化及标签生成
 modelica/HVACAI/           Modelica Buildings 物理参考模型
 embedded/                  100 ms PID / 2 s AI、PC SIL 与 STM32/ESP32 Wokwi 工程

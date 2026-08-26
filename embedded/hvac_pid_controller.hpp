@@ -3,6 +3,8 @@
 #include <cmath>
 #include <cstdint>
 
+#include "generated_policy.hpp"
+
 namespace hvac_mcu {
 
 template <typename T>
@@ -15,8 +17,7 @@ struct Diagnostics { Gains gains; float output; bool fallback_active; bool outpu
 
 class SafePI {
  public:
-  explicit SafePI(Gains fallback, float output_slew_per_second = 0.20f)
-      : gains_(fallback), fallback_(fallback), output_slew_per_second_(output_slew_per_second) {}
+  explicit SafePI(Gains fallback) : gains_(fallback), fallback_(fallback) {}
 
   void reset() {
     gains_ = fallback_; integral_ = 0.0f; output_ = 0.0f;
@@ -33,10 +34,8 @@ class SafePI {
     const float saturated = clamp_value(raw, 0.0f, 1.0f);
     if ((raw >= 0.0f && raw <= 1.0f) || (raw > 1.0f && error < 0.0f) ||
         (raw < 0.0f && error > 0.0f)) integral_ = candidate;
-    const float max_step = output_slew_per_second_ * dt_seconds;
-    const float slewed = clamp_value(saturated, output_ - max_step, output_ + max_step);
-    output_limited_ = std::fabs(slewed - raw) > 1e-6f;
-    output_ = clamp_value(slewed, 0.0f, 1.0f);
+    output_limited_ = std::fabs(saturated - raw) > 1e-6f;
+    output_ = saturated;
     return output_;
   }
 
@@ -44,8 +43,8 @@ class SafePI {
     if (!policy_valid || !std::isfinite(proposed.kp) || !std::isfinite(proposed.ki)) {
       gains_ = fallback_; fallback_active_ = true; return false;
     }
-    proposed.kp = clamp_value(proposed.kp, gains_.kp * 0.75f, gains_.kp * 1.25f);
-    proposed.ki = clamp_value(proposed.ki, gains_.ki * 0.75f, gains_.ki * 1.25f);
+    proposed.kp = clamp_value(proposed.kp, gains_.kp * 0.90f, gains_.kp * 1.10f);
+    proposed.ki = clamp_value(proposed.ki, gains_.ki * 0.90f, gains_.ki * 1.10f);
     gains_.kp = clamp_value(proposed.kp, 0.002f, 1.5f);
     gains_.ki = clamp_value(proposed.ki, 1e-5f, 0.08f);
     fallback_active_ = false;
@@ -60,18 +59,54 @@ class SafePI {
   Gains fallback_;
   float integral_ = 0.0f;
   float output_ = 0.0f;
-  float output_slew_per_second_ = 0.20f;
   bool fallback_active_ = false;
   bool output_limited_ = false;
 };
 
-// Exported from outputs/fnn_rule_table.npy. Only four neighbouring rules are read.
-static const float kFnnRuleTable[5][5][2] = {
-    {{0.051355902f,0.000056127f},{0.051355902f,0.000056127f},{0.051355902f,0.000056127f},{0.051355902f,0.000056127f},{0.051355902f,0.000056127f}},
-    {{0.051355902f,0.000056127f},{0.051355902f,0.000056127f},{0.051355902f,0.000056127f},{0.051355902f,0.000056127f},{0.051355902f,0.000056127f}},
-    {{0.051355902f,0.000056127f},{0.213310494f,0.001018775f},{0.606015206f,0.005166625f},{0.051355902f,0.000056127f},{0.051355902f,0.000056127f}},
-    {{0.051355902f,0.000056127f},{0.213310494f,0.001018775f},{0.638474978f,0.008540036f},{0.051355902f,0.000056127f},{0.051355902f,0.000056127f}},
-    {{0.051355902f,0.000056127f},{0.051355902f,0.000056127f},{0.621039394f,0.007309802f},{0.051355902f,0.000056127f},{0.051355902f,0.000056127f}}};
+class CompressorLimiter {
+ public:
+  CompressorLimiter(float minimum_running=0.25f, float slew_per_minute=0.05f,
+                    float quantum=0.01f, float minimum_on_seconds=300.0f,
+                    float minimum_off_seconds=180.0f)
+      : minimum_running_(minimum_running), slew_per_second_(slew_per_minute/60.0f),
+        quantum_(quantum), minimum_on_seconds_(minimum_on_seconds),
+        minimum_off_seconds_(minimum_off_seconds) {}
+
+  void reset() {
+    continuous_=0.0f; output_=0.0f; on_=false; seconds_in_state_=1.0e9f;
+  }
+
+  float update(float requested, float dt_seconds) {
+    requested=clamp_value(requested,0.0f,1.0f);
+    bool wants_on=requested>=0.5f*minimum_running_;
+    if (on_ && !wants_on) {
+      if (seconds_in_state_>=minimum_on_seconds_) {
+        on_=false; continuous_=0.0f; output_=0.0f; seconds_in_state_=0.0f;
+      } else wants_on=true;
+    } else if (!on_ && wants_on) {
+      if (seconds_in_state_>=minimum_off_seconds_) {
+        on_=true; continuous_=minimum_running_; output_=minimum_running_; seconds_in_state_=0.0f;
+      } else wants_on=false;
+    }
+    if (on_ && wants_on) {
+      const float target=clamp_value(requested<minimum_running_?minimum_running_:requested,minimum_running_,1.0f);
+      const float step=slew_per_second_*dt_seconds;
+      continuous_=clamp_value(target,continuous_-step,continuous_+step);
+      output_=quantum_>0.0f?std::round(continuous_/quantum_)*quantum_:continuous_;
+      output_=clamp_value(output_,minimum_running_,1.0f);
+    }
+    seconds_in_state_+=dt_seconds;
+    return output_;
+  }
+
+  float command() const { return output_; }
+  bool is_on() const { return on_; }
+
+ private:
+  float minimum_running_,slew_per_second_,quantum_,minimum_on_seconds_,minimum_off_seconds_;
+  float continuous_=0.0f,output_=0.0f,seconds_in_state_=1.0e9f;
+  bool on_=false;
+};
 
 inline void active_interval(float value, const float centers[5], int &low, int &high, float &weight) {
   value = clamp_value(value, centers[0], centers[4]);
@@ -82,36 +117,35 @@ inline void active_interval(float value, const float centers[5], int &low, int &
 }
 
 inline Gains fnn_gains(float error, float delta_error) {
-  static const float e_centers[5] = {-5.0f,-2.5f,0.0f,2.5f,5.0f};
-  static const float d_centers[5] = {-1.0f,-0.5f,0.0f,0.5f,1.0f};
   int e0,e1,d0,d1; float ew,dw;
-  active_interval(error,e_centers,e0,e1,ew); active_interval(delta_error,d_centers,d0,d1,dw);
+  active_interval(error,generated::kFnnErrorCenters,e0,e1,ew);
+  active_interval(delta_error,generated::kFnnErrorRateCenters,d0,d1,dw);
   Gains result{0.0f,0.0f};
   const int es[2]={e0,e1}, ds[2]={d0,d1};
   const float ews[2]={1.0f-ew,ew}, dws[2]={1.0f-dw,dw};
   for (int ei=0;ei<2;++ei) for (int di=0;di<2;++di) {
     const float w=ews[ei]*dws[di];
-    result.kp += w*kFnnRuleTable[es[ei]][ds[di]][0];
-    result.ki += w*kFnnRuleTable[es[ei]][ds[di]][1];
+    result.kp += w*generated::kFnnRuleTable[es[ei]][ds[di]][0];
+    result.ki += w*generated::kFnnRuleTable[es[ei]][ds[di]][1];
   }
   return result;
 }
 
-// Greedy RL export from the current quick run. All 25 coarse states were visited;
-// this is coverage evidence, not proof that the noisy policy has converged.
-static const uint8_t kRlPolicy[5][5] = {{8,1,0,0,3},{4,7,4,1,6},{4,6,2,5,1},{2,1,8,6,7},{5,1,1,6,7}};
-static const uint8_t kRlCovered[5][5] = {{1,1,1,1,1},{1,1,1,1,1},{1,1,1,1,1},{1,1,1,1,1},{1,1,1,1,1}};
-static const float kRlActions[9][2] = {{-0.10f,-0.10f},{-0.10f,0.10f},{0.0f,-0.10f},{0.0f,0.0f},{0.0f,0.10f},{0.10f,-0.10f},{0.10f,0.0f},{0.10f,0.10f},{0.20f,0.0f}};
-
-inline int rl_bin(float value, float scale) {
-  return clamp_value(static_cast<int>(std::floor(value/scale))+2,0,4);
+inline int edge_bin(float value, const float *edges, int edge_count) {
+  int result=0;
+  while (result<edge_count && value>=edges[result]) ++result;
+  return result;
 }
 
-inline Gains rl_gains(float error, float delta_error, Gains current, bool &covered) {
-  const int e=rl_bin(error,2.5f), d=rl_bin(delta_error,0.5f);
-  covered=kRlCovered[e][d]!=0;
-  const uint8_t action=covered?kRlPolicy[e][d]:3;
-  return {current.kp*(1.0f+kRlActions[action][0]),current.ki*(1.0f+kRlActions[action][1])};
+inline Gains rl_gains(float error, float error_rate, float applied_command,
+                      Gains fallback, bool &covered) {
+  const int e=edge_bin(error,generated::kRlErrorEdges,4);
+  const int d=edge_bin(error_rate,generated::kRlErrorRateEdges,4);
+  const int c=edge_bin(applied_command,generated::kRlCommandEdges,2);
+  covered=generated::kRlAccepted && generated::kRlCovered[e][d][c]!=0;
+  const uint8_t action=covered?generated::kRlPolicy[e][d][c]:4;
+  return {fallback.kp*generated::kRlTargetScales[action][0],
+          fallback.ki*generated::kRlTargetScales[action][1]};
 }
 
 // Accelerated plant stub: 100 ms real time = 0.6 simulated minutes.

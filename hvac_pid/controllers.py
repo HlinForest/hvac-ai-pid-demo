@@ -340,9 +340,19 @@ def ziegler_nichols_pi(model: FOPDT) -> tuple[float, float]:
     return float(np.clip(kp, 0.002, 1.5)), float(np.clip(ki, 1e-5, 0.08))
 
 
-def imc_pi(model: FOPDT) -> tuple[float, float]:
-    # Conservative SIMC/IMC-style choice for a slow, delayed thermal plant.
-    closed_loop_time = max(model.time_constant_minutes / 3.0, 3.0 * model.delay_minutes, 12.0)
+def imc_pi(model: FOPDT, closed_loop_time_minutes: float | None = None) -> tuple[float, float]:
+    """Return SIMC/IMC PI gains for a selected closed-loop time ``lambda``.
+
+    With no explicit lambda this keeps the conservative engineering fallback.
+    A comparison experiment may tune only lambda on commissioning scenarios;
+    the controller remains constrained to the IMC formula instead of becoming
+    an unconstrained two-gain optimiser.
+    """
+    closed_loop_time = (
+        max(model.time_constant_minutes / 3.0, 3.0 * model.delay_minutes, 12.0)
+        if closed_loop_time_minutes is None
+        else max(float(closed_loop_time_minutes), model.delay_minutes)
+    )
     kp = model.time_constant_minutes / (
         model.process_gain_c_per_u * (closed_loop_time + model.delay_minutes)
     )

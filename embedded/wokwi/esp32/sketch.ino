@@ -15,10 +15,14 @@ constexpr bool USE_RL_POLICY=false;
 constexpr uint32_t PID_PERIOD_MS=100;
 constexpr uint32_t AI_DIVIDER=20;  // 20 * 100 ms = 2 s
 
-SafePI controller({0.12f,0.004f});
+const Gains fallback_gains{generated::kFallbackKp,generated::kFallbackKi};
+SafePI controller(fallback_gains);
+CompressorLimiter limiter;
 VirtualHVACPlant plant;
 uint32_t next_pid_ms=0, tick_count=0;
-float previous_error=0.0f;
+float previous_ai_error=0.0f;
+uint32_t previous_ai_ms=0;
+bool ai_state_initialized=false;
 uint32_t worst_pi_us=0, worst_ai_us=0;
 
 void setup() {
@@ -28,8 +32,8 @@ void setup() {
   pinMode(PIN_PWM,OUTPUT);
   pinMode(PIN_FALLBACK,OUTPUT);
   controller.reset();
+  limiter.reset();
   plant.reset(30.0f);
-  previous_error=plant.temperature()-24.0f;
   next_pid_ms=millis();
 }
 
@@ -38,23 +42,29 @@ void control_tick() {
   const float setpoint=22.0f+4.0f*static_cast<float>(adc)/4095.0f;
   const bool door_open=digitalRead(PIN_DOOR)==LOW;
   const float error=plant.temperature()-setpoint;
-  const float delta_error=error-previous_error;
 
   if (tick_count%AI_DIVIDER==0) {
+    const uint32_t now_ms=millis();
+    const float elapsed_minutes=ai_state_initialized?static_cast<float>(now_ms-previous_ai_ms)/60000.0f:0.0f;
+    const float error_rate=ai_state_initialized?(error-previous_ai_error)/fmaxf(elapsed_minutes,1.0e-6f):0.0f;
     const uint32_t started=micros();
     if (USE_RL_POLICY) {
       bool covered=false;
-      const Gains proposed=rl_gains(error,delta_error,controller.gains(),covered);
+      const Gains proposed=rl_gains(error,error_rate,limiter.command(),fallback_gains,covered);
       controller.apply_proposal(proposed,covered);
     } else {
-      controller.apply_proposal(fnn_gains(error,delta_error));
+      controller.apply_proposal(fnn_gains(error,error_rate),generated::kFnnAccepted);
     }
     const uint32_t elapsed=micros()-started;
     if (elapsed>worst_ai_us) worst_ai_us=elapsed;
+    previous_ai_error=error;
+    previous_ai_ms=now_ms;
+    ai_state_initialized=true;
   }
 
   const uint32_t started=micros();
-  const float command=controller.update(error,PID_PERIOD_MS/1000.0f);
+  const float requested=controller.update(error,PID_PERIOD_MS/1000.0f);
+  const float command=limiter.update(requested,PID_PERIOD_MS/1000.0f);
   const uint32_t elapsed=micros()-started;
   if (elapsed>worst_pi_us) worst_pi_us=elapsed;
   plant.step(command,door_open);
@@ -72,7 +82,6 @@ void control_tick() {
     Serial.print(" ai_us:"); Serial.print(worst_ai_us);
     Serial.print(" fallback:"); Serial.println(d.fallback_active?1:0);
   }
-  previous_error=error;
   ++tick_count;
 }
 

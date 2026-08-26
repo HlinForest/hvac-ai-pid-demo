@@ -1,0 +1,8 @@
+﻿stage,wall_seconds,notes
+FOPDT identification,0.16256930003874004,168 h accelerated virtual step; shared by Z-N/IMC
+Z-N formula,7.389998063445091e-05,one formula evaluation after identification
+IMC lambda search,2.8671438000164926,21 lambda candidates x 8 training scenarios
+Bayesian global PI search,1.4175068999174982,9 gain candidates x 8 scenarios
+FNN BO label generation,4.329077999806032,8 per-context gain labels
+FNN rule fitting and gate,0.2929318000096828,deployment accepted=True
+RL training and gate,13.19307369994931,750 episodes; deployment accepted=False

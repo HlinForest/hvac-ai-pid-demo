@@ -27,6 +27,19 @@ outputs/documents/*_a11y.json
 # Native testbench binaries are rebuilt from the supplied C++ source.
 embedded/*.exe
 
+# Superseded experiment runs. Keep the audited final v2 evidence instead.
+outputs_adaptive_trial/
+outputs_adaptive_final/
+outputs_review/
+outputs_review_v2/
+outputs_review_final/
+
+# Learning-manual QA derivatives. The final DOCX remains tracked.
+outputs_adaptive_final_v2/learning_document/*.pdf
+outputs_adaptive_final_v2/learning_document/a11y_audit.json
+outputs_adaptive_final_v2/learning_document/rendered_*/
+outputs_adaptive_final_v2/learning_document/figures/
+
 # Editor and operating-system files
 .vscode/
 .idea/

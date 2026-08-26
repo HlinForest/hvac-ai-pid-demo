@@ -10,7 +10,7 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import ConstantKernel, Matern, WhiteKernel
 
 from .config import Scenario
-from .controllers import PIController, identify_fopdt, imc_pi, ziegler_nichols_pi
+from .controllers import FOPDT, PIController, identify_fopdt, imc_pi, ziegler_nichols_pi
 from .metrics import calculate_metrics
 from .simulator import simulate
 
@@ -28,6 +28,59 @@ class TuneResult:
     score: float
     evaluations: int
     history: tuple[dict[str, object], ...] = ()
+
+
+def tune_global_imc_lambda(
+    scenarios: list[Scenario],
+    model: FOPDT,
+    *,
+    seed: int = 0,
+    candidates: int = 21,
+) -> TuneResult:
+    """Tune the single IMC robustness parameter on commissioning data only.
+
+    This is the fair classical baseline: BO may search Kp and Ki freely, while
+    IMC searches only lambda and keeps its model-based Kp/Ti relationship.
+    The conservative formula point is always evaluated and retained in the
+    audit history.
+    """
+    if not scenarios:
+        raise ValueError("at least one scenario is required")
+    conservative = max(model.time_constant_minutes / 3.0, 3.0 * model.delay_minutes, 12.0)
+    lower = max(model.delay_minutes, min(12.0, conservative))
+    lambdas = np.unique(
+        np.concatenate(
+            ([conservative], np.geomspace(lower, conservative, max(3, int(candidates))))
+        )
+    )
+    history: list[dict[str, object]] = []
+    for index, closed_loop_time in enumerate(lambdas):
+        gains = imc_pi(model, float(closed_loop_time))
+        scores = [
+            calculate_metrics(simulate(scenario, PIController(*gains), seed=seed + scenario_index))["objective"]
+            for scenario_index, scenario in enumerate(scenarios)
+        ]
+        history.append(
+            {
+                "evaluation": index + 1,
+                "lambda_minutes": float(closed_loop_time),
+                "candidate_kp": gains[0],
+                "candidate_ki": gains[1],
+                "mean_training_objective": float(np.mean(scores)),
+                "worst_training_objective": float(np.max(scores)),
+                "formula_default": int(np.isclose(closed_loop_time, conservative)),
+            }
+        )
+    best = min(history, key=lambda row: float(row["mean_training_objective"]))
+    for row in history:
+        row["selected"] = int(row is best)
+    return TuneResult(
+        kp=float(best["candidate_kp"]),
+        ki=float(best["candidate_ki"]),
+        score=float(best["mean_training_objective"]),
+        evaluations=len(history),
+        history=tuple(history),
+    )
 
 
 class BayesianGainTuner:

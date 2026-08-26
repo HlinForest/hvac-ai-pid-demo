@@ -6,9 +6,10 @@ from pathlib import Path
 
 import numpy as np
 
-from hvac_pid.config import Scenario, sample_scenarios
+from hvac_pid.config import Scenario, sample_adaptive_scenarios, sample_scenarios
 from hvac_pid.controllers import PIController, identify_fopdt, identify_fopdt_audit, imc_pi, ziegler_nichols_pi
 from hvac_pid.ai_controllers import FNNGainController, IncrementalRLController, train_fnn_rule_table, train_offline_q_policy
+from hvac_pid.actuator import CompressorCommandLimiter
 from hvac_pid.pipeline import run_pipeline
 from hvac_pid.plant import ThermalPlant2R2C
 from hvac_pid.scheduler import GainScheduler
@@ -62,7 +63,7 @@ class PlantAndControllerTests(unittest.TestCase):
         fnn_table = train_fnn_rule_table(scenarios, labels, fallback)
         rl_table = train_offline_q_policy(scenarios, fallback, seed=5, episodes=8, horizon=5)
         self.assertEqual(fnn_table.shape, (5, 5, 2))
-        self.assertEqual(rl_table.shape, (5, 5, 9))
+        self.assertEqual(rl_table.shape, (5, 5, 3, 9))
         for controller in (FNNGainController(fallback, rule_table=fnn_table), IncrementalRLController(fallback, q_table=rl_table)):
             controller.reset()
             for minute in range(5):
@@ -71,6 +72,43 @@ class PlantAndControllerTests(unittest.TestCase):
             status = controller.diagnostics()
             self.assertTrue(0.002 <= float(status["kp"]) <= 1.5)
             self.assertTrue(1e-5 <= float(status["ki"]) <= 0.08)
+
+    def test_adaptive_curriculum_contains_both_error_signs_and_events(self) -> None:
+        scenarios = sample_adaptive_scenarios(18, seed=17, duration_hours=5.0)
+        self.assertTrue(any(item.initial_zone_c < item.setpoint_c for item in scenarios))
+        self.assertTrue(any(item.initial_zone_c > item.setpoint_c for item in scenarios))
+        self.assertTrue(any(item.setpoint_change_hour is not None for item in scenarios))
+        self.assertTrue(any(item.door_open_hour is not None for item in scenarios))
+
+    def test_rl_no_change_policy_preserves_fallback_gains(self) -> None:
+        fallback = (0.4, 0.004)
+        q = np.zeros((5, 5, 3, 9), dtype=float)
+        q[:, :, :, 4] = 1.0
+        controller = IncrementalRLController(fallback, q_table=q)
+        controller.reset()
+        for minute in range(11):
+            controller.update(2.0, 1.0, minute=float(minute))
+        self.assertAlmostEqual(controller.kp, fallback[0])
+        self.assertAlmostEqual(controller.ki, fallback[1])
+
+    def test_compressor_constraints_apply_quantisation_floor_slew_and_dwell(self) -> None:
+        scenario = Scenario(
+            command_slew_rate_per_minute=0.05,
+            command_quantization=0.01,
+            minimum_running_command=0.25,
+            minimum_on_minutes=3.0,
+            minimum_off_minutes=2.0,
+        )
+        limiter = CompressorCommandLimiter(scenario)
+        commands = [limiter.update(1.0, 1.0) for _ in range(5)]
+        self.assertTrue(np.allclose(commands[:5], [0.30, 0.35, 0.40, 0.45, 0.50]))
+        self.assertTrue(all(value == 0.0 or value >= 0.25 for value in commands))
+        self.assertTrue(all(np.isclose(value / 0.01, round(value / 0.01)) for value in commands))
+        limiter.reset()
+        self.assertEqual(limiter.update(0.30, 1.0), 0.30)
+        self.assertEqual(limiter.update(0.0, 1.0), 0.25)
+        self.assertEqual(limiter.update(0.0, 1.0), 0.25)
+        self.assertEqual(limiter.update(0.0, 1.0), 0.0)
 
 
 class LearningTests(unittest.TestCase):
@@ -89,15 +127,23 @@ class LearningTests(unittest.TestCase):
             run_pipeline(output, train_samples=8, test_samples=3, bo_iterations=1, seed=19)
             expected = {
                 "training_labels.csv",
+                "training_scenarios.csv",
                 "classical_tuning_history.csv",
                 "classical_tuning_steps.csv",
                 "fopdt_fit_history.csv",
                 "bayesian_search_history.csv",
                 "fnn_training_history.csv",
+                "fnn_training_samples.csv",
                 "rl_training_history.csv",
+                "rl_training_transitions.csv",
+                "adaptive_state_spec.csv",
                 "global_bayesian_tuning.csv",
+                "imc_lambda_tuning.csv",
                 "fnn_rule_table.npy",
+                "fnn_rule_table_candidate.npy",
                 "rl_q_table.npy",
+                "rl_q_table_candidate.npy",
+                "holdout_scenarios.csv",
                 "holdout_metrics.csv",
                 "holdout_summary.csv",
                 "dynamic_metrics.csv",

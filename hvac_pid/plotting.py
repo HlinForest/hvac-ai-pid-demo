@@ -67,7 +67,7 @@ def plot_dynamic_comparison(
     axes[0].grid(alpha=0.22)
 
     for name, result in results.items():
-        axes[1].plot(hour, result.command * 100.0, label=DISPLAY_NAMES[name], linewidth=1.5, color=SERIES_COLORS[name])
+        axes[1].plot(hour, result.command * 100.0, label=DISPLAY_NAMES[name], linewidth=1.5, color=SERIES_COLORS[name], drawstyle="steps-post")
     axes[1].set_ylabel("压缩机 PWM 指令（%）")
     axes[1].set_ylim(-2, 102)
     axes[1].set_xlabel("仿真时间（小时）")
@@ -394,7 +394,7 @@ def plot_case_comparisons(cases: dict[str, dict[str, SimulationResult]], output_
         axes[0].fill_between(hour, reference.setpoint_c - 0.5, reference.setpoint_c + 0.5, color="#9CA3AF", alpha=0.14, label="±0.5°C 目标带")
         for name, result in results.items():
             axes[0].plot(hour, result.zone_c, label=DISPLAY_NAMES[name], linewidth=1.5, color=SERIES_COLORS[name])
-            axes[1].plot(hour, result.command * 100.0, label=DISPLAY_NAMES[name], linewidth=1.3, color=SERIES_COLORS[name])
+            axes[1].plot(hour, result.command * 100.0, label=DISPLAY_NAMES[name], linewidth=1.3, color=SERIES_COLORS[name], drawstyle="steps-post")
         axes[0].set_title(f"{case_name}：温度跟踪")
         axes[0].set_ylabel("温度（°C）")
         axes[0].grid(alpha=0.22)

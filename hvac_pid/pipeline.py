@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import csv
+from dataclasses import asdict
 from pathlib import Path
 import time
 
 import numpy as np
 
-from .config import Scenario, dynamic_demo_scenario, sample_scenarios, typical_case_scenarios
+from .config import Scenario, dynamic_demo_scenario, sample_adaptive_scenarios, typical_case_scenarios
 from .ai_controllers import FNNGainController, IncrementalRLController, train_fnn_rule_table, train_offline_q_policy
 from .algorithm_reports import write_algorithm_reports
 from .controllers import (
@@ -30,7 +31,7 @@ from .plotting import (
 )
 from .report import write_engineering_report, write_html_engineering_report
 from .simulator import SimulationResult, simulate
-from .tuning import generate_label_rows, tune_global_fixed
+from .tuning import generate_label_rows, tune_global_fixed, tune_global_imc_lambda
 from .validation import run_cross_validation
 
 
@@ -41,6 +42,15 @@ def _write_rows(path: Path, rows: list[dict[str, object]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _scenario_rows(scenarios: list[Scenario]) -> list[dict[str, object]]:
+    rows: list[dict[str, object]] = []
+    for index, scenario in enumerate(scenarios):
+        row = {"scenario": index + 1, **asdict(scenario)}
+        row.pop("FEATURE_NAMES", None)
+        rows.append(row)
+    return rows
 
 
 def _aggregate(rows: list[dict[str, object]]) -> list[dict[str, object]]:
@@ -54,6 +64,11 @@ def _aggregate(rows: list[dict[str, object]]) -> list[dict[str, object]]:
         "settling_time_hour",
         "cooling_energy_kwh",
         "control_movement",
+        "max_running_slew_per_minute",
+        "running_slew_violation_count",
+        "sub_minimum_running_fraction",
+        "compressor_start_events",
+        "compressor_stop_events",
         "itae_c_hour2",
         "compressor_output_variance",
         "mean_ai_inference_us",
@@ -162,14 +177,14 @@ def run_pipeline(
     commissioning_scenario = Scenario()
     commissioning_fopdt, identification_history, fopdt_fit_history = identify_fopdt_audit(commissioning_scenario)
     zn_gains = ziegler_nichols_pi(commissioning_fopdt)
-    imc_gains = imc_pi(commissioning_fopdt)
+    formula_imc_gains = imc_pi(commissioning_fopdt)
     classical_rows = [
         {
             **row,
             "zn_kp": zn_gains[0],
             "zn_ki": zn_gains[1],
-            "imc_kp": imc_gains[0],
-            "imc_ki": imc_gains[1],
+            "imc_kp": formula_imc_gains[0],
+            "imc_ki": formula_imc_gains[1],
         }
         for row in identification_history
     ]
@@ -182,7 +197,39 @@ def run_pipeline(
         fopdt_fit_history,
     )
     _write_rows(output / "classical_tuning_steps.csv", classical_steps)
-    training_scenarios = sample_scenarios(train_samples, seed=seed, duration_hours=5.0)
+    training_scenarios = sample_adaptive_scenarios(train_samples, seed=seed, duration_hours=5.0)
+    _write_rows(output / "training_scenarios.csv", _scenario_rows(training_scenarios))
+    imc_tune = tune_global_imc_lambda(
+        training_scenarios,
+        commissioning_fopdt,
+        seed=seed + 404,
+    )
+    imc_gains = (imc_tune.kp, imc_tune.ki)
+    _write_rows(output / "imc_lambda_tuning.csv", list(imc_tune.history))
+    selected_imc = next(row for row in imc_tune.history if int(row["selected"]) == 1)
+    classical_steps.extend(
+        [
+            {
+                "step": len(classical_steps) + 1,
+                "method": "IMC λ训练集调参",
+                "quantity": "公平比较协议",
+                "formula_or_action": "仅在训练工况搜索lambda；Kp/Ti仍由IMC公式约束",
+                "substitution": f"{imc_tune.evaluations}个lambda候选；测试工况未参与",
+                "result": "选择训练集平均目标最低的lambda",
+                "meaning": "避免拿未经任务调节的保守回退参数与已优化算法直接比较",
+            },
+            {
+                "step": len(classical_steps) + 2,
+                "method": "IMC λ训练集调参",
+                "quantity": "选定参数",
+                "formula_or_action": "lambda*=argmin mean_train J(IMC(lambda))",
+                "substitution": f"lambda={float(selected_imc['lambda_minutes']):.8g} min",
+                "result": f"Kp={imc_gains[0]:.8g}, Ki={imc_gains[1]:.8g}",
+                "meaning": "进入留出集和三个案例后冻结，不利用测试结果回调参数",
+            },
+        ]
+    )
+    _write_rows(output / "classical_tuning_steps.csv", classical_steps)
     label_rows = generate_label_rows(
         training_scenarios,
         bo_iterations=bo_iterations,
@@ -195,15 +242,54 @@ def run_pipeline(
     fixed_gains = (global_tune.kp, global_tune.ki)
     _write_rows(output / "global_bayesian_tuning.csv", [{"kp": global_tune.kp, "ki": global_tune.ki, "objective": global_tune.score, "evaluations": global_tune.evaluations}])
     _write_rows(output / "bayesian_search_history.csv", list(global_tune.history))
-    fnn_rule_table, fnn_history = train_fnn_rule_table(training_scenarios, label_rows, imc_gains, return_history=True)
+    fnn_samples: list[dict[str, float]] = []
+    fnn_candidates: list[np.ndarray] = []
+    fnn_rule_table, fnn_history = train_fnn_rule_table(
+        training_scenarios,
+        label_rows,
+        imc_gains,
+        return_history=True,
+        sample_sink=fnn_samples,
+        candidate_sink=fnn_candidates,
+    )
     _write_rows(output / "fnn_training_history.csv", fnn_history)
+    _write_rows(output / "fnn_training_samples.csv", fnn_samples)
+    if fnn_candidates:
+        np.save(output / "fnn_rule_table_candidate.npy", fnn_candidates[-1])
     np.save(output / "fnn_rule_table.npy", fnn_rule_table)
-    rl_q_table, rl_history = train_offline_q_policy(training_scenarios, fallback_gains=imc_gains, seed=seed + 1_616, return_history=True)
+    rl_transitions: list[dict[str, float]] = []
+    rl_candidates: list[np.ndarray] = []
+    rl_q_table, rl_history = train_offline_q_policy(
+        training_scenarios,
+        fallback_gains=imc_gains,
+        seed=seed + 1_616,
+        return_history=True,
+        transition_sink=rl_transitions,
+        candidate_sink=rl_candidates,
+    )
     _write_rows(output / "rl_training_history.csv", rl_history)
+    _write_rows(output / "rl_training_transitions.csv", rl_transitions)
+    if rl_candidates:
+        np.save(output / "rl_q_table_candidate.npy", rl_candidates[-1])
     np.save(output / "rl_q_table.npy", rl_q_table)
+    state_spec_rows: list[dict[str, object]] = []
+    for index, value in enumerate(FNNGainController.centers):
+        state_spec_rows.append({"component": "FNN_error_center", "index": index, "value": float(value), "meaning": "Tzone-Tsetpoint, °C"})
+    for index, value in enumerate(FNNGainController.delta_centers):
+        state_spec_rows.append({"component": "FNN_error_rate_center", "index": index, "value": float(value), "meaning": "error rate, °C/min"})
+    for index, value in enumerate(IncrementalRLController.error_edges):
+        state_spec_rows.append({"component": "RL_error_edge", "index": index, "value": float(value), "meaning": "Tzone-Tsetpoint bin edge, °C"})
+    for index, value in enumerate(IncrementalRLController.delta_edges):
+        state_spec_rows.append({"component": "RL_error_rate_edge", "index": index, "value": float(value), "meaning": "error-rate bin edge, °C/min"})
+    for index, value in enumerate(IncrementalRLController.command_edges):
+        state_spec_rows.append({"component": "RL_command_edge", "index": index, "value": float(value), "meaning": "previous applied compressor command bin edge"})
+    for index, (kp_scale, ki_scale) in enumerate(IncrementalRLController._actions):
+        state_spec_rows.append({"component": "RL_action", "index": index, "value": f"{kp_scale:.6g},{ki_scale:.6g}", "meaning": "absolute Kp,Ki target scales relative to IMC"})
+    _write_rows(output / "adaptive_state_spec.csv", state_spec_rows)
 
     print("[2/3] Evaluating five controllers on held-out thermal contexts ...")
-    test_scenarios = sample_scenarios(test_samples, seed=seed + 100_003, duration_hours=5.0)
+    test_scenarios = sample_adaptive_scenarios(test_samples, seed=seed + 100_003, duration_hours=5.0)
+    _write_rows(output / "holdout_scenarios.csv", _scenario_rows(test_scenarios))
     evaluation_rows = _evaluate_holdout(test_scenarios, fixed_gains, zn_gains, imc_gains, fnn_rule_table, rl_q_table, seed + 200_003)
     summary_rows = _aggregate(evaluation_rows)
     _write_rows(output / "holdout_metrics.csv", evaluation_rows)
@@ -220,8 +306,10 @@ def run_pipeline(
         for index, minute in enumerate(result.minute):
             timeseries_rows.append({
                 "controller": name, "minute": float(minute), "zone_c": float(result.zone_c[index]),
+                "measurement_c": float(result.measurement_c[index]),
                 "setpoint_c": float(result.setpoint_c[index]), "outdoor_c": float(result.outdoor_c[index]),
                 "internal_load_w": float(result.internal_load_w[index]), "command_pct": float(result.command[index] * 100),
+                "requested_command_pct": float(result.requested_command[index] * 100),
                 "kp": float(result.kp[index]), "ki": float(result.ki[index]),
                 "inference_us": float(result.inference_us[index]), "fallback_active": int(result.fallback_active[index]),
             })

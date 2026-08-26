@@ -13,6 +13,11 @@ def calculate_metrics(result: SimulationResult, comfort_band_c: float = 0.5) -> 
     undershoot = np.maximum(-error, 0.0)
     overheat = np.maximum(error, 0.0)
     movement = np.abs(np.diff(result.command, prepend=result.command[0]))
+    command_delta = np.abs(np.diff(result.command))
+    running_pairs = (result.command[:-1] > 0.0) & (result.command[1:] > 0.0)
+    running_slew = command_delta[running_pairs] / max(float(np.median(np.diff(result.minute))), 1e-9)
+    running = result.command > 0.0
+    sub_minimum = running & (result.command < result.minimum_running_command - 1e-9)
     itae = float(np.sum(result.minute / 60.0 * abs_error) * dt_hours)
     command_variance = float(np.var(result.command))
     stable = bool(np.all(np.isfinite(result.zone_c)) and np.all((result.zone_c > 5.0) & (result.zone_c < 45.0)))
@@ -60,6 +65,11 @@ def calculate_metrics(result: SimulationResult, comfort_band_c: float = 0.5) -> 
         "disturbance_recovered": float(disturbance_recovered),
         "cooling_energy_kwh": float(np.sum(result.cooling_w) * dt_hours / 1000.0),
         "control_movement": float(np.sum(movement)),
+        "max_running_slew_per_minute": float(np.max(running_slew)) if running_slew.size else 0.0,
+        "running_slew_violation_count": float(np.count_nonzero(running_slew > result.command_slew_limit_per_minute + 1e-9)),
+        "sub_minimum_running_fraction": float(np.mean(sub_minimum)),
+        "compressor_start_events": float(np.count_nonzero((result.command[1:] > 0.0) & (result.command[:-1] == 0.0))),
+        "compressor_stop_events": float(np.count_nonzero((result.command[1:] == 0.0) & (result.command[:-1] > 0.0))),
         "compressor_output_variance": command_variance,
         "mean_ai_inference_us": float(np.mean(result.inference_us[result.inference_us > 0])) if np.any(result.inference_us > 0) else 0.0,
         "fallback_events": float(np.count_nonzero(np.diff(result.fallback_active.astype(int), prepend=0) > 0)),

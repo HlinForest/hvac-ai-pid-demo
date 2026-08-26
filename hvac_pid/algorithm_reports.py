@@ -137,7 +137,7 @@ def _gain_explanation(name: str, result: SimulationResult) -> str:
     if name == "Ziegler-Nichols":
         return f"Kp={kp_min:.4g}、Ki={ki_min:.4g}。两者经过长时虚拟阶跃、FOPDT多次候选拟合、Z-N公式换算和安全限幅后固定；正式运行中不变化。"
     if name == "IMC PI":
-        return f"Kp={kp_min:.4g}、Ki={ki_min:.4g}。两者先经过FOPDT多次候选拟合，再由房间反应速度、延迟和闭环速度λ逐项换算；正式运行中不变化。"
+        return f"Kp={kp_min:.4g}、Ki={ki_min:.4g}。先辨识FOPDT，再只用训练工况选择闭环速度λ并按IMC公式换算；留出测试中不变化。"
     if name == "Bayesian Auto-tune":
         return f"Kp={kp_min:.4g}、Ki={ki_min:.4g}。离线搜索结束后固定；本次场景中不再根据温度实时改动。"
     update_count = int(np.count_nonzero(np.diff(result.kp, prepend=result.kp[0]) != 0))
@@ -153,7 +153,7 @@ def _metric_rows(result: SimulationResult) -> list[dict[str, str]]:
         {"指标": "ITAE（越小越好）", "结果": f"{_number(metrics['itae_c_hour2'])} °C·h²", "说明": "越早消除偏差，分数越低"},
         {"指标": "调节时间", "结果": f"{_number(metrics['settling_time_hour'])} 小时", "说明": "进入并持续处于 ±0.5 °C 区间所需时间"},
         {"指标": "最大过冷", "结果": f"{_number(metrics['max_undershoot_c'])} °C", "说明": "低于设定温度的最大幅度"},
-        {"指标": "压缩机 PWM 方差", "结果": _number(metrics["compressor_output_variance"]), "说明": "越小表示压缩机指令越平稳"},
+        {"指标": "压缩机容量指令方差", "结果": _number(metrics["compressor_output_variance"]), "说明": "越小表示容量指令越平稳；不是寿命量"},
         {"指标": "制冷能耗代理", "结果": f"{_number(metrics['cooling_energy_kwh'])} kWh", "说明": "按模拟制冷量累积的比较指标"},
         {"指标": "安全回退次数", "结果": str(int(metrics["fallback_events"])), "说明": "AI 参数异常时回到 IMC 的次数"},
     ]
@@ -169,7 +169,7 @@ def _plot_one_algorithm(name: str, case_name: str, result: SimulationResult, pat
     axes[0].set_ylabel("温度（°C）")
     axes[0].legend()
     axes[0].grid(alpha=0.22)
-    axes[1].plot(hour, result.command * 100, color="#D97706", label="压缩机 PWM")
+    axes[1].plot(hour, result.command * 100, color="#D97706", label="压缩机容量指令", drawstyle="steps-post")
     axes[1].set_ylabel("PWM 指令（%）")
     axes[1].set_ylim(-2, 102)
     axes[1].legend()
@@ -224,7 +224,7 @@ def _scenario_result_rows(
                 "ITAE": _number(metrics["itae_c_hour2"]),
                 "调节时间（小时）": _number(metrics["settling_time_hour"]),
                 "最大过冷（°C）": _number(metrics["max_undershoot_c"]),
-                "PWM 方差": _number(metrics["compressor_output_variance"]),
+                "容量指令方差": _number(metrics["compressor_output_variance"]),
                 "能耗代理（kWh）": _number(metrics["cooling_energy_kwh"]),
             }
         )
@@ -239,7 +239,7 @@ def _case_rows_for_algorithm(case_rows: list[dict[str, object]], name: str) -> l
             "ITAE": _number(float(row["itae_c_hour2"])),
             "调节时间（小时）": _number(float(row["settling_time_hour"])),
             "最大过冷（°C）": _number(float(row["max_undershoot_c"])),
-            "PWM 方差": _number(float(row["compressor_output_variance"])),
+            "容量指令方差": _number(float(row["compressor_output_variance"])),
         }
         for row in selected
     ]
@@ -258,7 +258,8 @@ def _training_section(
         kp, ki = classical_gains[name]
         with (output_dir / "classical_tuning_steps.csv").open("r", encoding="utf-8-sig", newline="") as handle:
             all_steps = list(csv.DictReader(handle))
-        selected_steps = [row for row in all_steps if row["method"] in ("共同FOPDT辨识", name)]
+        selected_methods = ("共同FOPDT辨识", name, "IMC λ训练集调参") if name == "IMC PI" else ("共同FOPDT辨识", name)
+        selected_steps = [row for row in all_steps if row["method"] in selected_methods]
         rows = [
             {
                 "步骤": row["step"],
@@ -286,7 +287,7 @@ def _training_section(
         ]
         return f"""
 <h2>2. 从初始工况到 Kp、Ki：每一步完整计算</h2>
-<div class="answer"><strong>先纠正一个容易混淆的地方：</strong>Z-N/IMC 的<strong>公式换算</strong>确实可以在 K、τ、L 已知后直接完成；但 K、τ、L 不是凭空已知。本项目现在先运行 168 h 的加速虚拟阶跃，再用有界最小二乘反复提出 FOPDT 候选并计算误差，最后才代公式。因此“一次代公式”不等于“整个整定只做一步”。Z-N/IMC 是经典安装调试法，不是运行中自整定算法。</div>
+<div class="answer"><strong>比较协议：</strong>Z-N/IMC 先用 168 h 加速虚拟阶跃辨识 FOPDT。IMC 另在训练工况中只搜索一个鲁棒性参数 λ，Kp/Ti 始终受 IMC 公式约束；进入留出集后冻结。这样才不会把未经任务调节的保守回退参数与已优化控制器直接比较。</div>
 <h3>2.1 FOPDT 到底是什么？</h3>
 <p>FOPDT 是“一阶惯性 + 纯延迟”的英文缩写。直觉上，它把复杂机房的阶跃曲线压缩成三个数：<strong>K</strong> 表示制冷指令增加后最终能降多少温，<strong>L</strong> 表示命令发出后要空等多久，<strong>τ</strong> 表示开始响应后还要多慢才接近新温度。它只是给控制器算参数的低阶地图，不是 3R2C 物理房间本身。</p>
 <img src="data:image/png;base64,{_image_data(output_dir / 'classical_tuning_process.png')}" alt="经典PI阶跃辨识与参数计算过程">
@@ -336,15 +337,15 @@ def _training_section(
     if name == "FNN Self-tuning PI":
         fnn_steps = [
             {"步骤": "1", "操作": "生成监督标签", "Kp/Ki怎样得到": f"对 {len(fnn_history)} 个训练工况分别运行贝叶斯优化，得到各自较优固定 Kp/Ki"},
-            {"步骤": "2", "操作": "重放标签工况", "Kp/Ki怎样得到": "用该工况的标签 Kp/Ki 运行 3R2C，记录每分钟 e 与 Δe"},
-            {"步骤": "3", "操作": "分配模糊单元", "Kp/Ki怎样得到": "把 e 映射到 5 个中心、Δe 映射到 5 个中心，样本归入最近的规则单元"},
-            {"步骤": "4", "操作": "累计 log 增益", "Kp/Ki怎样得到": "对同一单元累计 log(Kp_label)、log(Ki_label) 和样本数"},
-            {"步骤": "5", "操作": "更新规则后件", "Kp/Ki怎样得到": "Kp_ij=exp(mean log Kp_label)，Ki_ij=exp(mean log Ki_label)"},
-            {"步骤": "6", "操作": "处理未覆盖规则", "Kp/Ki怎样得到": "没有训练样本的单元保留 IMC Kp/Ki，不凭空外推"},
+            {"步骤": "2", "操作": "重放标签工况", "Kp/Ki怎样得到": "用标签 Kp/Ki 运行3R2C，每5 min记录 e 与误差变化率 ė=Δe/Δt"},
+            {"步骤": "3", "操作": "软分配模糊单元", "Kp/Ki怎样得到": "e、ė各分配给相邻两个中心，以双线性权重更新最多4条规则"},
+            {"步骤": "4", "操作": "加权累计 log 增益", "Kp/Ki怎样得到": "按隶属权重累计 log(Kp_label)、log(Ki_label) 和有效样本量"},
+            {"步骤": "5", "操作": "正则化规则后件", "Kp/Ki怎样得到": "在内部验证集从多种IMC先验权重中选择，抑制稀疏格子的极端外推"},
+            {"步骤": "6", "操作": "处理未覆盖规则", "Kp/Ki怎样得到": "没有有效训练权重的单元保留 IMC Kp/Ki，不凭空外推"},
             {"步骤": "7", "操作": "逐批检查拟合", "Kp/Ki怎样得到": "记录规则覆盖率、log-RMSE、最大规则变化量和代表性规则增益"},
             {"步骤": "8", "操作": "冻结 5×5×2 规则表", "Kp/Ki怎样得到": f"本轮最终覆盖 {int(fnn_history[-1]['occupied_rules'])}/25 条规则"},
-            {"步骤": "9", "操作": "部署时在线插值", "Kp/Ki怎样得到": "当前 e、Δe 每轴各激活2个相邻中心，双线性插值得到动态 Kp/Ki，仅计算4条规则"},
-            {"步骤": "10", "操作": "安全处理", "Kp/Ki怎样得到": "动态增益再经过上下限、单次±25%变化率和非有限值 IMC 回退"},
+            {"步骤": "9", "操作": "部署时在线插值", "Kp/Ki怎样得到": "当前 e、ė每轴各激活2个相邻中心，双线性插值得到动态 Kp/Ki，仅计算4条规则"},
+            {"步骤": "10", "操作": "安全处理", "Kp/Ki怎样得到": "覆盖至少80%、验证目标不劣于IMC才部署；之后仍经过上下限、单次±10%变化率和异常回退"},
         ]
         rows = [
             {
@@ -358,27 +359,27 @@ def _training_section(
         ]
         return f"""
 <h2>2. 离线拟合：25条 FNN 规则如何逐步稳定</h2>
-<p>当前 FNN 是可解释的零阶 TSK 规则表，不是用反向传播跑 epoch 的深层网络。因此真实的拟合过程是：逐个加入 BO 标签工况，重放 e/Δe 轨迹，更新落入模糊单元的 Kp/Ki 后件。</p>
+<p>当前 FNN 是可解释的零阶 TSK 规则表，不是用反向传播跑 epoch 的深层网络。因此真实的拟合过程是：逐个加入 BO 标签工况，重放 e/ė 轨迹，更新落入模糊单元的 Kp/Ki 后件。</p>
 <h3>2.1 从贝叶斯标签到运行时动态增益</h3>
 {_html_table(fnn_steps, ["步骤", "操作", "Kp/Ki怎样得到"])}
 <img src="data:image/png;base64,{_image_data(output_dir / 'fnn_training_trace.png')}" alt="FNN规则覆盖、拟合误差与参数收敛过程">
 <h3>2.2 每加入一个训练工况后的规则状态</h3>
 {_html_table(rows, ["训练工况", "规则覆盖", "log-RMSE", "平均 Kp/Ki", "大误差规则 Kp/Ki"])}
-<p class="card">图和表使用了全部 {len(fnn_history)} 个训练工况；完整记录位于 <a href="../fnn_training_history.csv">fnn_training_history.csv</a>。训练完成后冻结规则表，运行时每次只激活4条相邻规则。</p>
+<p class="card">图和表使用了全部 {len(fnn_history)} 个训练工况；完整记录位于 <a href="../fnn_training_history.csv">fnn_training_history.csv</a>。训练后回放目标={fnn_history[-1].get('validation_learned_objective', float('nan')):.6g}，IMC基线={fnn_history[-1].get('validation_baseline_objective', float('nan')):.6g}，部署验收={'通过' if fnn_history[-1].get('deployment_accepted', 0.0) > 0.5 else '拒绝并回退IMC'}。</p>
 """
 
     rl_steps = [
-        {"步骤": "1", "操作": "定义状态", "Kp/Ki怎样得到": "把 e 按 2.5°C 分箱、Δe 按 0.5°C 分箱，形成 5×5=25 个状态"},
-        {"步骤": "2", "操作": "定义动作", "Kp/Ki怎样得到": "9 个动作分别让 Kp/Ki 乘以 -10%、0、+10% 或 Kp +20%"},
-        {"步骤": "3", "操作": "初始化", "Kp/Ki怎样得到": "Q表全部置0；每回合 Kp/Ki 从 IMC 回退值开始，缩放系数为1"},
-        {"步骤": "4", "操作": "选择训练工况", "Kp/Ki怎样得到": "随机抽取一个 3R2C 工况，并随机化初温与首个 Δe"},
+        {"步骤": "1", "操作": "定义状态", "Kp/Ki怎样得到": "e和误差变化率ė各5档，再加入上一次实际容量的停机/部分/高负荷3档；Q表为5×5×3×9"},
+        {"步骤": "2", "操作": "定义动作", "Kp/Ki怎样得到": "9个动作是相对IMC的绝对目标比例：Kp、Ki各取0.75、1.0、1.3"},
+        {"步骤": "3", "操作": "安全初始化", "Kp/Ki怎样得到": "未访问状态默认选择IMC不改增益；每回合从IMC和真实ė=0开始"},
+        {"步骤": "4", "操作": "选择训练工况", "Kp/Ki怎样得到": "随机抽取一个带噪3R2C工况并随机化初温；不人工伪造状态覆盖"},
         {"步骤": "5", "操作": "ε-greedy选动作", "Kp/Ki怎样得到": "以 ε 随机探索，否则选择当前 Q 最大动作；ε 从0.25降到0.03"},
-        {"步骤": "6", "操作": "产生本步增益", "Kp/Ki怎样得到": "累计动作得到 Kp_scale/Ki_scale，并限制在0.5–1.8，再乘 IMC 基准增益"},
-        {"步骤": "7", "操作": "推进物理环境", "Kp/Ki怎样得到": "PI 使用本步 Kp/Ki 计算制冷指令，3R2C 返回下一温度和新误差"},
-        {"步骤": "8", "操作": "计算奖励", "Kp/Ki怎样得到": "惩罚温差、增益动作、偏离基准和制冷指令"},
+        {"步骤": "6", "操作": "产生本步增益", "Kp/Ki怎样得到": "先屏蔽冷房间提高增益等无益动作，再把绝对目标比例乘IMC；实际增益每次最多变化±10%"},
+        {"步骤": "7", "操作": "推进物理环境", "Kp/Ki怎样得到": "保持动作5 min，通过最低频率、量化、斜率和启停约束后推进带噪3R2C"},
+        {"步骤": "8", "操作": "计算奖励", "Kp/Ki怎样得到": "按5 min区间平均惩罚温差、舒适超限、指令变化、能量代理与增益动作"},
         {"步骤": "9", "操作": "更新 Q 值", "Kp/Ki怎样得到": "Q←Q+0.12[r+0.94 max Q′−Q]"},
         {"步骤": "10", "操作": "重复训练", "Kp/Ki怎样得到": f"{len(rl_history)} 回合、约 {int(rl_history[-1]['environment_steps']):,} 个环境步"},
-        {"步骤": "11", "操作": "冻结部署策略", "Kp/Ki怎样得到": "每个状态保存 argmax Q 动作；上线 ε=0，再经增益限幅、变化率保护和 IMC 回退"},
+        {"步骤": "11", "操作": "部署验收门", "Kp/Ki怎样得到": "内部验证早停选表；目标若比IMC差2%以上或25热状态覆盖低于80%则拒绝，上线ε=0"},
     ]
     checkpoints = [row for index, row in enumerate(rl_history) if index == 0 or (index + 1) % 25 == 0 or index == len(rl_history) - 1]
     rows = [
@@ -395,13 +396,13 @@ def _training_section(
     total_steps = int(rl_history[-1]["environment_steps"]) if rl_history else 0
     return f"""
 <h2>2. 离线 RL 训练：奖励、TD误差、状态覆盖与参数变化</h2>
-<p>RL 不是直接给出一张 Q 表。它在虚拟热环境中训练 {len(rl_history)} 回合，约 {total_steps:,} 个环境步；每一步都选择小幅 Kp/Ki 增量并更新 Q 值。图中完整绘制所有回合，表格每25回合抽取一个可读检查点。</p>
+<p>RL 不是直接给出一张 Q 表。它在虚拟热环境中训练 {len(rl_history)} 回合，约 {total_steps:,} 个一分钟对象步、36,000次五分钟策略决策；每次选择相对IMC的绝对Kp/Ki目标并更新Q值。图中完整绘制所有回合，表格每25回合抽取一个可读检查点。</p>
 <h3>2.1 从 Q 表初始化到部署 Kp/Ki</h3>
 {_html_table(rl_steps, ["步骤", "操作", "Kp/Ki怎样得到"])}
 <img src="data:image/png;base64,{_image_data(output_dir / 'rl_training_trace.png')}" alt="RL回合奖励、TD误差、覆盖率、策略变化与KpKi训练轨迹">
 <h3>2.2 每25回合训练检查点</h3>
 {_html_table(rows, ["回合", "20回合平均奖励", "平均 TD 误差", "状态覆盖", "探索率", "回合平均 Kp/Ki"])}
-<p class="card">完整逐回合数据位于 <a href="../rl_training_history.csv">rl_training_history.csv</a>。上线后将 ε 强制设为0，禁止在真实空调上随机探索。</p>
+<p class="card">完整逐回合数据位于 <a href="../rl_training_history.csv">rl_training_history.csv</a>。训练后回放目标={rl_history[-1].get('validation_learned_objective', float('nan')):.6g}，IMC基线={rl_history[-1].get('validation_baseline_objective', float('nan')):.6g}，部署验收={'通过' if rl_history[-1].get('deployment_accepted', 0.0) > 0.5 else '拒绝并回退IMC'}。</p>
 """
 
 
@@ -472,14 +473,14 @@ img {{ width:100%; border:1px solid #d7e0e9; margin:12px 0; }} pre {{ white-spac
 <h2>3. 整定/训练阶段与部署运行阶段必须分开</h2>
 <div class="answer">Z-N、IMC 和贝叶斯 PI 在独立安装调试阶段得到参数，进入三个测试工况后全部冻结，所以运行图中 Kp/Ki 是水平线。FNN 和 RL 也先离线训练并冻结规则表/策略，但它们部署时会根据 e、Δe 输出受限的动态 Kp/Ki。测试工况不参与整定或训练。</div>
 {_html_table(gain_table, ["工况", "Kp 范围", "Ki 范围", "运行中更新"])}
-<h2>4. 三工况结果总览</h2>{_html_table(case_table, ["独立场景", "ITAE", "调节时间（小时）", "最大过冷（°C）", "PWM 方差", "能耗代理（kWh）"])}
+<h2>4. 三工况结果总览</h2>{_html_table(case_table, ["独立场景", "ITAE", "调节时间（小时）", "最大过冷（°C）", "容量指令方差", "能耗代理（kWh）"])}
 {''.join(scenario_sections)}
 <h2>8. 仿真函数：房间与压缩机如何被推进？</h2>
 <p>每一步读取环境和负荷，PI 计算 PWM，压缩机经过延迟/惯性后提供制冷量，最后更新空气与墙体温度。以下是实际使用的热模型代码与仿真循环代码。</p>
 <h3>热模型函数</h3><pre>{html.escape(plant_code)}</pre>
 <h3>仿真循环函数</h3><pre>{html.escape(simulation_code)}</pre>
 <h2>9. 本算法的实际代码</h2><pre>{html.escape(algorithm_code)}</pre>
-<p>解释原则：ITAE 和调节时间越小，说明越早回到设定温度；最大过冷越小，表示不会降得太低；PWM 方差越小，压缩机指令越平稳。不能只按一项排名。</p>
+<p>解释原则：ITAE 和调节时间越小，说明越早回到设定温度；最大过冷越小，表示不会降得太低；容量指令方差越小，命令越平稳，但它不是寿命量。不能只按一项排名。</p>
 </body></html>"""
         output_file.write_text(document, encoding="utf-8")
         generated[name] = str(output_file.relative_to(output_dir)).replace("\\", "/")

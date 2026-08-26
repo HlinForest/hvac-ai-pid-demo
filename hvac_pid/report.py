@@ -78,20 +78,31 @@ def write_engineering_report(
     fopdt_validation = fopdt_validation or []
     openmodelica_validation = openmodelica_validation or []
     validation_environment = validation_environment or {}
+    def deployment_accepted(filename: str) -> bool:
+        history_path = path.parent / filename
+        if not history_path.exists():
+            return True
+        with history_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+        value = rows[-1].get("deployment_accepted", "nan") if rows else "nan"
+        return str(value).lower() == "nan" or float(value) > 0.5
+
+    fnn_accepted = deployment_accepted("fnn_training_history.csv")
+    rl_accepted = deployment_accepted("rl_training_history.csv")
     display_names = {
         "Bayesian Auto-tune": "贝叶斯自动整定",
         "Ziegler-Nichols": "Z-N 反应曲线法",
-        "IMC PI": "IMC 内模控制",
-        "FNN Self-tuning PI": "FNN 在线自整定",
-        "RL Self-tuning PI": "RL 在线自整定",
+        "IMC PI": "IMC 内模控制（λ经训练集整定）",
+        "FNN Self-tuning PI": "FNN 在线自整定" if fnn_accepted else "FNN（验收拒绝→IMC）",
+        "RL Self-tuning PI": "RL 在线自整定" if rl_accepted else "RL（验收拒绝→IMC）",
     }
 
     def display_rows(rows: list[dict[str, object]], fields: list[tuple[str, str]]) -> list[dict[str, object]]:
         return [{label: (display_names.get(str(row.get(key)), row.get(key)) if key == "controller" else row.get(key)) for key, label in fields} for row in rows]
 
-    summary_display = display_rows(summary, [("controller", "算法"), ("mean_itae_c_hour2", "平均 ITAE（°C·h²）"), ("mean_settling_time_hour", "平均调节时间（小时）"), ("mean_max_undershoot_c", "平均最大过冷（°C）"), ("mean_compressor_output_variance", "平均 PWM 方差"), ("stable_rate", "稳定率")])
-    dynamic_display = display_rows(dynamic, [("controller", "算法"), ("itae_c_hour2", "ITAE（°C·h²）"), ("settling_time_hour", "调节时间（小时）"), ("max_undershoot_c", "最大过冷（°C）"), ("compressor_output_variance", "PWM 方差"), ("fallback_events", "安全回退次数")])
-    case_display = display_rows(case_rows, [("case", "场景"), ("controller", "算法"), ("itae_c_hour2", "ITAE（°C·h²）"), ("settling_time_hour", "调节时间（h）"), ("disturbance_recovery_time_hour", "扰动恢复（h）"), ("max_overheat_c", "最大过热（°C）"), ("max_undershoot_c", "最大过冷（°C）"), ("compressor_output_variance", "PWM 方差")])
+    summary_display = display_rows(summary, [("controller", "算法"), ("mean_itae_c_hour2", "平均 ITAE（°C·h²）"), ("mean_settling_time_hour", "平均调节时间（小时）"), ("mean_max_undershoot_c", "平均最大过冷（°C）"), ("mean_compressor_output_variance", "平均容量指令方差"), ("stable_rate", "稳定率")])
+    dynamic_display = display_rows(dynamic, [("controller", "算法"), ("itae_c_hour2", "ITAE（°C·h²）"), ("settling_time_hour", "调节时间（小时）"), ("max_undershoot_c", "最大过冷（°C）"), ("compressor_output_variance", "容量指令方差"), ("fallback_events", "安全回退次数")])
+    case_display = display_rows(case_rows, [("case", "场景"), ("controller", "算法"), ("itae_c_hour2", "ITAE（°C·h²）"), ("settling_time_hour", "调节时间（h）"), ("disturbance_recovery_time_hour", "扰动恢复（h）"), ("max_overheat_c", "最大过热（°C）"), ("max_undershoot_c", "最大过冷（°C）"), ("compressor_output_variance", "容量指令方差")])
     physical_display = [
         {
             "场景": row.get("case", ""),
@@ -168,10 +179,10 @@ OpenModelica/DASSL 与独立 Python/DOP853 连续方程的同工况结果：
 
 - 共用 PI：`e=Tz-Tsp`，`I*=I+eΔt`，`u=clip(Kp·e+Ki·I*,0,1)`；条件积分抗饱和。
 - Z-N：`Kp=0.9τ/(KL)`，`Ti=3.33L`，`Ki=Kp/Ti`；在独立安装调试阶段整定一次，三个测试工况全部冻结。
-- IMC：`λ=max(τ/3,3L,12min)`，`Kp=τ/[K(λ+L)]`，`Ti=min[τ,4(λ+L)]`，`Ki=Kp/Ti`。
+- IMC：保守回退值取 `λ=max(τ/3,3L,12min)`；公平性能基线只在训练工况搜索 λ，随后仍按 `Kp=τ/[K(λ+L)]`、`Ti=min[τ,4(λ+L)]` 换算并在留出测试中冻结。
 - 贝叶斯自动整定：在 log(Kp),log(Ki) 内用 Matérn-5/2 高斯过程 + EI 搜索全局固定增益；本次为 Kp=0.609258、Ki=0.00175406。
-- FNN：5×5 TSK 规则表，`Kp=ΣwᵢⱼKpᵢⱼ`、`Ki=ΣwᵢⱼKiᵢⱼ`，每次只有 4 条双线性插值规则激活；规则表由 BO 标签离线训练。
-- RL：状态为 5×5 的 (e,Δe) 网格，9 种增益增量动作；`Q←Q+α[r+γmaxQ'-Q]`；500 回合×60 步，上线只 argmax，不随机探索。
+- FNN：5×5 TSK 规则表，输入为误差 e 与误差变化率 ė，`Kp=ΣwᵢⱼKpᵢⱼ`、`Ki=ΣwᵢⱼKiᵢⱼ`，每次只有 4 条双线性插值规则激活；规则表由 BO 标签离线训练并在验证集选择 IMC 正则强度。覆盖不足或平均目标劣于 IMC时拒绝候选表。
+- RL：状态为 5×5 的 (e,ė) 热状态再乘 3 档实际容量模式，9 个动作是相对 IMC 的绝对 Kp/Ki 目标比例；750 回合、每回合最长 240 min、每 5 min 决策。训练后使用多工况回放和早停选表，劣于 IMC 超过2%或25热状态覆盖不足80%时拒绝并回退 IMC。
 
 完整整定/训练证据：
 
@@ -186,10 +197,10 @@ OpenModelica/DASSL 与独立 Python/DOP853 连续方程的同工况结果：
 |---|---|
 | 跟踪精度与速度 | RMSE、IAE=`∫|e|dt`、ITAE=`∫t|e|dt`、调节时间 |
 | 动态品质 | 扰动恢复时间、最大过热、最大过冷、舒适带超限度时 |
-| 执行机构寿命与能耗 | PWM 方差、`Σ|u[k]-u[k-1]|`、`∫Qc dt` 制冷能量代理 |
+| 执行机构寿命与能耗 | 容量指令方差、`Σ|u[k]-u[k-1]|`、启停次数、`∫Qc dt` 制冷能量代理 |
 | 安全与实时性 | 稳定率、回退次数、AI 推理时间 |
 
-`∫Qc dt` 未引入 COP 与风机/水泵功耗，只是横向比较代理；PWM 方差也只是压缩机寿命代理。
+`∫Qc dt` 未引入 COP 与风机/水泵功耗，只是横向比较代理；容量指令方差也只是平稳性代理，不能直接等同于寿命。
 
 ## 4. 三场景实验分析与工程评估
 
@@ -197,19 +208,19 @@ OpenModelica/DASSL 与独立 Python/DOP853 连续方程的同工况结果：
 - 场景 2：设定温度突变，1 h 时 25→23 °C，检验工况迁移。
 - 场景 3：室外 37±4.5 °C、持续设备发热、3 h 开门 12 min +2600 W，检验长时抗扰。
 
-{table(case_display, ["场景", "算法", "ITAE（°C·h²）", "调节时间（h）", "扰动恢复（h）", "最大过热（°C）", "最大过冷（°C）", "PWM 方差"])}
+{table(case_display, ["场景", "算法", "ITAE（°C·h²）", "调节时间（h）", "扰动恢复（h）", "最大过热（°C）", "最大过冷（°C）", "容量指令方差"])}
 
 留出工况汇总：
 
-{table(summary_display, ["算法", "平均 ITAE（°C·h²）", "平均调节时间（小时）", "平均最大过冷（°C）", "平均 PWM 方差", "稳定率"])}
+{table(summary_display, ["算法", "平均 ITAE（°C·h²）", "平均调节时间（小时）", "平均最大过冷（°C）", "平均容量指令方差", "稳定率"])}
 
 ## 5. 嵌入式量产落地与工程安全评估
 
 - STM32F103C8T6：72 MHz、64 KB Flash、20 KB SRAM。Wokwi Blue Pill 完整代码已在线编译并进入运行态；FNN float32 表 200 B，RL 已压成 25 B 动作索引 + 25 B 覆盖掩码 + 72 B 动作表。
 - ESP32：经典系列最高 240 MHz、520 KB SRAM；资源充足，但需隔离 Wi-Fi 任务与控制任务。
 - PC C++ Testbench：`sizeof(SafePI)=32 B`、虚拟对象状态 68 B，100 ms PI / 2 s AI 分频通过；PC 时间不能换算为 MCU WCET。
-- 已实现：输出/斜率限幅、条件积分抗饱和、Kp/Ki 边界、单次增益±25%、FNN 四规则插值、RL 无在线探索与未覆盖状态回退。
-- 尚未声称完成：Wokwi 已证明 STM32/ESP32 目标编译和启动，但还必须取得串口曲线、ROM、RAM、最坏周期和栈的可复核证据；随后补齐最小运停时间、高低压与排气温度联锁、传感器合理性、通信超时、看门狗及参数 CRC/回滚。
+- 已实现于 Python 统一比较层：0/25% 最低稳定容量、1% 量化台阶、运行段每分钟 5 个百分点斜率、最小启停驻留、测量噪声与滤波、条件积分抗饱和、Kp/Ki 边界、FNN/RL 训练后部署验收门。
+- 尚未声称完成：Wokwi 已证明 STM32/ESP32 目标编译和启动，但这些新增约束仍需同步到目标 MCU，并取得串口曲线、ROM、RAM、最坏周期和栈证据；高低压、排气温度、通信超时、看门狗及参数 CRC/回滚仍待补齐。
 - 上线流程：SIL → HIL → 只读影子模式 → 有限增益试运行 → 单机试点 → 多季节回归。
 
 ## 单算法三工况文档
@@ -303,12 +314,16 @@ def write_html_engineering_report(
     openmodelica_validation = openmodelica_validation or []
     validation_environment = validation_environment or {}
     katex_available = _ensure_katex_assets(path)
+    fnn_training_rows = read_csv_rows("fnn_training_history.csv")
+    rl_training_rows = read_csv_rows("rl_training_history.csv")
+    fnn_accepted = not fnn_training_rows or str(fnn_training_rows[-1].get("deployment_accepted", "nan")).lower() == "nan" or float(fnn_training_rows[-1]["deployment_accepted"]) > 0.5
+    rl_accepted = not rl_training_rows or str(rl_training_rows[-1].get("deployment_accepted", "nan")).lower() == "nan" or float(rl_training_rows[-1]["deployment_accepted"]) > 0.5
     display_names = {
         "Bayesian Auto-tune": "贝叶斯自动整定",
         "Ziegler-Nichols": "Z-N 反应曲线法",
-        "IMC PI": "IMC 内模控制",
-        "FNN Self-tuning PI": "FNN 在线自整定",
-        "RL Self-tuning PI": "RL 在线自整定",
+        "IMC PI": "IMC 内模控制（λ经训练集整定）",
+        "FNN Self-tuning PI": "FNN 在线自整定" if fnn_accepted else "FNN（验收拒绝→IMC）",
+        "RL Self-tuning PI": "RL 在线自整定" if rl_accepted else "RL（验收拒绝→IMC）",
     }
 
     def translate(rows: list[dict[str, object]], fields: list[tuple[str, str]]) -> tuple[list[dict[str, object]], list[str]]:
@@ -322,9 +337,9 @@ def write_html_engineering_report(
             translated.append(item)
         return translated, labels
 
-    holdout_rows, holdout_columns = translate(summary, [("controller", "算法"), ("mean_itae_c_hour2", "平均 ITAE（°C·h²）"), ("mean_settling_time_hour", "平均调节时间（小时）"), ("mean_max_undershoot_c", "平均最大过冷（°C）"), ("mean_compressor_output_variance", "平均 PWM 方差"), ("stable_rate", "稳定率")])
-    dynamic_rows, dynamic_columns = translate(dynamic, [("controller", "算法"), ("itae_c_hour2", "ITAE（°C·h²）"), ("settling_time_hour", "调节时间（小时）"), ("max_undershoot_c", "最大过冷（°C）"), ("compressor_output_variance", "PWM 方差"), ("fallback_events", "安全回退次数")])
-    case_display, case_columns = translate(case_rows, [("case", "场景"), ("controller", "算法"), ("itae_c_hour2", "ITAE（°C·h²）"), ("settling_time_hour", "调节时间（小时）"), ("max_undershoot_c", "最大过冷（°C）"), ("compressor_output_variance", "PWM 方差")])
+    holdout_rows, holdout_columns = translate(summary, [("controller", "算法"), ("mean_itae_c_hour2", "平均 ITAE（°C·h²）"), ("mean_settling_time_hour", "平均调节时间（小时）"), ("mean_max_undershoot_c", "平均最大过冷（°C）"), ("mean_compressor_output_variance", "平均容量指令方差"), ("stable_rate", "稳定率")])
+    dynamic_rows, dynamic_columns = translate(dynamic, [("controller", "算法"), ("itae_c_hour2", "ITAE（°C·h²）"), ("settling_time_hour", "调节时间（小时）"), ("max_undershoot_c", "最大过冷（°C）"), ("compressor_output_variance", "容量指令方差"), ("fallback_events", "安全回退次数")])
+    case_display, case_columns = translate(case_rows, [("case", "场景"), ("controller", "算法"), ("itae_c_hour2", "ITAE（°C·h²）"), ("settling_time_hour", "调节时间（小时）"), ("max_undershoot_c", "最大过冷（°C）"), ("compressor_output_variance", "容量指令方差")])
     physical_validation_rows = [
         {
             "验证场景": row.get("case", ""),
@@ -384,18 +399,17 @@ def write_html_engineering_report(
         else "本项目已建立可重复的 Python 热仿真环境、五类控制器、统一指标和三工况比较，并完成 1 min "
         "离散步进误差检查及 FOPDT 降阶代理验证；当前输出目录没有 OpenModelica 结果 CSV，不能在这一份报告中声称已完成 Modelica 交叉验证。"
     )
-    rl_table_path = image_dir / "rl_q_table.npy"
-    if rl_table_path.exists():
-        rl_table = np.load(rl_table_path)
-        rl_covered_states = int(np.count_nonzero(np.any(np.abs(rl_table) > 1e-12, axis=2)))
-        rl_total_states = int(rl_table.shape[0] * rl_table.shape[1])
-        rl_nonzero_values = int(np.count_nonzero(np.abs(rl_table) > 1e-12))
-        rl_total_values = int(rl_table.size)
+    if rl_training_rows:
+        rl_last = rl_training_rows[-1]
+        rl_covered_states = int(float(rl_last.get("visited_states", 0)))
+        rl_total_states = 25
+        rl_full_covered = int(float(rl_last.get("visited_full_states", 0)))
+        rl_full_total = 75
     else:
-        rl_covered_states = rl_total_states = rl_nonzero_values = rl_total_values = 0
+        rl_covered_states = rl_total_states = rl_full_covered = rl_full_total = 0
     rl_audit_html = (
-        f'<div class="card"><strong>RL训练覆盖：</strong>Q表已访问 {rl_covered_states}/{rl_total_states} 个状态，'
-        f'非零 Q 值 {rl_nonzero_values}/{rl_total_values}。覆盖状态不等于策略已收敛，还必须结合奖励趋势、TD误差和策略翻转数判断。</div>'
+        f'<div class="card"><strong>RL训练覆盖：</strong>已访问 {rl_covered_states}/{rl_total_states} 个热状态；'
+        f'热状态×实际容量模式自然访问 {rl_full_covered}/{rl_full_total}。未访问的不安全/不可达组合不通过伪造数据补齐。覆盖不等于策略收敛，还必须结合验证目标、TD误差和独立测试。</div>'
         if rl_total_states and rl_covered_states == rl_total_states
         else f'<div class="warning"><strong>RL训练覆盖不足：</strong>Q表只覆盖 {rl_covered_states}/{rl_total_states} 个状态，'
         '未访问状态必须保持增益并回退 IMC，不能将该策略称为已充分训练。</div>'
@@ -405,11 +419,11 @@ def write_html_engineering_report(
         {"算法": "IMC", "直觉：它在做什么": "按期望闭环速度计算保守增益", "主要优点": "平滑、可解释、安全余量大", "主要缺点": "过于保守时恢复慢", "Kp/Ki 行为": "安装调试一次；三工况冻结", "适用": "平稳和设备寿命优先"},
         {"算法": "贝叶斯自动整定", "直觉：它在做什么": "离线搜索一套全局固定参数", "主要优点": "减少人工试参；上线仍是普通 PI", "主要缺点": "依赖训练工况/权重；不在线适应", "Kp/Ki 行为": "三工况共用同一套固定参数", "适用": "工况范围明确、部署简单"},
         {"算法": "FNN 在线自整定", "直觉：它在做什么": "5×5 规则表按误差在线插值", "主要优点": "动态改参；每次只算 4 条；轻量", "主要缺点": "需离线标签/专家规则；未覆盖区域需验证", "Kp/Ki 行为": "运行中动态改参，有限幅/变化率保护", "适用": "低成本 MCU 轻量自适应"},
-        {"算法": "RL 在线自整定", "直觉：它在做什么": "离线学习小幅增减 Kp/Ki 的 Q 表动作", "主要优点": "可围绕综合目标学习；上线查表轻", "主要缺点": "训练/验证成本最高；小样本未必占优", "Kp/Ki 行为": "离线训练；上线不探索，安全动态改参", "适用": "有可靠仿真器的研究方案"},
+        {"算法": "RL 在线自整定", "直觉：它在做什么": "离线学习相对IMC的绝对 Kp/Ki 目标", "主要优点": "可围绕综合目标学习；上线查表轻", "主要缺点": "训练/验证成本最高；小样本未必占优", "Kp/Ki 行为": "离线训练；上线不探索，动作屏蔽后安全改参", "适用": "有可靠仿真器的研究方案"},
     ]
     resource_rows = [
         {"目标": "PID 内环", "周期": "100 ms", "作用": "每一拍输出压缩机 PWM", "MCU 形式": "纯 C/C++ 数学函数"},
-        {"目标": "FNN/RL 外环", "周期": "2–5 s", "作用": "偶尔修改 Kp、Ki", "MCU 形式": "25 条规则取 4 条 / 5×5×9 查表"},
+        {"目标": "FNN/RL 外环", "周期": "2–5 s", "作用": "偶尔修改 Kp、Ki", "MCU 形式": "25 条规则取 4 条 / 5×5×3 策略查表"},
         {"目标": "安全保护", "周期": "每次计算", "作用": "限幅、变化率限制、异常回退", "MCU 形式": "固定边界判断"},
     ]
     best = min(dynamic, key=lambda row: float(row["itae_c_hour2"])) if dynamic else None
@@ -445,7 +459,7 @@ def write_html_engineering_report(
         {"类别": "动态品质", "指标": "扰动恢复时间", "数学定义": "设定值变化或最大热负荷脉冲结束后，进入 ±0.5 °C 所需时间", "工程含义": "只看事件后恢复，不与启动阶段混在一起"},
         {"类别": "动态品质", "指标": "最大过冷 / 最大过热", "数学定义": "max(-e,0) / max(e,0)", "工程含义": "分别防止降得太低与长时间偏热"},
         {"类别": "动态品质", "指标": "舒适带超限度时", "数学定义": "∫max(|e|-0.5,0)dt", "工程含义": "超出容许温差的程度和持续时间"},
-        {"类别": "执行机构寿命与能耗", "指标": "PWM 方差", "数学定义": "Var(u)", "工程含义": "容量命令波动；仅作为机械平稳性代理"},
+        {"类别": "执行机构寿命与能耗", "指标": "容量指令方差", "数学定义": "Var(u)", "工程含义": "容量命令波动；仅作为平稳性代理，不等同于寿命"},
         {"类别": "执行机构寿命与能耗", "指标": "控制总变化量", "数学定义": "Σ|u[k]-u[k-1]|", "工程含义": "指令来回调节的总幅度"},
         {"类别": "执行机构寿命与能耗", "指标": "制冷能量代理", "数学定义": "∫Qc(t)dt / 1000", "工程含义": "累计制冷量；不等于真实电耗，尚未引入 COP/频率效率图"},
         {"类别": "安全与实时性", "指标": "稳定率 / 回退次数 / AI 推理时间", "数学定义": "有界温度轨迹、回退沿与平均推理微秒", "工程含义": "用于评估异常与实时调度"},
@@ -484,7 +498,7 @@ def write_html_engineering_report(
             {"设置": "制冷量 / 延迟 / 惯性", "数值": f"{scenario.cooling_capacity_w:g} W / {scenario.actuator_delay_minutes:g} min / {scenario.actuator_tau_minutes:g} min"},
         ]
         result_rows = [
-            {"算法": display_names.get(str(row.get("controller")), str(row.get("controller"))), "ITAE": number(row.get("itae_c_hour2", "")), "调节时间(h)": number(row.get("settling_time_hour", "")), "扰动恢复(h)": number(row.get("disturbance_recovery_time_hour", "")), "恢复状态": "已在时窗内恢复" if float(row.get("disturbance_recovered", 0.0)) > 0.5 else "未在时窗内恢复", "最大过热(°C)": number(row.get("max_overheat_c", "")), "最大过冷(°C)": number(row.get("max_undershoot_c", "")), "PWM方差": number(row.get("compressor_output_variance", "")), "能量代理(kWh)": number(row.get("cooling_energy_kwh", ""))}
+            {"算法": display_names.get(str(row.get("controller")), str(row.get("controller"))), "ITAE": number(row.get("itae_c_hour2", "")), "调节时间(h)": number(row.get("settling_time_hour", "")), "扰动恢复(h)": number(row.get("disturbance_recovery_time_hour", "")), "恢复状态": "已在时窗内恢复" if float(row.get("disturbance_recovered", 0.0)) > 0.5 else "未在时窗内恢复", "最大过热(°C)": number(row.get("max_overheat_c", "")), "最大过冷(°C)": number(row.get("max_undershoot_c", "")), "容量指令方差": number(row.get("compressor_output_variance", "")), "能量代理(kWh)": number(row.get("cooling_energy_kwh", ""))}
             for row in selected
         ]
         if selected:
@@ -496,7 +510,7 @@ def write_html_engineering_report(
                 f"ITAE 最低为 <strong>{html.escape(display_names.get(str(best_itae['controller']), str(best_itae['controller'])))}</strong>"
                 f"（{number(best_itae['itae_c_hour2'])}）；"
                 + (f"在给定时窗内，事件局部恢复时间最短为 <strong>{html.escape(display_names.get(str(min(recovered_rows, key=lambda row: float(row['disturbance_recovery_time_hour']))['controller']), str(min(recovered_rows, key=lambda row: float(row['disturbance_recovery_time_hour']))['controller'])))}</strong>（{number(min(recovered_rows, key=lambda row: float(row['disturbance_recovery_time_hour']))['disturbance_recovery_time_hour'])} h）；" if recovered_rows else "所有算法都未在剩余仿真时窗内连续 60 min 回到 ±0.5 °C，表中恢复时间是截尾上限，不能排名；")
-                + f"PWM 最平滑为 <strong>{html.escape(display_names.get(str(smoothest['controller']), str(smoothest['controller'])))}</strong>"
+                + f"容量指令最平滑为 <strong>{html.escape(display_names.get(str(smoothest['controller']), str(smoothest['controller'])))}</strong>"
                 f"（方差 {number(smoothest['compressor_output_variance'])}）。能量代理最低的 {html.escape(display_names.get(str(lowest_energy['controller']), str(lowest_energy['controller'])))} "
                 "不一定最节能：如果温度始终偏高，少制冷只是没有完成任务。"
             )
@@ -506,7 +520,7 @@ def write_html_engineering_report(
             f"<h3>4.{index} 场景 {index}：{html.escape(case_name)}（{html.escape(scenario_purposes[case_name].split('：', 1)[0])}）</h3>"
             f"<p>{html.escape(scenario_purposes[case_name])}</p>"
             f"<h4>仿真设置</h4>{html_table(settings, ['设置', '数值'])}"
-            f"<h4>统一指标结果</h4>{html_table(result_rows, ['算法', 'ITAE', '调节时间(h)', '扰动恢复(h)', '恢复状态', '最大过热(°C)', '最大过冷(°C)', 'PWM方差', '能量代理(kWh)'])}"
+            f"<h4>统一指标结果</h4>{html_table(result_rows, ['算法', 'ITAE', '调节时间(h)', '扰动恢复(h)', '恢复状态', '最大过热(°C)', '最大过冷(°C)', '容量指令方差', '能量代理(kWh)'])}"
             f"<div class='card'>{analysis}</div>"
         )
     document = f"""<!doctype html>
@@ -579,9 +593,9 @@ img {{ width:100%; border:1px solid #d7e0e9; margin:12px 0 20px; }} .note {{ fon
 <div class="equation">\\[K_p=\\frac{{0.9\\tau}}{{KL}},\\qquad T_i=3.33L,\\qquad K_i=\\frac{{K_p}}{{T_i}}\\]</div>
 <p>K、τ、L 已知以后，公式阶段确实可以直接算出 Kp/Ki；这是 Z-N 的设计，不是算法错误。但完整流程并非一步：先建立基准工作点、施加阶跃、采集长时响应、反复拟合 FOPDT，再计算未限幅增益并通过工程安全边界。三个测试工况不再重新辨识，因此运行曲线是水平线。</p>
 
-<h3>2.3 IMC/SIMC PI（经典保守固定参数）</h3>
+<h3>2.3 IMC/SIMC PI（λ经训练集整定后固定）</h3>
 <div class="equation">\\[\\lambda=\\max\\left(\\frac{{\\tau}}{{3}},3L,12\\,\\mathrm{{min}}\\right),\\quad K_p=\\frac{{\\tau}}{{K(\\lambda+L)}},\\quad T_i=\\min[\\tau,4(\\lambda+L)],\\quad K_i=\\frac{{K_p}}{{T_i}}\\]</div>
-<p>λ 表示希望的闭环速度。取更大 λ 会更平滑、更耐受模型误差，代价是恢复慢。IMC 与 Z-N 共用同一次安装调试阶跃辨识；区别是 Z-N 使用经验激进公式，IMC 还需要工程人员选择 λ。它们都不是运行中自整定算法。</p>
+<p>λ 表示希望的闭环速度。公式默认值是保守回退；本次公平比较在训练工况上只搜索 λ，Kp/Ti 仍受 IMC 公式约束，然后在留出集和三个案例中冻结。完整候选、训练目标和最终选择见 <code>imc_lambda_tuning.csv</code>。这修正了旧版直接用 λ≈τ/3 的极慢回退参数参与性能排名所造成的不公平。</p>
 {image_data('classical_tuning_process.png')}
 <h4>FOPDT 拟合器评价过的全部候选</h4>
 {html_table(fopdt_fit_rows, ["评价", "候选K", "候选τ(min)", "候选L(min)", "本次RMSE(°C)", "当前最小RMSE(°C)"])}
@@ -597,16 +611,16 @@ img {{ width:100%; border:1px solid #d7e0e9; margin:12px 0 20px; }} .note {{ fon
 <p class="note">完整逐次数据保存在 <code>bayesian_search_history.csv</code>：候选 Kp/Ki、本轮目标、当前最优 Kp/Ki、当前最优目标、EI、预测均值与标准差均可追溯。</p>
 
 <h3>2.5 FNN 在线自整定（5×5 零阶 TSK 规则表）</h3>
-<p>输入是 e 和 Δe；两轴各设 5 个中心。当前值只会落在每轴两个相邻中心之间，因此 25 条隐式规则中只有 2×2=4 条激活。</p>
+<p>输入是误差 e 和误差变化率 ė=Δe/Δt；两轴各设 5 个中心。用 °C/min 归一化后，PC训练的5 min节拍与MCU秒级节拍含义一致。当前值只会落在每轴两个相邻中心之间，因此 25 条隐式规则中只有 2×2=4 条激活。</p>
 <div class="equation">\\[w_{{ij}}=\\mu_i(e)\\mu_j(\\Delta e),\\qquad \\sum w_{{ij}}=1\\]\\[K_p=\\sum_{{(i,j)\\in\\mathcal{{A}}_4}}w_{{ij}}K_{{p,ij}},\\qquad K_i=\\sum_{{(i,j)\\in\\mathcal{{A}}_4}}w_{{ij}}K_{{i,ij}}\\]</div>
 <p>训练不是可选项：对每个离线工况先用 BO 得到最优固定 Kp/Ki，再重放其 e/Δe 轨迹，在 log 增益空间对落入同一模糊单元的标签求平均。未覆盖单元保留 IMC 回退值。</p>
 {image_data('fnn_training_trace.png')}
 <p class="note"><code>fnn_training_history.csv</code> 按加入训练工况的顺序记录规则覆盖率、拟合 log-RMSE、规则表最大变化和代表性 Kp/Ki；这是当前 TSK 规则表的真实拟合过程，不伪造深度网络 epoch loss。</p>
 
-<h3>2.6 安全约束的增量式 RL 在线自整定</h3>
-<p>状态是 5×5 个 (e,Δe) 粗粒度网格；动作是 9 种 Kp/Ki 百分比小幅增减，不是压缩机动作。离线使用 500 回合、每回合最多 60 步的 Q-learning，约 30,000 环境步。</p>
+<h3>2.6 安全约束的表格 RL 在线自整定</h3>
+<p>状态由 5×5 个 (e,ė) 热状态和3档上一次实际容量模式组成；动作是9种相对IMC的绝对Kp/Ki目标比例，不是压缩机动作。绝对目标避免旧版增量动作依赖未进入状态的当前增益；容量模式减少同一温差但执行器状态不同造成的状态混叠。离线使用750回合、每回合最长240 min、每5 min决策。25热状态覆盖只统计物理轨迹真实到达的网格，不人为注入状态凑数。</p>
 <div class="equation">\\[r=-|e'|-0.18\\|\\Delta g\\|_1-0.04|K_{{p,scale}}-1|-0.03u\\]\\[Q(s,a)\\leftarrow Q(s,a)+\\alpha\\left[r+\\gamma\\max_{{a'}}Q(s',a')-Q(s,a)\\right]\\]\\[\\alpha=0.12,\\qquad\\gamma=0.94,\\qquad\\varepsilon:0.25\\rightarrow0.03\\]</div>
-<p>部署时只执行 argmax Q，不随机探索；提议增益还需经过边界限幅、单次±25% 变化率限制和非有限值回退。当前是小型表格 RL，不能与需要数百万步的深度 RL 直接类比。</p>
+<p>部署时先屏蔽“房间已冷却却提高增益”等不安全动作，再执行argmax Q，不随机探索；提议增益还需经过边界和单次±10%限制。训练期间用内部验证集早停选取Q表；若平均目标比已整定IMC差2%以上或25热状态覆盖低于80%，策略整体拒绝并退回IMC。当前仍是小型表格RL，不能与深度RL直接类比。</p>
 {image_data('rl_training_trace.png')}
 {rl_audit_html}
 
@@ -622,7 +636,7 @@ img {{ width:100%; border:1px solid #d7e0e9; margin:12px 0 20px; }} .note {{ fon
 {html_table(metric_rows, ["类别", "指标", "数学定义", "工程含义"])}
 <p>贝叶斯优化和统一排序使用的当前综合目标为：</p>
 <div class="equation">\\[\\begin{{aligned}}J&=2\\,IAE+1.5\\,ITAE+10\\,ComfortViolation+3\\,MaxOvercool \\\\ &\\quad+0.35\\,Settling+0.08\\,ControlMovement+0.7\\,Var(u)+0.015\\,CoolingEnergyProxy\\end{{aligned}}\\]</div>
-<div class="warning"><strong>能耗口径限制：</strong>当前只累计制冷量 Qc，没有压缩机 COP(频率、室内/外温度)、风机/水泵功耗和启停损耗。因此它只能用于同模型内横向比较，不能作为真实 kWh 节能承诺。PWM 方差也不等同于真实压缩机寿命，后续需增加频率翻转次数、最小运行时间与压缩机厂家限制。</div>
+<div class="warning"><strong>能耗口径限制：</strong>当前只累计制冷量 Qc，没有压缩机 COP(频率、室内/外温度)、风机/水泵功耗和启停损耗。因此它只能用于同模型内横向比较，不能作为真实 kWh 节能承诺。报告已把“PWM 方差”改称“容量指令方差”，并另记启停次数；两者都不能直接等同于真实寿命。</div>
 
 <h2>4. 实验分析与工程评估：三个独立场景</h2>
 <p>每个算法都独立跑完三个场景；不用一条混合曲线代替三类工程问题。下图给出总波形，后面分别列出仿真设置、统一指标和取舍分析。</p>
@@ -646,7 +660,7 @@ img {{ width:100%; border:1px solid #d7e0e9; margin:12px 0 20px; }} .note {{ fon
 <div class="warning"><strong>当前 C++ 交付边界：</strong><code>embedded/hvac_pid_controller.hpp</code> 已包含 SafePI、训练后 FNN 四规则插值、RL 压缩策略和安全回退；<code>embedded/wokwi</code> 已生成 ESP32 与 STM32F103C8 双工程。PC SIL 已通过；2026-08-23 两个完整工程也在 Wokwi 在线编译并进入运行态。ESP32 观察约 10.079 s，STM32F103 观察约 28.500 s并点击一次开门按钮。匿名会话没有产出可复核的串口曲线、目标 ROM/RAM 和最坏周期，因此这些仍明确标为未完成。</div>
 
 <h3>5.3 量产安全策略与缺口</h3>{html_table(safety_rows, ["等级", "措施"])}
-<p>特别注意：当前核心已经有通用容量指令斜率限制，但<strong>还没有依据具体压缩机厂家曲线实现独立频率斜率、最小运停时间和制冷系统压力/温度联锁</strong>。这些必须由底层设备安全层实现，不能依赖 AI 或 PI 自己“学会安全”。</p>
+<p>Python 统一比较层已经实现最低稳定容量、量化、运行段斜率和最小运停时间；但<strong>仍需按具体压缩机厂家曲线标定参数，并把同一逻辑同步到 MCU，同时补齐制冷系统压力/温度联锁</strong>。这些必须由底层设备安全层实现，不能依赖 AI 或 PI 自己“学会安全”。</p>
 
 <h3>5.4 芯片资源资料与可追溯性</h3>
 <ul>

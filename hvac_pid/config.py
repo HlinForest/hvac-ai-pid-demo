@@ -39,7 +39,13 @@ class Scenario:
     cooling_capacity_w: float = 7000.0
     actuator_delay_minutes: float = 5.0
     actuator_tau_minutes: float = 4.0
-    sensor_noise_std_c: float = 0.0
+    sensor_noise_std_c: float = 0.04
+    sensor_filter_tau_minutes: float = 2.0
+    command_slew_rate_per_minute: float = 0.05
+    command_quantization: float = 0.01
+    minimum_running_command: float = 0.25
+    minimum_on_minutes: float = 5.0
+    minimum_off_minutes: float = 3.0
 
     FEATURE_NAMES: ClassVar[tuple[str, ...]] = (
         "outdoor_c",
@@ -113,7 +119,7 @@ class Scenario:
                 self.r_out_wall_k_per_w,
                 self.cooling_capacity_w,
                 self.actuator_delay_minutes,
-                self.actuator_tau_minutes,
+            self.actuator_tau_minutes,
             ],
             dtype=float,
         )
@@ -155,9 +161,107 @@ def sample_scenarios(count: int, seed: int, duration_hours: float = 5.0) -> list
                 cooling_capacity_w=float(rng.uniform(4500.0, 10500.0)),
                 actuator_delay_minutes=float(rng.uniform(2.0, 12.0)),
                 actuator_tau_minutes=float(rng.uniform(2.0, 10.0)),
+                sensor_noise_std_c=float(rng.uniform(0.025, 0.075)),
             )
         )
     return scenarios
+
+
+def sample_adaptive_scenarios(count: int, seed: int, duration_hours: float = 5.0) -> list[Scenario]:
+    """Create a stratified operating-domain data set for adaptive controllers.
+
+    ``sample_scenarios`` is intentionally a simple hot-start commissioning set.
+    That is adequate for fixed-gain tuning, but it does not exercise the signs
+    of error and error-rate needed by a two-dimensional FNN/RL state grid.  This
+    curriculum adds physically reachable cold starts, setpoint changes, heat
+    pulses and weather/load ramps.  The list is shuffled deterministically so
+    the final validation slice contains a mixture of scenario families.
+    """
+
+    if count <= 0:
+        return []
+    rng = np.random.default_rng(seed)
+    base = sample_scenarios(count, seed=seed + 17, duration_hours=duration_hours)
+    scenarios: list[Scenario] = []
+    for index, scenario in enumerate(base):
+        family = index % 7
+        common = {
+            "outdoor_amplitude_c": float(rng.uniform(0.0, 3.5)),
+            "outdoor_peak_hour": float(rng.uniform(2.0, 8.0)),
+        }
+        if family == 0:
+            # Ordinary hot start: positive error that falls toward zero.
+            updated = replace(scenario, **common)
+        elif family == 1:
+            # Cold start: the compressor must remain off while the room warms.
+            updated = replace(
+                scenario,
+                initial_zone_c=float(scenario.setpoint_c - rng.uniform(0.6, 3.5)),
+                **common,
+            )
+        elif family == 2:
+            # Lowering the setpoint creates a positive error-rate event.
+            change_hour = float(rng.uniform(0.8, max(1.0, duration_hours - 1.2)))
+            updated = replace(
+                scenario,
+                initial_zone_c=float(scenario.setpoint_c + rng.uniform(-0.4, 1.0)),
+                setpoint_change_hour=change_hour,
+                setpoint_after_c=float(scenario.setpoint_c - rng.uniform(0.8, 2.2)),
+                **common,
+            )
+        elif family == 3:
+            # Raising the setpoint creates a negative error-rate event and an
+            # intentional compressor unload/stop transition.
+            change_hour = float(rng.uniform(0.8, max(1.0, duration_hours - 1.2)))
+            updated = replace(
+                scenario,
+                initial_zone_c=float(scenario.setpoint_c + rng.uniform(1.0, 4.0)),
+                setpoint_change_hour=change_hour,
+                setpoint_after_c=float(scenario.setpoint_c + rng.uniform(0.8, 2.2)),
+                **common,
+            )
+        elif family == 4:
+            # A finite door/occupancy heat pulse drives error upward and then
+            # back down after the pulse, exercising both derivative signs.
+            pulse_start = float(rng.uniform(0.8, max(1.0, duration_hours - 1.5)))
+            pulse_duration = float(rng.uniform(15.0, 50.0))
+            updated = replace(
+                scenario,
+                initial_zone_c=float(scenario.setpoint_c + rng.uniform(-0.5, 1.5)),
+                door_open_hour=pulse_start,
+                door_open_duration_minutes=pulse_duration,
+                door_open_load_w=float(rng.uniform(1800.0, 4200.0)),
+                **common,
+            )
+        elif family == 5:
+            # Sustained load transition covers slow positive error-rate states.
+            start = float(rng.uniform(0.6, max(0.8, duration_hours / 2.0)))
+            end = float(rng.uniform(max(start + 0.6, duration_hours * 0.65), duration_hours - 0.1))
+            updated = replace(
+                scenario,
+                initial_zone_c=float(scenario.setpoint_c + rng.uniform(-1.0, 2.0)),
+                occupied_start_hour=start,
+                occupied_end_hour=end,
+                occupied_load_add_w=float(rng.uniform(900.0, 2600.0)),
+                **common,
+            )
+        else:
+            # Rare but valid corner: a room is already well below the old
+            # setpoint and an operator lowers the setpoint shortly afterwards.
+            # The room remains cold while delta-error becomes strongly positive;
+            # this is the only physically meaningful route to the upper-right
+            # derivative corner of the negative-error state grid.
+            updated = replace(
+                scenario,
+                initial_zone_c=float(scenario.setpoint_c - rng.uniform(3.5, 5.0)),
+                setpoint_change_hour=float(rng.uniform(0.20, 0.45)),
+                setpoint_after_c=float(scenario.setpoint_c - rng.uniform(0.8, 1.3)),
+                **common,
+            )
+        scenarios.append(updated)
+
+    order = rng.permutation(len(scenarios))
+    return [scenarios[int(index)] for index in order]
 
 
 def nominal_scenario() -> Scenario:
@@ -191,7 +295,7 @@ def dynamic_demo_scenario() -> Scenario:
         cooling_capacity_w=7600.0,
         actuator_delay_minutes=8.0,
         actuator_tau_minutes=6.0,
-        sensor_noise_std_c=0.025,
+        sensor_noise_std_c=0.05,
     )
 
 
@@ -208,6 +312,7 @@ def typical_case_scenarios() -> dict[str, Scenario]:
             cooling_capacity_w=7600.0,
             actuator_delay_minutes=6.0,
             actuator_tau_minutes=4.0,
+            sensor_noise_std_c=0.05,
         ),
         "设定温度突变": Scenario(
             duration_hours=5.0,
@@ -221,6 +326,7 @@ def typical_case_scenarios() -> dict[str, Scenario]:
             cooling_capacity_w=7600.0,
             actuator_delay_minutes=7.0,
             actuator_tau_minutes=5.0,
+            sensor_noise_std_c=0.05,
         ),
         "持续外界热扰动": Scenario(
             duration_hours=6.0,
@@ -238,5 +344,6 @@ def typical_case_scenarios() -> dict[str, Scenario]:
             cooling_capacity_w=8200.0,
             actuator_delay_minutes=8.0,
             actuator_tau_minutes=6.0,
+            sensor_noise_std_c=0.05,
         ),
     }

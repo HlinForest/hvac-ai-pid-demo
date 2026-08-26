@@ -19,7 +19,7 @@ from hvac_pid.tuning import BayesianGainTuner
 
 DISPLAY_NAMES = {
     "Z-N": "Z-N 反应曲线法",
-    "IMC": "IMC 内模控制",
+    "IMC": "IMC 内模控制（λ经训练集整定）",
     "Bayesian Auto-tune": "贝叶斯自动整定",
     "FNN Self-tuning": "FNN 在线自整定",
     "RL Self-tuning": "RL 在线自整定",
@@ -47,18 +47,37 @@ scenario = replace(
     internal_load_w=float(equipment), door_open_load_w=float(door), door_open_duration_minutes=float(duration),
 )
 @st.cache_resource
-def load_trained_self_tuning_models() -> tuple[np.ndarray | None, np.ndarray | None]:
+def load_trained_self_tuning_models() -> tuple[np.ndarray | None, np.ndarray | None, float | None, bool, bool]:
     """Load models that were trained by `python main.py`, never train in the UI."""
     artifact_dir = Path(__file__).parent / "outputs"
     fnn_path, rl_path = artifact_dir / "fnn_rule_table.npy", artifact_dir / "rl_q_table.npy"
+    def accepted(history_name: str) -> bool:
+        history_path = artifact_dir / history_name
+        if not history_path.exists():
+            return False
+        history = pd.read_csv(history_path)
+        return "deployment_accepted" in history and bool(float(history.iloc[-1]["deployment_accepted"]) > 0.5)
+
+    lambda_minutes = None
+    lambda_path = artifact_dir / "imc_lambda_tuning.csv"
+    if lambda_path.exists():
+        rows = pd.read_csv(lambda_path)
+        selected_rows = rows[rows["selected"] == 1]
+        if not selected_rows.empty:
+            lambda_minutes = float(selected_rows.iloc[-1]["lambda_minutes"])
     return (
         np.load(fnn_path) if fnn_path.exists() else None,
         np.load(rl_path) if rl_path.exists() else None,
+        lambda_minutes,
+        accepted("fnn_training_history.csv"),
+        accepted("rl_training_history.csv"),
     )
 
 model = identify_fopdt(scenario)
-fallback = imc_pi(model)
-fnn_rule_table, rl_q_table = load_trained_self_tuning_models()
+fnn_rule_table, rl_q_table, tuned_lambda, fnn_accepted, rl_accepted = load_trained_self_tuning_models()
+fallback = imc_pi(model, tuned_lambda)
+if tuned_lambda is None:
+    st.warning("未找到通过训练集选择的 IMC λ；当前使用保守公式回退值。请重新运行 main.py 生成新版产物后再做性能比较。")
 controllers = {}
 if "Z-N" in selected:
     controllers["Z-N"] = PIController(*ziegler_nichols_pi(model))
@@ -69,13 +88,13 @@ if "Bayesian Auto-tune" in selected:
         gains = BayesianGainTuner(iterations=3, candidates=256).tune(scenario, seed=11)
     controllers["Bayesian Auto-tune"] = PIController(gains.kp, gains.ki)
 if "FNN Self-tuning" in selected:
-    if fnn_rule_table is None:
-        st.warning("FNN 尚未离线训练。请先运行 `python main.py --quick`，生成 fnn_rule_table.npy 后再使用在线自整定。")
+    if fnn_rule_table is None or not fnn_accepted:
+        st.warning("FNN 没有通过新版离线部署验收，因此不参与本次比较；请查看 fnn_training_history.csv。")
     else:
         controllers["FNN Self-tuning"] = FNNGainController(fallback, rule_table=fnn_rule_table)
 if "RL Self-tuning" in selected:
-    if rl_q_table is None:
-        st.warning("RL 尚未离线训练。请先运行 `python main.py --quick`，生成 rl_q_table.npy 后再使用在线自整定。")
+    if rl_q_table is None or not rl_accepted:
+        st.warning("RL 没有通过新版离线部署验收，因此不参与本次比较；请查看 rl_training_history.csv。")
     else:
         controllers["RL Self-tuning"] = IncrementalRLController(fallback, q_table=rl_q_table)
 
@@ -102,7 +121,7 @@ with col1:
     st.line_chart(data.pivot(index="hour", columns="algorithm_zh", values="zone_c"), height=280)
     st.caption(f"设定值（最终）：{setpoint:.1f} °C；FOPDT: K={model.process_gain_c_per_u:.2f}, τ={model.time_constant_minutes:.1f} min, L={model.delay_minutes:.1f} min")
 with col2:
-    st.subheader("压缩机输出功率 / PWM")
+    st.subheader("压缩机容量指令（受最低频率/量化/斜率/启停约束）")
     st.line_chart(data.pivot(index="hour", columns="algorithm_zh", values="command_pct"), height=280)
 
 st.subheader("AI 实时输出 Kp、Ki")
