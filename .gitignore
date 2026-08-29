@@ -11,6 +11,7 @@ tmp_submission/
 
 # Generated inspection payloads: the actual Excel/PPT deliverables are retained.
 outputs/**/*.inspect.ndjson
+outputs_embedded_demo/*.inspect.ndjson
 
 # OpenModelica C build intermediates; retain the response CSV used by validation.
 outputs/modelica/*
@@ -26,6 +27,7 @@ outputs/documents/*_a11y.json
 
 # Native testbench binaries are rebuilt from the supplied C++ source.
 embedded/*.exe
+embedded/**/.pio/
 
 # Superseded experiment runs. Keep the audited final v2 evidence instead.
 outputs_adaptive_trial/

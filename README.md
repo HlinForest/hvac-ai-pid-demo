@@ -2,11 +2,42 @@
 
 > 新增风险感知安全 BO，以及“LLM 只提议、仿真和安全门裁决”的高级 PI 调参实现。详见 [SOTA_LLM_PI_TUNING.md](SOTA_LLM_PI_TUNING.md)，入口为 `run_advanced_tuning_benchmark.py`。Q-learning 保留为教学/对照方法，不称为 SOTA。
 
+## ESP32 七算法温度闭环 Demo（新增）
+
+这一版把“温度是否真的稳定”放在算法分数之前。统一场景从 30°C 开始，目标为 24°C；曲线必须进入 24±0.5°C 并保持，随后注入开门扰动，再观察容量升高和温度恢复。90 秒墙钟演示对应 5 小时虚拟物理时间，不能解释为真实房间 90 秒降温。
+
+七个独立入口：
+
+```powershell
+python run_embedded_demo.py --algorithm zn
+python run_embedded_demo.py --algorithm imc
+python run_embedded_demo.py --algorithm bo
+python run_embedded_demo.py --algorithm safe-bo
+python run_embedded_demo.py --algorithm fnn
+python run_embedded_demo.py --algorithm rl
+python run_embedded_demo.py --algorithm llm --provider replay
+```
+
+统一生成与交互展示：
+
+```powershell
+python run_embedded_demo.py --algorithm all --provider replay --output outputs_embedded_demo
+streamlit run streamlit_app.py
+```
+
+- `outputs_embedded_demo/temperature_control_demo.html`：可离线打开的交互式温度回放、完整系统框图、七算法同场比较和 LLM 安全门审计；
+- `outputs_embedded_demo/ESP32_七算法温度闭环_零基础教学.pptx`：20 页、原生可编辑框图和图表的零基础教学材料；
+- `embedded/esp32_seven_algorithm_demo/`：ESP32 PlatformIO 双模式固件；
+- `embedded/modbus_config.hpp`：真实设备寄存器配置，默认 `kWritesEnabled=false`；
+- `embedded/validate_esp32_serial.py`：真实 ESP32 连续 10 分钟、丢周期与 WCET 验收脚本。
+
+当前统一场景中，Z-N 与 FNN 候选未通过部署门，因此实际曲线明确使用 IMC 回退，并同时保留候选影子温度；不能把回退后的稳定曲线写成候选算法成功。LLM 的 `replay` 是无网络录制响应，不是实时模型调用。`ollama` 和 `openai` 都只在上位机提出结构化 `Kp/Ki`，经过硬边界、单轮 ±10%、重复仿真和安全门后才能导出。
+
 ## 当前版本：变频精密/机柜空调仿真平台
 
 本项目实现双层模型：`modelica/HVACAI` 是 OpenModelica + Modelica Standard Library 的可执行物理参考模型（Modelica Buildings 留作后续高保真扩展）；`hvac_pid` 是可批量运行的 3R2C/FOPDT 快速控制代理。3R2C 的直觉是“室内空气”和“墙体/机柜”两个蓄热体，通过室外到空气、室外到慢热质、慢热质到空气三条换热通道交换热量。前者用于可追溯的热物理校验，后者用于控制算法寻优与可视化。
 
-五种控制算法的逐段中文代码解析见 [ALGORITHM_GUIDE.md](ALGORITHM_GUIDE.md)。
+传统五种控制算法的逐段中文代码解析见 [ALGORITHM_GUIDE.md](ALGORITHM_GUIDE.md)；七算法嵌入式展示入口和落地边界以本节为准。
 
 已实现五类控制器：Z-N、只在训练集整定 λ 的 IMC、全局贝叶斯优化固定 PI、25 规则（每次激活 4 条）的 FNN 自整定 PI、以及安全屏蔽的表格 RL 自整定 PI。RL 使用 5×5 热状态、3 档实际容量模式和 9 个相对 IMC 的绝对增益目标；不再递归累乘隐藏的当前增益。所有方法共用 0/最低稳定频率、量化、运行斜率、最小启停驻留、传感器噪声与滤波约束。
 

@@ -1,5 +1,31 @@
 # 第二阶段：STM32F103 / ESP32 轻量化验证
 
+## ESP32 七算法主工程
+
+新主工程位于 `embedded/esp32_seven_algorithm_demo/`，ESP32 DevKit 是当前嵌入式主目标。它与早期双目标 Wokwi 教学工程并存，不把早期十几秒运行记录冒充新版七算法固件的完整验收。
+
+```powershell
+cd embedded/esp32_seven_algorithm_demo
+pio run
+pio run --target upload
+pio device monitor --baud 115200
+```
+
+固件提供两种模式：
+
+- `MODE demo`：100 ms 墙钟运行一次控制任务，并用 200 倍时间加速的虚拟热对象让 5 小时温度过程在 90 秒内可见；FNN/RL 每 2 秒才运行一次候选增益调度；
+- `MODE modbus`：从真实空调控制器/BMS 读取温度、实际频率和告警，并在取得真实寄存器表且显式许可后写容量请求。默认只读，ESP32 不直接驱动压缩机功率器件。
+
+七算法配置由 `run_embedded_demo.py --algorithm all` 生成到 `generated_demo_profiles.hpp`，带版本、清单字符串和 CRC32。Z-N/FNN 当前配置标记为“拒绝并回退”；RL 是冻结策略查表；LLM 只部署已通过上位机仿真门的固定增益。串口命令与接线说明见 `esp32_seven_algorithm_demo/README.md`。
+
+真实目标板验收：
+
+```powershell
+python embedded/validate_esp32_serial.py --port COM3 --seconds 600
+```
+
+脚本要求连续收到板端 JSON，检查温度有限、运行时长、`missed_periods=0`、PI 最坏执行时间小于 10 ms、AI 调度小于 100 ms，并把原始遥测和结论分别保存为 CSV/JSON。未接目标板时不会生成“通过”结论。
+
 这一阶段要回答的不是“房间热模型是否足够逼真”，而是“同一份控制算法放到低成本 MCU 上，能否按时运行、占多少资源、异常时是否安全回退”。
 
 ## 已交付的三层验证

@@ -309,7 +309,7 @@ class OpenAIResponsesPIDProposer:
             "store": False,
             "instructions": (
                 "You are an offline HVAC PI tuning supervisor. Diagnose metrics and propose one conservative Kp/Ki pair. "
-                "Never propose actuator commands. Stay within supplied bounds and prefer changes below 25%. "
+                "Never propose actuator commands. Stay within supplied bounds and keep each change at or below 10%. "
                 "A deterministic simulator and safety gate, not you, has final authority."
             ),
             "input": json.dumps(context, ensure_ascii=False),
@@ -376,6 +376,32 @@ class PhysicsInformedHeuristicProposer:
         return LLMGainProposal(kp * scale_p, ki * scale_i, diagnosis, "离线流程连通性演示；该结果不能称为大模型实验", 1.0)
 
 
+class ReplayPIDProposer:
+    """Deterministic recorded-response provider for an offline LLM demo.
+
+    This provider is intentionally labelled as replay data.  It makes the full
+    schema/bounds/simulation/safety-gate path runnable without network access or
+    credentials, but its result must never be reported as a live model call.
+    """
+
+    name = "recorded LLM replay (not a live model call)"
+
+    def __init__(self) -> None:
+        self._round = 0
+
+    def propose(self, context: dict[str, object]) -> LLMGainProposal:
+        current = context["current_gains"]
+        kp, ki = float(current["kp"]), float(current["ki"])
+        scripts = (
+            (0.94, 0.90, "启动阶段冷过冲风险偏高", "记录中的模型建议先减小积分，再小幅降低比例作用"),
+            (0.98, 0.94, "温度已接近目标但容量变化仍偏大", "记录中的模型建议继续保持保守积分，避免穿越设定值"),
+            (1.02, 0.98, "跟踪稳定后可轻微恢复比例作用", "记录中的模型建议只做小于安全信赖域的微调"),
+        )
+        scale_p, scale_i, diagnosis, rationale = scripts[min(self._round, len(scripts) - 1)]
+        self._round += 1
+        return LLMGainProposal(kp * scale_p, ki * scale_i, diagnosis, rationale, 0.76)
+
+
 class LLMSupervisoryTuner:
     def __init__(
         self,
@@ -383,7 +409,7 @@ class LLMSupervisoryTuner:
         *,
         bounds: GainBounds | None = None,
         rounds: int = 6,
-        max_change_fraction: float = 0.25,
+        max_change_fraction: float = 0.10,
         min_improvement_fraction: float = 0.005,
         config: RiskSafetyConfig | None = None,
     ) -> None:

@@ -19,6 +19,11 @@ class SafePI {
  public:
   explicit SafePI(Gains fallback) : gains_(fallback), fallback_(fallback) {}
 
+  void configure_fallback(Gains fallback) {
+    fallback_ = fallback;
+    reset();
+  }
+
   void reset() {
     gains_ = fallback_; integral_ = 0.0f; output_ = 0.0f;
     fallback_active_ = false; output_limited_ = false;
@@ -49,6 +54,11 @@ class SafePI {
     gains_.ki = clamp_value(proposed.ki, 1e-5f, 0.08f);
     fallback_active_ = false;
     return true;
+  }
+
+  void force_fallback() {
+    gains_ = fallback_;
+    fallback_active_ = true;
   }
 
   Gains gains() const { return gains_; }
@@ -148,14 +158,15 @@ inline Gains rl_gains(float error, float error_rate, float applied_command,
           fallback.ki*generated::kRlTargetScales[action][1]};
 }
 
-// Accelerated plant stub: 100 ms real time = 0.6 simulated minutes.
+// Accelerated plant stub: 100 ms wall time = 1/3 simulated minute, so the
+// five-hour demonstration lasts 90 seconds.  This is not a real-room claim.
 class VirtualHVACPlant {
  public:
   void reset(float initial_temperature=30.0f) {
     temperature_=initial_temperature; actuator_=0.0f; index_=0;
     for (int i=0;i<kDelaySlots;++i) delay_[i]=0.0f;
   }
-  float step(float command,bool door_open,float dt_sim_minutes=0.6f) {
+  float step(float command,bool door_open,float dt_sim_minutes=0.333333333f) {
     const float delayed=delay_[index_]; delay_[index_]=clamp_value(command,0.0f,1.0f);
     index_=(index_+1)%kDelaySlots;
     actuator_ += dt_sim_minutes*(delayed-actuator_)/6.0f;

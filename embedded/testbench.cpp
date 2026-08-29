@@ -1,4 +1,5 @@
 #include "hvac_pid_controller.hpp"
+#include "generated_demo_profiles.hpp"
 #include <algorithm>
 #include <chrono>
 #include <iostream>
@@ -46,11 +47,29 @@ int main() {
   }
   controller.apply_proposal({std::numeric_limits<float>::quiet_NaN(),0.01f});
   const Diagnostics d=controller.diagnostics();
-  const bool passed=bounded&&ai_calls==200&&d.fallback_active;
+  int valid_profiles=0, stable_profiles=0;
+  constexpr float kAcceleratedPhysicalDtSeconds=20.0f;  // 100 ms wall clock at 200x
+  for (const auto &profile : demo::kProfiles) {
+    const bool flags_valid=profile.accepted!=profile.fallback_required;
+    const bool gains_valid=profile.kp>=0.002f&&profile.kp<=1.5f&&profile.ki>=1e-5f&&profile.ki<=0.08f;
+    if (flags_valid&&gains_valid) ++valid_profiles;
+    SafePI profile_controller({profile.kp,profile.ki});
+    CompressorLimiter profile_limiter;
+    VirtualHVACPlant profile_plant;
+    for (int profile_tick=0;profile_tick<900;++profile_tick) {
+      const float profile_error=profile_plant.temperature()-24.0f;
+      const float request=profile_controller.update(profile_error,kAcceleratedPhysicalDtSeconds);
+      const float limited=profile_limiter.update(request,kAcceleratedPhysicalDtSeconds);
+      profile_plant.step(limited,profile_tick>=567&&profile_tick<612);
+    }
+    if (std::fabs(profile_plant.temperature()-24.0f)<=0.75f) ++stable_profiles;
+  }
+  const bool passed=bounded&&ai_calls==200&&d.fallback_active&&valid_profiles==7&&stable_profiles==7;
   std::cout<<"MCU_SIL "<<(passed?"PASS":"FAIL")<<"\n"
            <<"PID period=100ms; AI period=2s; AI calls="<<ai_calls<<"\n"
            <<"sizeof(SafePI)="<<sizeof(SafePI)<<" bytes; sizeof(VirtualHVACPlant)="<<sizeof(VirtualHVACPlant)<<" bytes\n"
            <<"worst PI="<<worst_pi_ns<<" ns; worst AI="<<worst_ai_ns<<" ns\n"
+           <<"seven profiles valid="<<valid_profiles<<"; stable after 90s demo="<<stable_profiles<<"\n"
            <<"final temperature="<<plant.temperature()<<" C; u="<<command<<"; Kp="<<d.gains.kp<<"; Ki="<<d.gains.ki<<"\n"
            <<"RL uncovered-state fallbacks="<<fallback_events<<"; NaN fallback="<<d.fallback_active<<"\n";
   return passed?0:1;

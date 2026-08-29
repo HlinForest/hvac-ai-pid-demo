@@ -1,6 +1,7 @@
 MCU_SIL PASS
 PID period=100ms; AI period=2s; AI calls=200
 sizeof(SafePI)=28 bytes; sizeof(VirtualHVACPlant)=68 bytes
-worst PI=100 ns; worst AI=200 ns
-final temperature=23.9229 C; u=0.58; Kp=0.450824; Ki=0.00307652
-RL uncovered-state fallbacks=164; NaN fallback=1
+worst PI=800 ns; worst AI=400 ns
+seven profiles valid=7; stable after 90s demo=7
+final temperature=23.9874 C; u=0.58; Kp=0.450824; Ki=0.00307652
+RL uncovered-state fallbacks=167; NaN fallback=1
