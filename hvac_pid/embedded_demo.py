@@ -13,10 +13,10 @@ import zlib
 import numpy as np
 
 from .advanced_tuning import (
-    LLMSupervisoryTuner,
-    OllamaPIDProposer,
-    OpenAIResponsesPIDProposer,
-    ReplayPIDProposer,
+    LLMAgentAutoTuner,
+    OllamaPIDAgentPolicy,
+    OpenAIResponsesPIDAgentPolicy,
+    ReplayPIDAgentPolicy,
     RiskAwareSafeBOTuner,
     RiskSafetyConfig,
 )
@@ -36,7 +36,7 @@ DISPLAY_NAMES = {
     "safe-bo": "风险感知安全 BO",
     "fnn": "FNN 规则自整定",
     "rl": "RL 冻结策略自整定",
-    "llm": "LLM 监督调参",
+    "llm": "LLM Agent 自动调参",
 }
 DESCRIPTIONS = {
     "zn": "上位机辨识后按经验公式计算固定增益，ESP32 只执行安全 PI。",
@@ -45,7 +45,7 @@ DESCRIPTIONS = {
     "safe-bo": "在性能均值之外惩罚噪声方差，并用安全代理限制候选。",
     "fnn": "ESP32 每 2 s 用误差和误差变化率插值四条规则；未通过验收时只做影子计算。",
     "rl": "训练在虚拟对象上完成，ESP32 只查冻结策略，不进行随机探索。",
-    "llm": "本地或云端模型仅提出 Kp/Ki，重复仿真和安全门拥有最终决定权。",
+    "llm": "大模型 Agent 自主选择查看历史、运行候选仿真或停止；安全门拥有最终决定权。",
 }
 
 
@@ -60,6 +60,7 @@ class DemoTrace:
     summary: dict[str, object]
     deployment_accepted: bool
     forced_fallback: bool
+    agent_trace: tuple[dict[str, object], ...] = ()
 
 
 def demo_scenario(*, setpoint_c: float = 24.0, door_load_w: float = 3200.0) -> Scenario:
@@ -255,7 +256,7 @@ def run_algorithm_demo(
     deployment_accepted = True
     forced_fallback = False
     candidate_result: SimulationResult | None = None
-    llm_audit: tuple[dict[str, object], ...] = ()
+    llm_agent_trace: tuple[dict[str, object], ...] = ()
     source = "computed for this demo"
 
     controller: PIController
@@ -315,26 +316,27 @@ def run_algorithm_demo(
     else:
         training = sample_adaptive_scenarios(5, seed=seed + 30, duration_hours=3.0)
         if provider == "replay":
-            proposer = ReplayPIDProposer()
+            policy = ReplayPIDAgentPolicy()
         elif provider == "ollama":
-            proposer = OllamaPIDProposer(model or "qwen3:0.6b")
+            policy = OllamaPIDAgentPolicy(model or "qwen3:0.6b")
         elif provider == "openai":
             if not model:
                 raise ValueError("--model is required for the OpenAI provider")
-            proposer = OpenAIResponsesPIDProposer(model)
+            policy = OpenAIResponsesPIDAgentPolicy(model)
         else:
             raise ValueError("provider must be replay, ollama, or openai")
-        tuned = LLMSupervisoryTuner(
-            proposer,
-            rounds=3,
+        tuned = LLMAgentAutoTuner(
+            policy,
+            max_steps=6,
+            max_trials=3,
             max_change_fraction=0.10,
-            config=RiskSafetyConfig(repeats=1, max_undershoot_c=4.0),
+            config=RiskSafetyConfig(repeats=2, max_undershoot_c=4.0),
         ).tune(training, fallback, seed=seed + 31)
-        llm_audit = tuned.history
+        llm_agent_trace = tuned.trace
         controller = PIController(tuned.kp, tuned.ki)
         deployment_accepted = bool(tuned.accepted or not tuned.fallback_used)
         forced_fallback = bool(tuned.fallback_used)
-        source = proposer.name
+        source = policy.name
 
     result = simulate(scenario, controller, seed=seed)
     # A formula/optimizer/LLM artifact that fails the visible commissioning
@@ -362,18 +364,21 @@ def run_algorithm_demo(
             "provider": provider if algorithm == "llm" else "not_applicable",
         }
     )
-    if llm_audit:
-        last = llm_audit[-1]
+    evaluated_agent_rows = [row for row in llm_agent_trace if row.get("tool") == "evaluate_candidate"]
+    if evaluated_agent_rows:
+        last = evaluated_agent_rows[-1]
         summary.update(
             {
                 "llm_raw_kp": float(last["raw_kp"]),
                 "llm_raw_ki": float(last["raw_ki"]),
-                "llm_limited_kp": float(last["candidate_kp"]),
-                "llm_limited_ki": float(last["candidate_ki"]),
-                "llm_diagnosis": str(last["diagnosis"]),
-                "llm_rationale": str(last["rationale"]),
+                "llm_limited_kp": float(last["limited_kp"]),
+                "llm_limited_ki": float(last["limited_ki"]),
+                "llm_diagnosis": "Agent自主选择工具与候选试验",
+                "llm_rationale": str(last.get("reason", "")),
                 "llm_decision": str(last["decision"]),
                 "llm_replay_disclosure": int(provider == "replay"),
+                "llm_agent_steps": len(llm_agent_trace),
+                "llm_agent_trials": len(evaluated_agent_rows),
             }
         )
     return DemoTrace(
@@ -386,6 +391,7 @@ def run_algorithm_demo(
         summary,
         deployment_accepted,
         forced_fallback,
+        llm_agent_trace,
     )
 
 
@@ -419,6 +425,21 @@ def write_trace_csv(path: Path, trace: DemoTrace) -> None:
         writer.writerows(trace.rows)
 
 
+def write_agent_trace_csv(path: Path, trace: DemoTrace) -> None:
+    """Persist every Agent tool request and deterministic host decision."""
+
+    if not trace.agent_trace:
+        return
+    fields: list[str] = []
+    for row in trace.agent_trace:
+        fields.extend(key for key in row if key not in fields)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8-sig", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=fields)
+        writer.writeheader()
+        writer.writerows(trace.agent_trace)
+
+
 def write_summary_csv(path: Path, traces: dict[str, DemoTrace]) -> None:
     rows = [trace.summary for trace in traces.values()]
     fields: list[str] = []
@@ -443,6 +464,7 @@ def _serializable_trace(trace: DemoTrace) -> dict[str, object]:
         "source": trace.source,
         "accepted": trace.deployment_accepted,
         "forced_fallback": trace.forced_fallback,
+        "agent_trace": trace.agent_trace,
         "summary": trace.summary,
         "rows": [
             {key: (round(float(row[key]), 6) if isinstance(row[key], (float, np.floating)) else row[key]) for key in keys}
@@ -461,7 +483,7 @@ def _system_diagram_svg() -> str:
     <path d="M156 250H265"/><path d="M365 250H470"/><path d="M600 250H700"/><path d="M850 250H960"/>
     <path d="M1040 300V360H315V300"/><path d="M555 125V205"/><path d="M555 335V295"/>
   </g>
-  <g id="node-host" class="node"><rect x="380" y="25" width="350" height="100"/><text x="555" y="58">离线调参 / 训练 / LLM上位机</text><text x="555" y="88" class="small">Z-N · IMC · BO · Safe BO · FNN/RL训练 · LLM</text><text x="555" y="111" class="tiny">只下发已通过验收的 Kp、Ki 或冻结策略</text></g>
+  <g id="node-host" class="node"><rect x="380" y="25" width="350" height="100"/><text x="555" y="58">离线调参 / 训练 / Agent上位机</text><text x="555" y="88" class="small">Z-N · IMC · BO · Safe BO · FNN/RL训练 · LLM Agent</text><text x="555" y="111" class="tiny">Agent只调用仿真工具；仅下发验收后的 Kp、Ki</text></g>
   <g id="node-setpoint" class="node"><rect x="30" y="215" width="126" height="70"/><text x="93" y="246">目标温度 r</text><text x="93" y="270" class="small">例如 24°C</text></g>
   <g id="node-error" class="node"><circle cx="315" cy="250" r="50"/><text x="315" y="245">误差 Σ</text><text x="315" y="270" class="small">e = T-r</text></g>
   <g id="node-pi" class="node"><rect x="470" y="205" width="130" height="90"/><text x="535" y="242">安全 PI</text><text x="535" y="270" class="small">100 ms</text></g>
@@ -499,7 +521,7 @@ table{{border-collapse:collapse;width:100%;font-size:14px}}th,td{{padding:8px;bo
 <h2>压缩机容量</h2><svg class="chart" id="command-chart" viewBox="0 0 960 230" role="img" aria-label="压缩机容量百分比随时间变化"></svg>
 <div class="summary"><div>首次进入稳定带<strong id="first-band">--</strong></div><div>连续稳定起点<strong id="stable-at">--</strong></div><div>开门后恢复<strong id="recovery">--</strong></div><div>部署状态<strong id="accepted">--</strong></div></div>
 <p class="notice" id="description"></p>
-<section id="llm-section" style="display:none"><h2>LLM建议与安全门审计</h2><pre id="llm-audit" style="white-space:pre-wrap;background:#f5f8fb;padding:14px;border-radius:8px"></pre></section>
+<section id="llm-section" style="display:none"><h2>LLM Agent 工具调用与安全门审计</h2><p>Agent 可以选择 <code>inspect_history</code>、<code>evaluate_candidate</code> 或 <code>finish</code>；它不能直接接受参数，更不能输出压缩机容量。</p><pre id="llm-audit" style="white-space:pre-wrap;background:#f5f8fb;padding:14px;border-radius:8px"></pre></section>
 <h2>嵌入式验收证据与边界</h2><table><thead><tr><th>层级</th><th>结果</th><th>已有证据</th><th>仍不能证明</th></tr></thead><tbody>
 <tr><td>Python统一场景</td><td>通过</td><td>七条实际部署温度均进入稳定带；开门后恢复；失败候选明确回退</td><td>不代表真实空调响应时间</td></tr>
 <tr><td>PC C++ 软件在环</td><td>通过</td><td>七档增益边界、90秒加速稳定、NaN回退、100ms/2s调度逻辑</td><td>PC纳秒耗时不能写成ESP32 WCET</td></tr>
@@ -509,7 +531,7 @@ table{{border-collapse:collapse;width:100%;font-size:14px}}th,td{{padding:8px;bo
 <tr><td>Modbus真实空调</td><td>默认只读</td><td>从站、寄存器、缩放、字节序、CRC、超时和告警回退均可配置</td><td>没有厂商寄存器表时禁止写容量</td></tr>
 </tbody></table>
 <h2>七种算法在系统中的位置</h2><table><thead><tr><th>算法</th><th>运行位置</th><th>ESP32实际执行</th><th>安全边界</th></tr></thead><tbody>
-<tr><td>Z-N</td><td>上位机辨识与公式</td><td>固定安全PI</td><td>执行器限制与增益边界</td></tr><tr><td>IMC</td><td>上位机模型整定</td><td>固定安全PI / 全局回退</td><td>鲁棒λ与独立联锁</td></tr><tr><td>普通BO</td><td>上位机离线搜索</td><td>验收后的固定PI</td><td>不允许真实设备在线探索</td></tr><tr><td>风险安全BO</td><td>上位机风险与安全代理</td><td>验收后的固定PI</td><td>预测安全集与重复噪声仿真</td></tr><tr><td>FNN</td><td>PC训练，ESP32插值</td><td>每2秒候选Kp/Ki；当前拒绝后回退</td><td>规则验收、±10%与IMC回退</td></tr><tr><td>RL</td><td>PC训练，ESP32查冻结策略</td><td>每2秒候选Kp/Ki</td><td>无在线探索、状态掩码与回退</td></tr><tr><td>LLM</td><td>本地/云端上位机</td><td>只接收已验收固定参数</td><td>Schema、±10%、仿真门和人工批准</td></tr>
+<tr><td>Z-N</td><td>上位机辨识与公式</td><td>固定安全PI</td><td>执行器限制与增益边界</td></tr><tr><td>IMC</td><td>上位机模型整定</td><td>固定安全PI / 全局回退</td><td>鲁棒λ与独立联锁</td></tr><tr><td>普通BO</td><td>上位机离线搜索</td><td>验收后的固定PI</td><td>不允许真实设备在线探索</td></tr><tr><td>风险安全BO</td><td>上位机风险与安全代理</td><td>验收后的固定PI</td><td>预测安全集与重复噪声仿真</td></tr><tr><td>FNN</td><td>PC训练，ESP32插值</td><td>每2秒候选Kp/Ki；当前拒绝后回退</td><td>规则验收、±10%与IMC回退</td></tr><tr><td>RL</td><td>PC训练，ESP32查冻结策略</td><td>每2秒候选Kp/Ki</td><td>无在线探索、状态掩码与回退</td></tr><tr><td>LLM Agent</td><td>本地/云端上位机</td><td>自主选仿真工具；只下发已验收固定参数</td><td>工具白名单、试验预算、±10%、仿真门和IMC回退</td></tr>
 </tbody></table>
 </main><script>
 const traces={payload}; const colors={{"zn":"#c43d4b","imc":"#17864b","bo":"#1677ff","safe-bo":"#00a6a6","fnn":"#e37a12","rl":"#7446b8","llm":"#39475b"}};
@@ -521,7 +543,8 @@ function axisSvg(width,height,margin,yMin,yMax,yLabel){{let s=`<rect x="${{margi
 function drawTemperature(){{const svg=document.getElementById('temperature-chart'),W=960,H=430,m={{l:68,r:22,t:22,b:48}},rows=traces[Object.keys(traces)[0]].rows;const yMin=22,yMax=31;const x=v=>m.l+(W-m.l-m.r)*v/300,y=v=>m.t+(H-m.t-m.b)*(yMax-v)/(yMax-yMin);let s=axisSvg(W,H,m,yMin,yMax,'温度 °C');const low=rows[0].comfort_low_c,high=rows[0].comfort_high_c;s+=`<rect x="${{m.l}}" y="${{y(high)}}" width="${{W-m.l-m.r}}" height="${{y(low)-y(high)}}" fill="#dff4e8" opacity=".8"/><text x="${{W-m.r-8}}" y="${{y(high)+16}}" text-anchor="end" fill="#17864b" font-size="12">目标±0.5°C稳定带</text>`;const eventX=x(rows.find(r=>r.door_open)?.simulated_minute||189);s+=`<line x1="${{eventX}}" x2="${{eventX}}" y1="${{m.t}}" y2="${{H-m.b}}" stroke="#e37a12" stroke-width="2" stroke-dasharray="7 5"/><text x="${{eventX+6}}" y="${{m.t+18}}" fill="#e37a12" font-size="12">开门扰动</text>`;for(const key of selectedKeys()){{const t=traces[key];s+=`<path d="${{linePath(t.rows,'temperature_c',x,y,index)}}" fill="none" stroke="${{colors[key]}}" stroke-width="3"/>`;if(t.forced_fallback) s+=`<path d="${{linePath(t.rows,'candidate_temperature_c',x,y,index)}}" fill="none" stroke="${{colors[key]}}" stroke-width="2" stroke-dasharray="4 5" opacity=".65"/>`}}const active=traces[select.value==='all'?'imc':select.value];s+=`<path d="${{linePath(active.rows,'setpoint_c',x,y,index)}}" fill="none" stroke="#11243a" stroke-width="2" stroke-dasharray="8 5"/>`;const cx=x(active.rows[index].simulated_minute),cy=y(active.rows[index].temperature_c);s+=`<circle cx="${{cx}}" cy="${{cy}}" r="6" fill="${{colors[select.value]||'#11243a'}}"/>`;svg.innerHTML=s;document.getElementById('legend').innerHTML=selectedKeys().map(k=>`<span><i class="swatch" style="background:${{colors[k]}}"></i>${{traces[k].display_name}}</span>`).join('')+'<span><i class="swatch" style="background:#11243a"></i>目标温度</span>'}}
 function drawCommand(){{const svg=document.getElementById('command-chart'),W=960,H=230,m={{l:68,r:22,t:18,b:42}},x=v=>m.l+(W-m.l-m.r)*v/300,y=v=>m.t+(H-m.t-m.b)*(100-v)/100;let s=axisSvg(W,H,m,0,100,'容量 %');for(const key of selectedKeys())s+=`<path d="${{linePath(traces[key].rows,'command_pct',x,y,index)}}" fill="none" stroke="${{colors[key]}}" stroke-width="2.5"/>`;svg.innerHTML=s}}
 function fmt(v,suffix=' min'){{return Number.isFinite(Number(v))?Number(v).toFixed(1)+suffix:'未达到'}}
-function draw(){{const key=select.value==='all'?'imc':select.value,t=traces[key],r=t.rows[index],sum=t.summary;document.getElementById('temp').textContent=r.temperature_c.toFixed(2)+' °C';document.getElementById('sp').textContent=r.setpoint_c.toFixed(2)+' °C';document.getElementById('err').textContent=(r.temperature_c-r.setpoint_c>=0?'+':'')+(r.temperature_c-r.setpoint_c).toFixed(2)+' °C';document.getElementById('cmd').textContent=r.command_pct.toFixed(1)+' %';document.getElementById('gains').textContent=r.kp.toFixed(4)+' / '+r.ki.toFixed(5);const st=document.getElementById('status');st.textContent=r.status;st.className='status '+(r.fallback_active?'fallback':'');document.getElementById('clock').textContent='墙钟 '+r.wall_clock_second.toFixed(1)+' s · 模拟 '+r.simulated_minute.toFixed(0)+' min';document.getElementById('first-band').textContent=fmt(sum.first_in_band_minute);document.getElementById('stable-at').textContent=fmt(sum.stable_first_minute);document.getElementById('recovery').textContent=fmt(sum.door_recovery_minutes);document.getElementById('accepted').textContent=t.accepted?'已通过部署门':'已拒绝/回退';document.getElementById('description').textContent=t.description+' 产物来源：'+t.source;const llm=document.getElementById('llm-section');llm.style.display=key==='llm'?'block':'none';if(key==='llm')document.getElementById('llm-audit').textContent=(sum.llm_replay_disclosure?'声明：这是无网络录制响应 replay，不是本次实时模型调用。\n':'')+'原始建议 Kp/Ki：'+sum.llm_raw_kp.toFixed(6)+' / '+sum.llm_raw_ki.toFixed(7)+'\n±10%和硬边界后的候选：'+sum.llm_limited_kp.toFixed(6)+' / '+sum.llm_limited_ki.toFixed(7)+'\n诊断：'+sum.llm_diagnosis+'\n理由：'+sum.llm_rationale+'\n安全门决定：'+sum.llm_decision;document.querySelectorAll('#system-diagram .node').forEach(n=>n.classList.remove('active'));document.getElementById(nodes[index%nodes.length]).classList.add('active');scrub.value=index;drawTemperature();drawCommand()}}
+function drawAgentAudit(key,t,sum){{const section=document.getElementById('llm-section');section.style.display=key==='llm'?'block':'none';if(key!=='llm')return;const lines=(t.agent_trace||[]).map(row=>{{let line='步骤 '+row.step+' · '+row.tool+'\n  原因：'+(row.reason||'—')+'\n  主机决定：'+row.decision;if(row.limited_kp!==undefined)line+='\n  原始 Kp/Ki：'+Number(row.raw_kp).toFixed(6)+' / '+Number(row.raw_ki).toFixed(7)+'\n  限幅 Kp/Ki：'+Number(row.limited_kp).toFixed(6)+' / '+Number(row.limited_ki).toFixed(7)+'\n  风险目标：'+Number(row.risk_objective).toFixed(3)+' · 安全='+row.safe+' · 接受='+row.accepted;return line}});document.getElementById('llm-audit').textContent=(sum.llm_replay_disclosure?'声明：这是无网络录制的 Agent 工具调用 replay，不是本次实时模型调用。\n\n':'')+lines.join('\n\n')}}
+function draw(){{const key=select.value==='all'?'imc':select.value,t=traces[key],r=t.rows[index],sum=t.summary;document.getElementById('temp').textContent=r.temperature_c.toFixed(2)+' °C';document.getElementById('sp').textContent=r.setpoint_c.toFixed(2)+' °C';document.getElementById('err').textContent=(r.temperature_c-r.setpoint_c>=0?'+':'')+(r.temperature_c-r.setpoint_c).toFixed(2)+' °C';document.getElementById('cmd').textContent=r.command_pct.toFixed(1)+' %';document.getElementById('gains').textContent=r.kp.toFixed(4)+' / '+r.ki.toFixed(5);const st=document.getElementById('status');st.textContent=r.status;st.className='status '+(r.fallback_active?'fallback':'');document.getElementById('clock').textContent='墙钟 '+r.wall_clock_second.toFixed(1)+' s · 模拟 '+r.simulated_minute.toFixed(0)+' min';document.getElementById('first-band').textContent=fmt(sum.first_in_band_minute);document.getElementById('stable-at').textContent=fmt(sum.stable_first_minute);document.getElementById('recovery').textContent=fmt(sum.door_recovery_minutes);document.getElementById('accepted').textContent=t.accepted?'已通过部署门':'已拒绝/回退';document.getElementById('description').textContent=t.description+' 产物来源：'+t.source;drawAgentAudit(key,t,sum);document.querySelectorAll('#system-diagram .node').forEach(n=>n.classList.remove('active'));document.getElementById(nodes[index%nodes.length]).classList.add('active');scrub.value=index;drawTemperature();drawCommand()}}
 function stop(){{if(timer)clearInterval(timer);timer=null}}function play(){{stop();timer=setInterval(()=>{{if(index>=300){{stop();return}}index++;draw()}},300/Number(document.getElementById('speed').value))}}
 document.getElementById('play').onclick=play;document.getElementById('pause').onclick=stop;document.getElementById('reset').onclick=()=>{{stop();index=0;draw()}};document.getElementById('event').onclick=()=>{{index=Math.max(0,traces[Object.keys(traces)[0]].rows.findIndex(r=>r.door_open));draw()}};select.onchange=()=>{{index=0;draw()}};scrub.oninput=()=>{{index=Number(scrub.value);draw()}};draw();
 </script></body></html>"""
@@ -597,6 +620,8 @@ def write_demo_bundle(output_dir: str | Path, traces: dict[str, DemoTrace], *, p
     output.mkdir(parents=True, exist_ok=True)
     for key, trace in traces.items():
         write_trace_csv(output / f"{key.replace('-', '_')}_temperature_demo.csv", trace)
+        if trace.agent_trace:
+            write_agent_trace_csv(output / f"{key.replace('-', '_')}_agent_trace.csv", trace)
         write_interactive_html(output / f"{key.replace('-', '_')}_temperature_demo.html", {key: trace}, title=f"{trace.display_name}温度闭环 Demo")
     write_summary_csv(output / "seven_algorithm_summary.csv", traces)
     write_interactive_html(output / "temperature_control_demo.html", traces)
@@ -605,5 +630,6 @@ def write_demo_bundle(output_dir: str | Path, traces: dict[str, DemoTrace], *, p
     return {
         "interactive_html": str((output / "temperature_control_demo.html").resolve()),
         "summary_csv": str((output / "seven_algorithm_summary.csv").resolve()),
+        "llm_agent_trace_csv": str((output / "llm_agent_trace.csv").resolve()),
         "esp32_profile_header": str(header.resolve()),
     }

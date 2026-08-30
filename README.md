@@ -1,6 +1,6 @@
 # HVAC AI–PI 自动整定演示
 
-> 新增风险感知安全 BO，以及“LLM 只提议、仿真和安全门裁决”的高级 PI 调参实现。详见 [SOTA_LLM_PI_TUNING.md](SOTA_LLM_PI_TUNING.md)，入口为 `run_advanced_tuning_benchmark.py`。Q-learning 保留为教学/对照方法，不称为 SOTA。
+> 新增风险感知安全 BO，以及真正的工具调用式 LLM Agent 自动整定：Agent 自主选择查看历史、运行候选仿真或停止，宿主安全门负责限幅、试验、验收和回退。详见 [SOTA_LLM_PI_TUNING.md](SOTA_LLM_PI_TUNING.md)。Q-learning 保留为教学/对照方法，不称为 SOTA。
 
 ## ESP32 七算法温度闭环 Demo（新增）
 
@@ -25,13 +25,31 @@ python run_embedded_demo.py --algorithm all --provider replay --output outputs_e
 streamlit run streamlit_app.py
 ```
 
-- `outputs_embedded_demo/temperature_control_demo.html`：可离线打开的交互式温度回放、完整系统框图、七算法同场比较和 LLM 安全门审计；
+- `outputs_embedded_demo/temperature_control_demo.html`：可离线打开的交互式温度回放、完整系统框图、七算法同场比较和 LLM Agent 工具审计；
+- `outputs_embedded_demo/llm_agent_trace.csv`：Agent 每一步工具、原始/限幅增益、仿真风险、安全门决定和剩余预算；
 - `outputs_embedded_demo/ESP32_七算法温度闭环_零基础教学.pptx`：20 页、原生可编辑框图和图表的零基础教学材料；
 - `embedded/esp32_seven_algorithm_demo/`：ESP32 PlatformIO 双模式固件；
 - `embedded/modbus_config.hpp`：真实设备寄存器配置，默认 `kWritesEnabled=false`；
 - `embedded/validate_esp32_serial.py`：真实 ESP32 连续 10 分钟、丢周期与 WCET 验收脚本。
 
-当前统一场景中，Z-N 与 FNN 候选未通过部署门，因此实际曲线明确使用 IMC 回退，并同时保留候选影子温度；不能把回退后的稳定曲线写成候选算法成功。LLM 的 `replay` 是无网络录制响应，不是实时模型调用。`ollama` 和 `openai` 都只在上位机提出结构化 `Kp/Ki`，经过硬边界、单轮 ±10%、重复仿真和安全门后才能导出。
+当前统一场景中，Z-N 与 FNN 候选未通过部署门，因此实际曲线明确使用 IMC 回退，并同时保留候选影子温度；不能把回退后的稳定曲线写成候选算法成功。LLM Agent 的 `replay` 是无网络录制的工具调用轨迹，不是实时模型调用。`ollama` 和 `openai` 模式会让模型在上位机从 `inspect_history`、`evaluate_candidate`、`finish` 中自主选择下一步；宿主程序仍独立执行硬边界、单轮 ±10%、重复仿真、试验预算和安全门。Agent 不进入 ESP32 的 100 ms 控制循环，也没有写压缩机容量的工具。
+
+LLM Agent 自动整定数据流：
+
+```text
+历史指标 + 当前 Kp/Ki + 剩余预算
+                 ↓
+          [LLM Agent 决策]
+       ┌─────────┼──────────┐
+       ↓         ↓          ↓
+  查看历史   请求候选仿真   结束整定
+                  ↓
+     [宿主限幅 → 多场景仿真 → 安全门]
+                  ↓
+       指标/接受或拒绝原因反馈给 Agent
+                  ↺
+     最终只导出已验收 Kp/Ki；否则 IMC 回退
+```
 
 ## 当前版本：变频精密/机柜空调仿真平台
 

@@ -130,7 +130,7 @@ with st.expander("先看完整闭环框图：温度为什么会变化？", expan
     components.html(
         "<div style='font-family:Arial,sans-serif;background:#f8fafc;padding:12px;border-radius:14px'>"
         + _system_diagram_svg()
-        + "<p><b>循环：</b>测温 → 与目标相减 → 安全 PI 计算容量请求 → 限制器处理最低频率、斜率、量化和启停 → 空调改变温度 → 再次测温。FNN/RL 只低频改增益；LLM 不进入 100 ms 实时环。</p></div>",
+        + "<p><b>循环：</b>测温 → 与目标相减 → 安全 PI 计算容量请求 → 限制器处理最低频率、斜率、量化和启停 → 空调改变温度 → 再次测温。FNN/RL 只低频改增益；LLM Agent 只在上位机调用仿真工具，不进入 100 ms 实时环。</p></div>",
         height=510,
         scrolling=False,
     )
@@ -181,6 +181,17 @@ else:
     st.subheader(DISPLAY_NAMES[selected])
     if trace.forced_fallback:
         st.warning(f"{DISPLAY_NAMES[selected]} 候选被拒绝；红色实际温度由 IMC 安全参数控制，紫色虚线是候选影子温度。")
+
+    if selected == "llm":
+        st.info("Agent 循环：查看当前指标 → 自主选择工具 → 主机限幅并运行仿真 → 安全门反馈结果 → Agent 继续试验或停止。Agent 没有压缩机写入工具。")
+        with st.expander("查看 LLM Agent 每一步工具调用与安全门决定", expanded=True):
+            agent_rows = pd.DataFrame(trace.agent_trace)
+            preferred = [
+                "step", "tool", "reason", "raw_kp", "raw_ki", "limited_kp", "limited_ki",
+                "risk_objective", "safe", "accepted", "remaining_trials", "decision",
+            ]
+            st.dataframe(agent_rows[[column for column in preferred if column in agent_rows]], use_container_width=True, hide_index=True)
+            st.caption("replay 是固定录制的工具选择序列，用于无密钥演示；只有 ollama/openai 模式会在本次运行中调用模型。")
 
     meter, chart_col = st.columns([1, 4])
     with meter:

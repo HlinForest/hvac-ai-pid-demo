@@ -1,6 +1,6 @@
 # ESP32 七算法固件目标编译记录
 
-- 日期：2026-08-29
+- 日期：2026-08-30（加入 LLM Agent 自动整定后回归）
 - 命令：`python -m platformio run`
 - PlatformIO Core：6.1.19
 - 平台：Espressif 32 7.0.1

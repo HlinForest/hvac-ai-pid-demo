@@ -27,6 +27,10 @@ def test_seven_algorithms_expose_temperature_and_safe_deployment() -> None:
     assert traces["fnn"].forced_fallback and not traces["fnn"].deployment_accepted
     assert traces["zn"].forced_fallback and not traces["zn"].deployment_accepted
     assert traces["rl"].deployment_accepted and not traces["rl"].forced_fallback
+    assert [row["tool"] for row in traces["llm"].agent_trace] == [
+        "inspect_history", "evaluate_candidate", "evaluate_candidate",
+        "evaluate_candidate", "finish",
+    ]
 
 
 def test_html_contains_live_temperature_diagram_and_llm_audit(tmp_path: Path) -> None:
@@ -36,7 +40,8 @@ def test_html_contains_live_temperature_diagram_and_llm_audit(tmp_path: Path) ->
     document = output.read_text(encoding="utf-8")
     for required in (
         "当前被控温度", "目标±0.5°C稳定带", "开门扰动", "node-pi",
-        "压缩机限制器", "LLM建议与安全门审计", "无网络录制响应 replay",
+        "压缩机限制器", "LLM Agent 工具调用与安全门审计", "无网络录制的 Agent 工具调用 replay",
+        "inspect_history", "evaluate_candidate", "finish",
         "开始", "暂停", "复位",
     ):
         assert required in document

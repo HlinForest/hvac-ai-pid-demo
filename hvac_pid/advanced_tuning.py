@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-"""Risk-aware safe BO and simulator-gated LLM supervision for PI tuning.
+"""Risk-aware safe BO and simulator-gated LLM/Agent PI tuning.
 
-The LLM is deliberately outside the real-time loop.  It may propose Kp/Ki,
-but deterministic bounds, trust-region limits, repeated simulation and safety
-constraints decide whether a proposal is accepted.
+The LLM Agent is deliberately outside the real-time loop.  It may inspect the
+experiment history, request a Kp/Ki simulation, or stop.  Deterministic bounds,
+trust-region limits, repeated simulation and safety constraints decide whether
+a request is accepted and which parameters are deployed.
 """
 
 from dataclasses import dataclass, replace
@@ -62,6 +63,27 @@ class SupervisedTuneResult:
     fallback_used: bool
     evaluations: int
     history: tuple[dict[str, object], ...]
+
+
+@dataclass(frozen=True)
+class AgentAction:
+    """One tool request selected by an LLM tuning agent."""
+
+    tool: str
+    arguments: dict[str, object]
+    reason: str = ""
+
+
+@dataclass(frozen=True)
+class AgentTuneResult:
+    kp: float
+    ki: float
+    score: float
+    accepted: bool
+    fallback_used: bool
+    evaluations: int
+    stop_reason: str
+    trace: tuple[dict[str, object], ...]
 
 
 def _safety_margin(metrics: dict[str, float], config: RiskSafetyConfig) -> float:
@@ -475,4 +497,364 @@ class LLMSupervisoryTuner:
             accepted=qualified and (deployed.kp, deployed.ki) != (baseline.kp, baseline.ki),
             fallback_used=not qualified,
             evaluations=1 + len(history), history=tuple(history),
+        )
+
+
+class AgentPolicy(Protocol):
+    """Policy that chooses the next safe host-side tuning tool."""
+
+    name: str
+
+    def decide(self, state: dict[str, object]) -> AgentAction: ...
+
+
+_AGENT_TOOLS = (
+    {
+        "type": "function",
+        "name": "inspect_history",
+        "description": "Inspect current gains, metrics, trial budget and prior simulator decisions without changing control parameters.",
+        "strict": True,
+        "parameters": {"type": "object", "properties": {}, "required": [], "additionalProperties": False},
+    },
+    {
+        "type": "function",
+        "name": "evaluate_candidate",
+        "description": "Request one Kp/Ki experiment. The host clamps the pair, runs repeated simulations, and independently accepts or rejects it.",
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "kp": {"type": "number"},
+                "ki": {"type": "number"},
+                "reason": {"type": "string"},
+            },
+            "required": ["kp", "ki", "reason"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "type": "function",
+        "name": "finish",
+        "description": "Stop experimenting and deploy the best host-accepted gains, or IMC when no candidate was accepted.",
+        "strict": True,
+        "parameters": {
+            "type": "object",
+            "properties": {"reason": {"type": "string"}},
+            "required": ["reason"],
+            "additionalProperties": False,
+        },
+    },
+)
+
+
+def _agent_action_from_function_call(item: dict[str, object]) -> AgentAction:
+    name = str(item.get("name", ""))
+    raw_arguments = item.get("arguments", {})
+    if isinstance(raw_arguments, str):
+        arguments = json.loads(raw_arguments)
+    elif isinstance(raw_arguments, dict):
+        arguments = raw_arguments
+    else:
+        raise ValueError("agent tool arguments must be a JSON object")
+    if name not in {"inspect_history", "evaluate_candidate", "finish"}:
+        raise ValueError(f"unsupported agent tool: {name}")
+    reason = str(arguments.get("reason", ""))
+    return AgentAction(name, dict(arguments), reason)
+
+
+class ReplayPIDAgentPolicy:
+    """Deterministic recording of a tool-using agent for offline demos."""
+
+    name = "recorded tool-using LLM agent replay (not a live model call)"
+
+    def __init__(self) -> None:
+        self._step = 0
+
+    def decide(self, state: dict[str, object]) -> AgentAction:
+        current = state["current_gains"]
+        kp, ki = float(current["kp"]), float(current["ki"])
+        scripts = (
+            AgentAction("inspect_history", {}, "先读取基线指标、剩余试验预算和安全限制"),
+            AgentAction(
+                "evaluate_candidate",
+                {"kp": kp * 0.94, "ki": ki * 0.90, "reason": "先减弱积分以降低启动阶段过冷风险"},
+                "先减弱积分以降低启动阶段过冷风险",
+            ),
+            AgentAction(
+                "evaluate_candidate",
+                {"kp": kp * 0.98, "ki": ki * 0.94, "reason": "根据上一轮结果继续小步减少控制动作"},
+                "根据上一轮结果继续小步减少控制动作",
+            ),
+            AgentAction(
+                "evaluate_candidate",
+                {"kp": kp * 1.02, "ki": ki * 0.98, "reason": "在安全候选附近轻微恢复比例作用"},
+                "在安全候选附近轻微恢复比例作用",
+            ),
+            AgentAction("finish", {"reason": "试验预算已足够，停止并部署安全门接受的最优参数"}, "试验完成"),
+        )
+        action = scripts[min(self._step, len(scripts) - 1)]
+        self._step += 1
+        return action
+
+
+class OpenAIResponsesPIDAgentPolicy:
+    """Responses API function-calling policy; host code executes every tool."""
+
+    def __init__(self, model: str, *, base_url: str = "https://api.openai.com/v1", timeout_s: float = 60.0) -> None:
+        if not model:
+            raise ValueError("an explicit OpenAI model name is required")
+        self.model, self.base_url, self.timeout_s = model, base_url.rstrip("/"), timeout_s
+        self.name = f"OpenAI Responses tool agent/{model}"
+
+    def decide(self, state: dict[str, object]) -> AgentAction:
+        api_key = os.environ.get("OPENAI_API_KEY")
+        if not api_key:
+            raise RuntimeError("OPENAI_API_KEY is not set")
+        payload = {
+            "model": self.model,
+            "store": False,
+            "instructions": (
+                "You are an offline HVAC PI auto-tuning agent. Choose exactly one provided function tool. "
+                "Use inspect_history when evidence is insufficient, evaluate_candidate for one conservative experiment, "
+                "and finish when the remaining budget is not worth the risk. Never output actuator commands. "
+                "The deterministic host clamps gains and has sole authority to accept, reject, deploy, or fall back."
+            ),
+            "input": json.dumps(state, ensure_ascii=False),
+            "tools": list(_AGENT_TOOLS),
+            "tool_choice": "required",
+            "parallel_tool_calls": False,
+            "max_output_tokens": 500,
+        }
+        req = request.Request(
+            f"{self.base_url}/responses",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310 - configured official endpoint
+            body = json.loads(response.read().decode("utf-8"))
+        for item in body.get("output", []):
+            if item.get("type") == "function_call":
+                return _agent_action_from_function_call(item)
+        raise RuntimeError("Responses API agent returned no function_call")
+
+
+class OllamaPIDAgentPolicy:
+    """Local Ollama function-calling policy, intended for Qwen3-class models."""
+
+    def __init__(self, model: str, *, base_url: str = "http://localhost:11434", timeout_s: float = 120.0) -> None:
+        if not model:
+            raise ValueError("an explicit Ollama model name is required")
+        self.model, self.base_url, self.timeout_s = model, base_url.rstrip("/"), timeout_s
+        self.name = f"Ollama tool agent/{model}"
+
+    def decide(self, state: dict[str, object]) -> AgentAction:
+        ollama_tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool["name"],
+                    "description": tool["description"],
+                    "parameters": tool["parameters"],
+                },
+            }
+            for tool in _AGENT_TOOLS
+        ]
+        payload = {
+            "model": self.model,
+            "stream": False,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "Act as an offline HVAC PI tuning agent. Call one tool only. Never generate actuator commands. "
+                        "The host safety gate has final authority."
+                    ),
+                },
+                {"role": "user", "content": json.dumps(state, ensure_ascii=False)},
+            ],
+            "tools": ollama_tools,
+        }
+        req = request.Request(
+            f"{self.base_url}/api/chat",
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST",
+        )
+        with request.urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310 - user-selected local endpoint
+            body = json.loads(response.read().decode("utf-8"))
+        calls = body.get("message", {}).get("tool_calls", [])
+        if not calls:
+            raise RuntimeError("Ollama agent returned no tool call")
+        return _agent_action_from_function_call(calls[0].get("function", {}))
+
+
+class LLMAgentAutoTuner:
+    """Bounded tool-using agent loop for offline PI auto-tuning.
+
+    The policy controls experiment selection and stopping only. It cannot
+    bypass hard gain bounds, the ±trust region, repeated simulation, the
+    deterministic acceptance rule, or final IMC fallback.
+    """
+
+    def __init__(
+        self,
+        policy: AgentPolicy,
+        *,
+        bounds: GainBounds | None = None,
+        max_steps: int = 8,
+        max_trials: int = 5,
+        max_change_fraction: float = 0.10,
+        min_improvement_fraction: float = 0.005,
+        config: RiskSafetyConfig | None = None,
+    ) -> None:
+        self.policy = policy
+        self.bounds = bounds or GainBounds()
+        self.max_steps = max(1, int(max_steps))
+        self.max_trials = max(1, int(max_trials))
+        self.max_change_fraction = float(max_change_fraction)
+        self.min_improvement_fraction = float(min_improvement_fraction)
+        self.config = config or RiskSafetyConfig()
+
+    def tune(self, scenarios: list[Scenario], baseline_gains: tuple[float, float], *, seed: int = 0) -> AgentTuneResult:
+        if not scenarios:
+            raise ValueError("at least one scenario is required")
+        baseline = evaluate_candidate(scenarios, baseline_gains, seed=seed, config=self.config)
+        current = baseline
+        trace: list[dict[str, object]] = []
+        trials = 0
+        stop_reason = "maximum agent steps reached"
+        provider_error = False
+
+        for step in range(1, self.max_steps + 1):
+            state: dict[str, object] = {
+                "step": step,
+                "role": "offline experiment-selection agent; no real-time actuator authority",
+                "available_tools": [tool["name"] for tool in _AGENT_TOOLS],
+                "current_gains": {"kp": current.kp, "ki": current.ki},
+                "current_metrics": current.metrics_mean,
+                "current_risk_objective": current.risk_objective,
+                "baseline_risk_objective": baseline.risk_objective,
+                "remaining_trials": self.max_trials - trials,
+                "hard_bounds": {"kp": self.bounds.kp, "ki": self.bounds.ki},
+                "maximum_fractional_change": self.max_change_fraction,
+                "safety_limits": self.config.__dict__,
+                "recent_tool_results": trace[-4:],
+            }
+            try:
+                action = self.policy.decide(state)
+            except Exception as exc:
+                provider_error = True
+                stop_reason = f"agent provider error: {type(exc).__name__}: {exc}"
+                trace.append({"step": step, "provider": self.policy.name, "tool": "provider_error", "decision": stop_reason})
+                break
+
+            if action.tool == "inspect_history":
+                trace.append(
+                    {
+                        "step": step,
+                        "provider": self.policy.name,
+                        "tool": action.tool,
+                        "reason": action.reason,
+                        "current_kp": current.kp,
+                        "current_ki": current.ki,
+                        "risk_objective": current.risk_objective,
+                        "safe": int(current.safe),
+                        "remaining_trials": self.max_trials - trials,
+                        "decision": "inspection returned; no parameters changed",
+                    }
+                )
+                continue
+
+            if action.tool == "finish":
+                stop_reason = action.reason or "agent requested finish"
+                trace.append(
+                    {
+                        "step": step,
+                        "provider": self.policy.name,
+                        "tool": action.tool,
+                        "reason": action.reason,
+                        "current_kp": current.kp,
+                        "current_ki": current.ki,
+                        "risk_objective": current.risk_objective,
+                        "safe": int(current.safe),
+                        "remaining_trials": self.max_trials - trials,
+                        "decision": "agent stopped; host will run final deployment qualification",
+                    }
+                )
+                break
+
+            if action.tool != "evaluate_candidate":
+                provider_error = True
+                stop_reason = f"invalid agent tool: {action.tool}"
+                trace.append({"step": step, "provider": self.policy.name, "tool": action.tool, "decision": stop_reason})
+                break
+            if trials >= self.max_trials:
+                stop_reason = "hard experiment budget exhausted"
+                trace.append({"step": step, "provider": self.policy.name, "tool": action.tool, "decision": stop_reason})
+                break
+
+            try:
+                raw = np.asarray([float(action.arguments["kp"]), float(action.arguments["ki"])], dtype=float)
+                if not np.all(np.isfinite(raw)):
+                    raise ValueError("non-finite gains")
+            except (KeyError, TypeError, ValueError) as exc:
+                provider_error = True
+                stop_reason = f"invalid agent candidate: {exc}"
+                trace.append({"step": step, "provider": self.policy.name, "tool": action.tool, "decision": stop_reason})
+                break
+
+            low = np.asarray([current.kp, current.ki]) * (1.0 - self.max_change_fraction)
+            high = np.asarray([current.kp, current.ki]) * (1.0 + self.max_change_fraction)
+            hard_low = np.asarray([self.bounds.kp[0], self.bounds.ki[0]])
+            hard_high = np.asarray([self.bounds.kp[1], self.bounds.ki[1]])
+            limited = np.clip(raw, np.maximum(low, hard_low), np.minimum(high, hard_high))
+            trials += 1
+            candidate = evaluate_candidate(
+                scenarios,
+                (float(limited[0]), float(limited[1])),
+                seed=seed + trials * 20_011,
+                config=self.config,
+            )
+            candidate = _relative_safety(candidate, baseline.risk_objective, self.config)
+            improvement = (current.risk_objective - candidate.risk_objective) / max(abs(current.risk_objective), 1e-9)
+            accepted = bool(candidate.safe and improvement >= self.min_improvement_fraction)
+            if accepted:
+                current = candidate
+            decision = (
+                "accepted by deterministic host gate"
+                if accepted
+                else ("rejected: safety constraint" if not candidate.safe else "rejected: insufficient risk-adjusted improvement")
+            )
+            trace.append(
+                {
+                    "step": step,
+                    "provider": self.policy.name,
+                    "tool": action.tool,
+                    "reason": action.reason or str(action.arguments.get("reason", "")),
+                    "raw_kp": float(raw[0]),
+                    "raw_ki": float(raw[1]),
+                    "limited_kp": candidate.kp,
+                    "limited_ki": candidate.ki,
+                    "risk_objective": candidate.risk_objective,
+                    "safety_margin": candidate.safety_margin,
+                    "safe": int(candidate.safe),
+                    "improvement_fraction": improvement,
+                    "accepted": int(accepted),
+                    "remaining_trials": self.max_trials - trials,
+                    "decision": decision,
+                }
+            )
+        qualified = current.safe and current.risk_objective <= baseline.risk_objective * self.config.validation_tolerance
+        deployed = current if qualified else baseline
+        changed = (deployed.kp, deployed.ki) != (baseline.kp, baseline.ki)
+        return AgentTuneResult(
+            deployed.kp,
+            deployed.ki,
+            deployed.risk_objective,
+            accepted=bool(qualified and changed),
+            fallback_used=bool(provider_error or not qualified or not changed),
+            evaluations=1 + trials,
+            stop_reason=stop_reason,
+            trace=tuple(trace),
         )

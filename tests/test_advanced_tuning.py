@@ -3,8 +3,11 @@ from __future__ import annotations
 from dataclasses import replace
 
 from hvac_pid.advanced_tuning import (
+    AgentAction,
+    LLMAgentAutoTuner,
     LLMGainProposal,
     LLMSupervisoryTuner,
+    ReplayPIDAgentPolicy,
     RiskAwareSafeBOTuner,
     RiskSafetyConfig,
     evaluate_candidate,
@@ -19,6 +22,13 @@ class ExtremeProvider:
 
     def propose(self, context: dict[str, object]) -> LLMGainProposal:
         return LLMGainProposal(999.0, 999.0, "故意越界", "验证硬边界和信赖域", 0.2)
+
+
+class BrokenAgentPolicy:
+    name = "broken test agent"
+
+    def decide(self, state: dict[str, object]) -> AgentAction:
+        raise RuntimeError("simulated provider outage")
 
 
 def _small_scenarios():
@@ -67,3 +77,38 @@ def test_llm_supervisor_clamps_extreme_proposal_and_keeps_audit() -> None:
     assert float(row["candidate_ki"]) <= baseline[1] * 1.25 + 1e-12
     assert "decision" in row
     assert result.evaluations == 2
+
+
+def test_llm_agent_uses_bounded_tools_and_persists_host_decisions() -> None:
+    scenarios = _small_scenarios()
+    baseline = imc_pi(identify_fopdt(scenarios[0]))
+    result = LLMAgentAutoTuner(
+        ReplayPIDAgentPolicy(), max_steps=6, max_trials=3,
+        max_change_fraction=0.10,
+        config=RiskSafetyConfig(repeats=1, max_undershoot_c=10.0),
+    ).tune(scenarios, baseline, seed=17)
+    assert [row["tool"] for row in result.trace] == [
+        "inspect_history", "evaluate_candidate", "evaluate_candidate",
+        "evaluate_candidate", "finish",
+    ]
+    assert result.evaluations == 4
+    assert sum(row["tool"] == "evaluate_candidate" for row in result.trace) == 3
+    for row in result.trace:
+        assert row["tool"] in {"inspect_history", "evaluate_candidate", "finish"}
+        assert "decision" in row
+        if row["tool"] == "evaluate_candidate":
+            assert GainBounds().kp[0] <= float(row["limited_kp"]) <= GainBounds().kp[1]
+            assert GainBounds().ki[0] <= float(row["limited_ki"]) <= GainBounds().ki[1]
+
+
+def test_llm_agent_provider_failure_returns_unchanged_imc_fallback() -> None:
+    scenarios = _small_scenarios()
+    baseline = imc_pi(identify_fopdt(scenarios[0]))
+    result = LLMAgentAutoTuner(
+        BrokenAgentPolicy(), max_steps=3, max_trials=2,
+        config=RiskSafetyConfig(repeats=1, max_undershoot_c=10.0),
+    ).tune(scenarios, baseline, seed=23)
+    assert result.fallback_used
+    assert not result.accepted
+    assert (result.kp, result.ki) == baseline
+    assert result.trace[0]["tool"] == "provider_error"

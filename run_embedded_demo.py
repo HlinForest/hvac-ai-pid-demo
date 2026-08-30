@@ -10,6 +10,7 @@ from hvac_pid.embedded_demo import (
     run_algorithm_demo,
     run_all_demos,
     write_demo_bundle,
+    write_agent_trace_csv,
     write_interactive_html,
     write_trace_csv,
 )
@@ -62,9 +63,15 @@ def main() -> None:
     html_path = output / f"{stem}.html"
     summary_path = output / f"{stem}_summary.json"
     write_trace_csv(csv_path, trace)
+    agent_trace_path = output / f"{stem}_agent_trace.csv"
+    if trace.agent_trace:
+        write_agent_trace_csv(agent_trace_path, trace)
     write_interactive_html(html_path, {args.algorithm: trace}, title=f"{trace.display_name}温度闭环 Demo")
     summary_path.write_text(json.dumps(trace.summary, ensure_ascii=False, indent=2), encoding="utf-8")
-    print(json.dumps({"html": str(html_path), "csv": str(csv_path), "summary": str(summary_path)}, ensure_ascii=False, indent=2))
+    files = {"html": str(html_path), "csv": str(csv_path), "summary": str(summary_path)}
+    if trace.agent_trace:
+        files["agent_trace"] = str(agent_trace_path)
+    print(json.dumps(files, ensure_ascii=False, indent=2))
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ Q-learning 不是当前 PI/PID 自动调参的普遍 SOTA。它把状态和动�
 
 本项目将其实现为 `RiskAwareSafeBOTuner`。思想来自 RaGoOSE 的风险规避安全贝叶斯优化，但这是针对本项目的工程改编，不声称逐行复现论文源码。
 
-大模型适合承担“读指标—诊断—提出下一组候选增益”的低频监督任务，不适合直接决定每分钟的压缩机命令。本项目实现 OpenAI Responses API 和本地 Ollama 接口，但建议必须经过确定性限幅、重复仿真、安全门和回退逻辑。
+大模型适合承担“读指标—选择下一项试验—观察结果—决定继续或停止”的低频 Agent 任务，不适合直接决定每分钟的压缩机命令。本项目实现 OpenAI Responses API 和本地 Ollama 工具调用接口；Agent 的请求必须经过确定性限幅、重复仿真、安全门和回退逻辑。
 
 ## 2. 被优化的问题
 
@@ -77,27 +77,37 @@ IMC 基线 ──┐
 
 2026 年一项物理信息 LLM-Agent PID 研究采用“响应特征—诊断—增益建议—验收”的迭代框架，并探索 SFT 和物理信息 GRPO。这说明它是活跃研究方向，但化工仿真的成功率不能直接当成本空调项目的证据。见 [A Physics-Informed Framework for PID Tuning Using LLM Agents](https://arxiv.org/abs/2607.26594)。较早开源实现采用 OpenAI/Ollama、指标反馈和迭代建议，见 [LLM-Based PID Controller Optimization](https://github.com/ilijakamenko/LLM_PID_Tuner)。
 
-本项目的门控流程为：
+本项目同时保留旧的“单次结构化建议”监督器供基准兼容，并新增真正的工具调用式 Agent。Agent 每一步只能三选一：
+
+- `inspect_history`：查看当前安全点、指标、历史决定和剩余试验预算；
+- `evaluate_candidate`：申请试验一组 `Kp/Ki`，但由宿主程序限幅并运行仿真；
+- `finish`：停止探索，要求宿主部署最佳已验收参数或回退 IMC。
+
+Agent 自动整定的门控流程为：
 
 ```text
-当前 Kp/Ki -> 重复仿真指标 -> LLM 候选+诊断
-                                  │
-                                  v
-                         硬边界+单轮最多±25%
-                                  │
-                                  v
-                         多场景重复噪声仿真
-                                  │
-                    安全且风险分至少改善0.5%？
-                         │是                 │否
-                         v                   v
-                    更新安全点          拒绝并保持原点
-                                  │
-                                  v
-                            不合格回退IMC
+历史+当前安全点+预算 -> LLM Agent 选择一个工具
+                             │
+               ┌─────────────┼────────────┐
+               v             v            v
+          查看历史      请求候选试验      结束
+                             │
+                    硬边界+单轮最多±10%
+                             │
+                    多场景重复噪声仿真
+                             │
+               安全且风险分至少改善0.5%？
+                    │是                 │否
+                    v                   v
+               更新安全点          拒绝并保持原点
+                    └────────指标与原因────────> Agent
+                             │
+                    预算耗尽/主动结束
+                             │
+                 最终复验；不合格回退 IMC
 ```
 
-OpenAI 接口使用 Responses API 严格 JSON Schema，只允许返回 `kp`、`ki`、诊断、理由和置信度，依据 [OpenAI Responses API 官方文档](https://developers.openai.com/api/reference/resources/responses/methods/create)。密钥仅在调用时从 `OPENAI_API_KEY` 读取，不写入报告或 CSV。
+OpenAI 接口使用 Responses API 的严格自定义函数工具，强制单步只调用一个白名单工具，并设置 `store:false`；宿主程序执行工具且保留最终裁决权，依据 [OpenAI Responses API 官方文档](https://developers.openai.com/api/reference/cli/resources/responses/methods/create)。密钥仅在调用时从 `OPENAI_API_KEY` 读取，不写入报告或 CSV。
 
 ## 6. 运行方法
 
@@ -107,17 +117,23 @@ OpenAI 接口使用 Responses API 严格 JSON Schema，只允许返回 `kp`、`k
 python run_advanced_tuning_benchmark.py --quick --llm-provider heuristic --output outputs_advanced_quick
 ```
 
+无需网络的 Agent 工具调用回放（可直接看到温度和逐步审计）：
+
+```powershell
+python run_llm_agent_demo.py --provider replay --output outputs_llm_agent
+```
+
 OpenAI Responses API：
 
 ```powershell
 $env:OPENAI_API_KEY="你的密钥"
-python run_advanced_tuning_benchmark.py --quick --llm-provider openai --llm-model "明确指定的模型名" --output outputs_advanced_openai
+python run_llm_agent_demo.py --provider openai --model "明确指定的模型名" --output outputs_llm_agent_openai
 ```
 
 程序不会默认猜模型名。调用会产生费用。使用本地 Ollama：
 
 ```powershell
-python run_advanced_tuning_benchmark.py --quick --llm-provider ollama --llm-model "已安装的模型名" --output outputs_advanced_ollama
+python run_llm_agent_demo.py --provider ollama --model "已安装且支持工具调用的模型名" --output outputs_llm_agent_ollama
 ```
 
 仅比较数值优化：
@@ -131,6 +147,7 @@ python run_advanced_tuning_benchmark.py --llm-provider none
 - `advanced_holdout_summary.csv`：独立留出场景的均值、标准差、风险、最坏分数和安全性，是最重要的比较；
 - `safe_bo_history.csv`：每个候选的预测/实测安全裕量；
 - `llm_tuning_history.csv`：原始建议、限幅后候选、诊断和接受/拒绝原因；
+- `llm_temperature_demo_agent_trace.csv`：Agent 每一步工具调用、原始/限幅参数、风险、安全门决定和剩余预算；
 - `tuning_wall_time.csv`：本机真实墙钟耗时，不把仿真时长冒充计算耗时；
 - `advanced_tuning_report.md`：本次规模与结论。
 
@@ -138,6 +155,6 @@ python run_advanced_tuning_benchmark.py --llm-provider none
 
 1. 当前对象仍是 3R2C 虚拟模型，不等于真实空调，下一步需用 BMS、OpenModelica 或 HIL 复核。
 2. “RaGoOSE 风格”表示采用风险与安全代理思想，不表示满足论文全部实验条件。
-3. LLM 的论文新颖性不等于闭环性能 SOTA；在本架构中它只是候选生成器。
-4. 没有真实调用模型时，启发式 dry-run 绝不能报告成 LLM 效果。
+3. LLM 的论文新颖性不等于闭环性能 SOTA；在本架构中 Agent 只拥有试验编排权，没有安全裁决权或执行器权限。
+4. 没有真实调用模型时，启发式 dry-run 或 replay 绝不能报告成实时 LLM 效果。
 5. 上真实设备前还需人工批准、厂家边界、急停、看门狗、影子模式和灰度实验。
