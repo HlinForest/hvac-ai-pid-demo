@@ -52,6 +52,11 @@ def test_html_contains_live_temperature_diagram_and_llm_audit(tmp_path: Path) ->
     assert "row.tool+'\n" not in document
     # The low-frequency scheduler must not sit on top of the feedback path.
     assert 'M1040 300V420H315V300' in document
+    # SVG presentation attributes keep the diagram readable even when a local
+    # file browser fails to apply the outer page stylesheet.
+    assert 'fill="#e7f6ee" stroke="#17864b"' in document
+    assert 'fill="#fff4df" stroke="#e37a12"' in document
+    assert 'fill="#11243a"' in document
 
 
 def test_replay_proposer_is_deterministic_and_changes_no_more_than_ten_percent() -> None:

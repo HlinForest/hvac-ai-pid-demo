@@ -478,19 +478,19 @@ def _system_diagram_svg() -> str:
 <svg id="system-diagram" viewBox="0 0 1180 465" role="img" aria-labelledby="diagram-title diagram-desc">
   <title id="diagram-title">温度反馈闭环系统框图</title>
   <desc id="diagram-desc">上位机生成经过验收的增益，ESP32读取设定温度和测量温度，经安全PI与压缩机限制器控制空调，温度传感器形成反馈。</desc>
-  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="currentColor"/></marker></defs>
-  <g class="edges" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#arrow)">
+  <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#11243a"/></marker></defs>
+  <g class="edges" fill="none" stroke="#11243a" stroke-width="2" marker-end="url(#arrow)">
     <path d="M156 250H265"/><path d="M365 250H470"/><path d="M600 250H700"/><path d="M850 250H960"/>
     <path d="M1040 300V420H315V300"/><path d="M555 125V205"/><path d="M555 330V295"/>
   </g>
-  <g id="node-host" class="node"><rect x="380" y="25" width="350" height="100"/><text x="555" y="58">离线调参 / 训练 / Agent上位机</text><text x="555" y="86" class="small">Z-N · IMC · BO · Safe BO · FNN/RL · LLM Agent</text><text x="555" y="110" class="tiny">只下发已验收增益或冻结策略</text></g>
-  <g id="node-setpoint" class="node"><rect x="30" y="215" width="126" height="70"/><text x="93" y="246">目标温度 r</text><text x="93" y="270" class="small">例如 24°C</text></g>
-  <g id="node-error" class="node"><circle cx="315" cy="250" r="50"/><text x="315" y="245">误差 Σ</text><text x="315" y="270" class="small">e = T-r</text></g>
-  <g id="node-pi" class="node"><rect x="470" y="205" width="130" height="90"/><text x="535" y="242">安全 PI</text><text x="535" y="270" class="small">100 ms</text></g>
-  <g id="node-limiter" class="node"><rect x="700" y="200" width="150" height="100"/><text x="775" y="235">压缩机限制器</text><text x="775" y="263" class="small">斜率 · 量化</text><text x="775" y="285" class="small">最低频率 · 启停</text></g>
-  <g id="node-plant" class="node"><rect x="960" y="195" width="170" height="110"/><text x="1045" y="232">空调 / 虚拟对象</text><text x="1045" y="262" class="small">容量指令 u</text><text x="1045" y="286" class="small">产生室内温度 T</text></g>
-  <g id="node-scheduler" class="node"><rect x="440" y="330" width="230" height="65"/><text x="555" y="357">FNN / RL 低频调度</text><text x="555" y="381" class="small">只建议 Kp、Ki · 2 s</text></g>
-  <text x="790" y="412" class="feedback">温度传感器反馈：测温 → 算误差 → PI → 限幅 → 温度变化 → 再测温</text>
+  <g id="node-host" class="node" fill="#11243a"><rect x="380" y="25" width="350" height="100" fill="#e8f2ff" stroke="#1677ff" stroke-width="2"/><text x="555" y="58">离线调参 / 训练 / Agent上位机</text><text x="555" y="86" class="small">Z-N · IMC · BO · Safe BO · FNN/RL · LLM Agent</text><text x="555" y="110" class="tiny">只下发已验收增益或冻结策略</text></g>
+  <g id="node-setpoint" class="node" fill="#11243a"><rect x="30" y="215" width="126" height="70" fill="#ffffff" stroke="#91a4b8" stroke-width="2"/><text x="93" y="246">目标温度 r</text><text x="93" y="270" class="small">例如 24°C</text></g>
+  <g id="node-error" class="node" fill="#11243a"><circle cx="315" cy="250" r="50" fill="#ffffff" stroke="#1677ff" stroke-width="2"/><text x="315" y="245">误差 Σ</text><text x="315" y="270" class="small">e = T-r</text></g>
+  <g id="node-pi" class="node" fill="#11243a"><rect x="470" y="205" width="130" height="90" fill="#e7f6ee" stroke="#17864b" stroke-width="2"/><text x="535" y="242">安全 PI</text><text x="535" y="270" class="small">100 ms</text></g>
+  <g id="node-limiter" class="node" fill="#11243a"><rect x="700" y="200" width="150" height="100" fill="#fff4df" stroke="#e37a12" stroke-width="2"/><text x="775" y="235">压缩机限制器</text><text x="775" y="263" class="small">斜率 · 量化</text><text x="775" y="285" class="small">最低频率 · 启停</text></g>
+  <g id="node-plant" class="node" fill="#11243a"><rect x="960" y="195" width="170" height="110" fill="#e8f2ff" stroke="#1677ff" stroke-width="2"/><text x="1045" y="232">空调 / 虚拟对象</text><text x="1045" y="262" class="small">容量指令 u</text><text x="1045" y="286" class="small">产生室内温度 T</text></g>
+  <g id="node-scheduler" class="node" fill="#11243a"><rect x="440" y="330" width="230" height="65" fill="#f5f8fb" stroke="#7446b8" stroke-width="2"/><text x="555" y="357">FNN / RL 低频调度</text><text x="555" y="381" class="small">只建议 Kp、Ki · 2 s</text></g>
+  <text x="790" y="412" class="feedback" fill="#607086">温度传感器反馈：测温 → 算误差 → PI → 限幅 → 温度变化 → 再测温</text>
 </svg>"""
 
 
