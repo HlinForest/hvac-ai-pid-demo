@@ -57,6 +57,10 @@ def test_html_contains_live_temperature_diagram_and_llm_audit(tmp_path: Path) ->
     assert 'fill="#e7f6ee" stroke="#17864b"' in document
     assert 'fill="#fff4df" stroke="#e37a12"' in document
     assert 'fill="#11243a"' in document
+    assert 'text-anchor: middle' in document
+    assert '经典：Z-N · IMC · BO · Safe BO' in document
+    assert '>温度传感器反馈 T</text>' in document
+    assert '温度传感器反馈：测温 → 算误差' not in document
 
 
 def test_replay_proposer_is_deterministic_and_changes_no_more_than_ten_percent() -> None:
