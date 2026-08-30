@@ -45,6 +45,13 @@ def test_html_contains_live_temperature_diagram_and_llm_audit(tmp_path: Path) ->
         "开始", "暂停", "复位",
     ):
         assert required in document
+    # A literal newline inside a single-quoted JavaScript string makes the
+    # entire page fail before draw() can attach button handlers.
+    assert "function drawAgentAudit" in document
+    assert "String.fromCharCode(10,10)" in document
+    assert "row.tool+'\n" not in document
+    # The low-frequency scheduler must not sit on top of the feedback path.
+    assert 'M1040 300V420H315V300' in document
 
 
 def test_replay_proposer_is_deterministic_and_changes_no_more_than_ten_percent() -> None:

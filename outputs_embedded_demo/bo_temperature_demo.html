@@ -8,7 +8,7 @@ h1{margin:0 0 6px;font-size:30px}h2{margin:30px 0 12px;font-size:22px}p{line-hei
 .controls{display:flex;gap:12px;align-items:end;flex-wrap:wrap;padding:12px 0}label{font-size:13px;color:var(--muted)}select,button,input{font:inherit;padding:8px 12px;border:1px solid var(--line);background:#fff;border-radius:6px}button{cursor:pointer}button.primary{background:var(--blue);color:#fff;border-color:var(--blue)}
 .live{display:grid;grid-template-columns:220px 1fr;gap:22px;align-items:stretch}.thermo{background:var(--panel);padding:18px;border-radius:10px}.temperature{font-size:42px;font-weight:600;margin:12px 0}.status{font-size:18px;color:var(--green)}.fallback{color:var(--orange)}
 .chart-wrap{position:relative}svg.chart{width:100%;height:auto;background:#fff;border:1px solid var(--line)}.axis{stroke:var(--muted);stroke-width:1}.grid{stroke:var(--line);stroke-width:1}.tick{font-size:12px;fill:var(--muted)}
-#system-diagram{width:100%;height:auto;background:var(--panel);border-radius:10px}#system-diagram .node rect,#system-diagram .node circle{fill:#fff;stroke:#91a4b8;stroke-width:2}#system-diagram text{font-size:18px;text-anchor:middle;fill:var(--ink)}#system-diagram .small{font-size:14px;fill:var(--muted)}#system-diagram .tiny{font-size:12px;fill:var(--muted)}#system-diagram .feedback{font-size:13px;fill:var(--muted)}#system-diagram .active rect,#system-diagram .active circle{stroke:var(--blue);stroke-width:5;fill:#e8f2ff}
+#system-diagram{display:block;width:100%;height:auto;background:var(--panel);border-radius:10px}#system-diagram .node rect,#system-diagram .node circle{fill:#fff;stroke:#91a4b8;stroke-width:2}#system-diagram text{font-size:17px;text-anchor:middle;fill:var(--ink)}#system-diagram .small{font-size:13px;fill:var(--muted)}#system-diagram .tiny{font-size:12px;fill:var(--muted)}#system-diagram .feedback{font-size:12px;fill:var(--muted)}#system-diagram .active rect,#system-diagram .active circle{stroke:var(--blue);stroke-width:5;fill:#e8f2ff}
 .summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}.summary>div{border-top:3px solid var(--blue);padding:12px;background:var(--panel)}.summary strong{display:block;font-size:22px;margin-top:6px}.notice{padding:12px 16px;background:#fff4df;border-left:4px solid var(--orange)}
 .legend{display:flex;gap:15px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:8px 0}.swatch{display:inline-block;width:18px;height:3px;margin-right:5px;vertical-align:middle}
 table{border-collapse:collapse;width:100%;font-size:14px}th,td{padding:8px;border-bottom:1px solid var(--line);text-align:left}th{background:var(--panel)}
@@ -16,22 +16,22 @@ table{border-collapse:collapse;width:100%;font-size:14px}th,td{padding:8px;borde
 </style></head><body><main>
 <h1>普通贝叶斯优化固定 PI温度闭环 Demo</h1><p class="lead">直接观察被控温度从 30°C 接近目标、进入 ±0.5°C 稳定带，并在开门扰动后恢复。90 秒墙钟时间对应 5 小时模拟物理时间；这不是实际设备降温速度。</p>
 <h2>完整温度反馈闭环</h2>
-<svg id="system-diagram" viewBox="0 0 1180 420" role="img" aria-labelledby="diagram-title diagram-desc">
+<svg id="system-diagram" viewBox="0 0 1180 465" role="img" aria-labelledby="diagram-title diagram-desc">
   <title id="diagram-title">温度反馈闭环系统框图</title>
   <desc id="diagram-desc">上位机生成经过验收的增益，ESP32读取设定温度和测量温度，经安全PI与压缩机限制器控制空调，温度传感器形成反馈。</desc>
   <defs><marker id="arrow" markerWidth="10" markerHeight="10" refX="8" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="currentColor"/></marker></defs>
   <g class="edges" fill="none" stroke="currentColor" stroke-width="2" marker-end="url(#arrow)">
     <path d="M156 250H265"/><path d="M365 250H470"/><path d="M600 250H700"/><path d="M850 250H960"/>
-    <path d="M1040 300V360H315V300"/><path d="M555 125V205"/><path d="M555 335V295"/>
+    <path d="M1040 300V420H315V300"/><path d="M555 125V205"/><path d="M555 330V295"/>
   </g>
-  <g id="node-host" class="node"><rect x="380" y="25" width="350" height="100"/><text x="555" y="58">离线调参 / 训练 / Agent上位机</text><text x="555" y="88" class="small">Z-N · IMC · BO · Safe BO · FNN/RL训练 · LLM Agent</text><text x="555" y="111" class="tiny">Agent只调用仿真工具；仅下发验收后的 Kp、Ki</text></g>
+  <g id="node-host" class="node"><rect x="380" y="25" width="350" height="100"/><text x="555" y="58">离线调参 / 训练 / Agent上位机</text><text x="555" y="86" class="small">Z-N · IMC · BO · Safe BO · FNN/RL · LLM Agent</text><text x="555" y="110" class="tiny">只下发已验收增益或冻结策略</text></g>
   <g id="node-setpoint" class="node"><rect x="30" y="215" width="126" height="70"/><text x="93" y="246">目标温度 r</text><text x="93" y="270" class="small">例如 24°C</text></g>
   <g id="node-error" class="node"><circle cx="315" cy="250" r="50"/><text x="315" y="245">误差 Σ</text><text x="315" y="270" class="small">e = T-r</text></g>
   <g id="node-pi" class="node"><rect x="470" y="205" width="130" height="90"/><text x="535" y="242">安全 PI</text><text x="535" y="270" class="small">100 ms</text></g>
   <g id="node-limiter" class="node"><rect x="700" y="200" width="150" height="100"/><text x="775" y="235">压缩机限制器</text><text x="775" y="263" class="small">斜率 · 量化</text><text x="775" y="285" class="small">最低频率 · 启停</text></g>
   <g id="node-plant" class="node"><rect x="960" y="195" width="170" height="110"/><text x="1045" y="232">空调 / 虚拟对象</text><text x="1045" y="262" class="small">容量指令 u</text><text x="1045" y="286" class="small">产生室内温度 T</text></g>
-  <g id="node-scheduler" class="node"><rect x="450" y="335" width="210" height="65"/><text x="555" y="362">FNN / RL 低频调度</text><text x="555" y="386" class="small">只建议 Kp、Ki · 2 s</text></g>
-  <text x="705" y="381" class="feedback">温度传感器反馈：测温 → 算误差 → PI → 限幅 → 温度变化 → 再测温</text>
+  <g id="node-scheduler" class="node"><rect x="440" y="330" width="230" height="65"/><text x="555" y="357">FNN / RL 低频调度</text><text x="555" y="381" class="small">只建议 Kp、Ki · 2 s</text></g>
+  <text x="790" y="412" class="feedback">温度传感器反馈：测温 → 算误差 → PI → 限幅 → 温度变化 → 再测温</text>
 </svg>
 <div class="controls"><label>算法<br><select id="algorithm"><option value="bo">普通贝叶斯优化固定 PI</option><option value="all">七算法同场比较</option></select></label><button class="primary" id="play">开始</button><button id="pause">暂停</button><button id="reset">复位</button><button id="event">跳到开门扰动</button><label>播放速度<br><select id="speed"><option value="1">1×（约90秒）</option><option value="3" selected>3×</option><option value="10">10×</option></select></label><label style="flex:1;min-width:240px">时间位置<br><input id="scrub" type="range" min="0" max="300" value="0" style="width:100%"></label></div>
 <div class="live"><section class="thermo"><div>当前被控温度</div><div class="temperature" id="temp">-- °C</div><div>目标：<strong id="sp">-- °C</strong></div><div>温差：<strong id="err">-- °C</strong></div><div>容量：<strong id="cmd">-- %</strong></div><div>Kp / Ki：<strong id="gains">--</strong></div><p class="status" id="status">准备开始</p><p id="clock">墙钟 0 s · 模拟 0 min</p></section>
@@ -61,16 +61,28 @@ function axisSvg(width,height,margin,yMin,yMax,yLabel){let s=`<rect x="${margin.
 function drawTemperature(){const svg=document.getElementById('temperature-chart'),W=960,H=430,m={l:68,r:22,t:22,b:48},rows=traces[Object.keys(traces)[0]].rows;const yMin=22,yMax=31;const x=v=>m.l+(W-m.l-m.r)*v/300,y=v=>m.t+(H-m.t-m.b)*(yMax-v)/(yMax-yMin);let s=axisSvg(W,H,m,yMin,yMax,'温度 °C');const low=rows[0].comfort_low_c,high=rows[0].comfort_high_c;s+=`<rect x="${m.l}" y="${y(high)}" width="${W-m.l-m.r}" height="${y(low)-y(high)}" fill="#dff4e8" opacity=".8"/><text x="${W-m.r-8}" y="${y(high)+16}" text-anchor="end" fill="#17864b" font-size="12">目标±0.5°C稳定带</text>`;const eventX=x(rows.find(r=>r.door_open)?.simulated_minute||189);s+=`<line x1="${eventX}" x2="${eventX}" y1="${m.t}" y2="${H-m.b}" stroke="#e37a12" stroke-width="2" stroke-dasharray="7 5"/><text x="${eventX+6}" y="${m.t+18}" fill="#e37a12" font-size="12">开门扰动</text>`;for(const key of selectedKeys()){const t=traces[key];s+=`<path d="${linePath(t.rows,'temperature_c',x,y,index)}" fill="none" stroke="${colors[key]}" stroke-width="3"/>`;if(t.forced_fallback) s+=`<path d="${linePath(t.rows,'candidate_temperature_c',x,y,index)}" fill="none" stroke="${colors[key]}" stroke-width="2" stroke-dasharray="4 5" opacity=".65"/>`}const active=traces[select.value==='all'?'imc':select.value];s+=`<path d="${linePath(active.rows,'setpoint_c',x,y,index)}" fill="none" stroke="#11243a" stroke-width="2" stroke-dasharray="8 5"/>`;const cx=x(active.rows[index].simulated_minute),cy=y(active.rows[index].temperature_c);s+=`<circle cx="${cx}" cy="${cy}" r="6" fill="${colors[select.value]||'#11243a'}"/>`;svg.innerHTML=s;document.getElementById('legend').innerHTML=selectedKeys().map(k=>`<span><i class="swatch" style="background:${colors[k]}"></i>${traces[k].display_name}</span>`).join('')+'<span><i class="swatch" style="background:#11243a"></i>目标温度</span>'}
 function drawCommand(){const svg=document.getElementById('command-chart'),W=960,H=230,m={l:68,r:22,t:18,b:42},x=v=>m.l+(W-m.l-m.r)*v/300,y=v=>m.t+(H-m.t-m.b)*(100-v)/100;let s=axisSvg(W,H,m,0,100,'容量 %');for(const key of selectedKeys())s+=`<path d="${linePath(traces[key].rows,'command_pct',x,y,index)}" fill="none" stroke="${colors[key]}" stroke-width="2.5"/>`;svg.innerHTML=s}
 function fmt(v,suffix=' min'){return Number.isFinite(Number(v))?Number(v).toFixed(1)+suffix:'未达到'}
-function drawAgentAudit(key,t,sum){const section=document.getElementById('llm-section');section.style.display=key==='llm'?'block':'none';if(key!=='llm')return;const lines=(t.agent_trace||[]).map(row=>{let line='步骤 '+row.step+' · '+row.tool+'
-  原因：'+(row.reason||'—')+'
-  主机决定：'+row.decision;if(row.limited_kp!==undefined)line+='
-  原始 Kp/Ki：'+Number(row.raw_kp).toFixed(6)+' / '+Number(row.raw_ki).toFixed(7)+'
-  限幅 Kp/Ki：'+Number(row.limited_kp).toFixed(6)+' / '+Number(row.limited_ki).toFixed(7)+'
-  风险目标：'+Number(row.risk_objective).toFixed(3)+' · 安全='+row.safe+' · 接受='+row.accepted;return line});document.getElementById('llm-audit').textContent=(sum.llm_replay_disclosure?'声明：这是无网络录制的 Agent 工具调用 replay，不是本次实时模型调用。
-
-':'')+lines.join('
-
-')}
+function drawAgentAudit(key,t,sum){
+  const section=document.getElementById('llm-section');
+  section.style.display=key==='llm'?'block':'none';
+  if(key!=='llm')return;
+  const lines=(t.agent_trace||[]).map(row=>{
+    const parts=[
+      '步骤 '+row.step+' · '+row.tool,
+      '原因：'+(row.reason||'—'),
+      '主机决定：'+row.decision
+    ];
+    if(row.limited_kp!==undefined){
+      parts.push('原始 Kp/Ki：'+Number(row.raw_kp).toFixed(6)+' / '+Number(row.raw_ki).toFixed(7));
+      parts.push('限幅 Kp/Ki：'+Number(row.limited_kp).toFixed(6)+' / '+Number(row.limited_ki).toFixed(7));
+      parts.push('风险目标：'+Number(row.risk_objective).toFixed(3)+' · 安全='+row.safe+' · 接受='+row.accepted);
+    }
+    return parts.join(String.fromCharCode(10)+'  ');
+  });
+  const disclosure=sum.llm_replay_disclosure
+    ? '声明：这是无网络录制的 Agent 工具调用 replay，不是本次实时模型调用。'+String.fromCharCode(10,10)
+    : '';
+  document.getElementById('llm-audit').textContent=disclosure+lines.join(String.fromCharCode(10,10));
+}
 function draw(){const key=select.value==='all'?'imc':select.value,t=traces[key],r=t.rows[index],sum=t.summary;document.getElementById('temp').textContent=r.temperature_c.toFixed(2)+' °C';document.getElementById('sp').textContent=r.setpoint_c.toFixed(2)+' °C';document.getElementById('err').textContent=(r.temperature_c-r.setpoint_c>=0?'+':'')+(r.temperature_c-r.setpoint_c).toFixed(2)+' °C';document.getElementById('cmd').textContent=r.command_pct.toFixed(1)+' %';document.getElementById('gains').textContent=r.kp.toFixed(4)+' / '+r.ki.toFixed(5);const st=document.getElementById('status');st.textContent=r.status;st.className='status '+(r.fallback_active?'fallback':'');document.getElementById('clock').textContent='墙钟 '+r.wall_clock_second.toFixed(1)+' s · 模拟 '+r.simulated_minute.toFixed(0)+' min';document.getElementById('first-band').textContent=fmt(sum.first_in_band_minute);document.getElementById('stable-at').textContent=fmt(sum.stable_first_minute);document.getElementById('recovery').textContent=fmt(sum.door_recovery_minutes);document.getElementById('accepted').textContent=t.accepted?'已通过部署门':'已拒绝/回退';document.getElementById('description').textContent=t.description+' 产物来源：'+t.source;drawAgentAudit(key,t,sum);document.querySelectorAll('#system-diagram .node').forEach(n=>n.classList.remove('active'));document.getElementById(nodes[index%nodes.length]).classList.add('active');scrub.value=index;drawTemperature();drawCommand()}
 function stop(){if(timer)clearInterval(timer);timer=null}function play(){stop();timer=setInterval(()=>{if(index>=300){stop();return}index++;draw()},300/Number(document.getElementById('speed').value))}
 document.getElementById('play').onclick=play;document.getElementById('pause').onclick=stop;document.getElementById('reset').onclick=()=>{stop();index=0;draw()};document.getElementById('event').onclick=()=>{index=Math.max(0,traces[Object.keys(traces)[0]].rows.findIndex(r=>r.door_open));draw()};select.onchange=()=>{index=0;draw()};scrub.oninput=()=>{index=Number(scrub.value);draw()};draw();
