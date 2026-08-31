@@ -26,6 +26,7 @@ bool use_knob = true;
 bool manual_door = false;
 bool fault = false;
 bool profile_crc_valid = false;
+bool policy_crc_valid = false;
 uint32_t next_pid_ms = 0, next_telemetry_ms = 0, next_modbus_ms = 0;
 uint32_t tick_count = 0, worst_pi_us = 0, worst_ai_us = 0, missed_periods = 0;
 uint32_t last_sensor_ms = 0;
@@ -54,7 +55,7 @@ void activate_profile(uint8_t index) {
   if (index >= 7) return;
   algorithm_index = index;
   const auto &selected = profile();
-  controller.configure_fallback({selected.kp, selected.ki});
+  controller.configure_fallback(policy_crc_valid ? Gains{selected.kp, selected.ki} : kFactoryFallbackGains);
   if (selected.fallback_required || !selected.accepted) controller.force_fallback();
   limiter.reset();
 }
@@ -110,12 +111,14 @@ void schedule_adaptive(float error) {
   const uint32_t started = micros();
   const float error_rate = (error - previous_ai_error) / (demo::kAdaptivePeriodMs / 60000.0f);
   if (algorithm_index == static_cast<uint8_t>(demo::AlgorithmId::FNN)) {
-    controller.apply_proposal(fnn_gains(error, error_rate), generated::kFnnAccepted && profile().accepted);
+    controller.apply_proposal(
+        fnn_gains(error, error_rate, limiter.command(), controller.integral_state()),
+        policy_crc_valid && generated::kFnnAccepted && profile().accepted);
   } else if (algorithm_index == static_cast<uint8_t>(demo::AlgorithmId::RL)) {
     bool covered = false;
     const Gains proposed = rl_gains(error, error_rate, limiter.command(),
                                     {profile().kp, profile().ki}, covered);
-    controller.apply_proposal(proposed, covered && profile().accepted);
+    controller.apply_proposal(proposed, policy_crc_valid && covered && profile().accepted);
   }
   if (!profile().accepted || profile().fallback_required) controller.force_fallback();
   previous_ai_error = error;
@@ -181,6 +184,7 @@ void setup() {
   ledcAttachPin(kPwmPin, kPwmChannel);
   modbus.begin();
   profile_crc_valid = crc32(demo::kProfileManifest) == demo::kProfileCrc32;
+  policy_crc_valid = policy_manifest_valid();
   activate_profile(algorithm_index);
   plant.reset(30.0f);
   next_pid_ms = next_telemetry_ms = next_modbus_ms = millis();

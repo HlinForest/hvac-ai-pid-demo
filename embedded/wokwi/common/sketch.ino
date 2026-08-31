@@ -15,8 +15,8 @@ constexpr bool USE_RL_POLICY=false;
 constexpr uint32_t PID_PERIOD_MS=100;
 constexpr uint32_t AI_DIVIDER=20;  // 20 * 100 ms = 2 s
 
-const Gains fallback_gains{generated::kFallbackKp,generated::kFallbackKi};
-SafePI controller(fallback_gains);
+Gains fallback_gains=kFactoryFallbackGains;
+SafePI controller(kFactoryFallbackGains);
 CompressorLimiter limiter;
 VirtualHVACPlant plant;
 uint32_t next_pid_ms=0, tick_count=0;
@@ -31,7 +31,8 @@ void setup() {
   pinMode(PIN_DOOR,INPUT_PULLUP);
   pinMode(PIN_PWM,OUTPUT);
   pinMode(PIN_FALLBACK,OUTPUT);
-  controller.reset();
+  if (policy_manifest_valid()) fallback_gains={generated::kFallbackKp,generated::kFallbackKi};
+  controller.configure_fallback(fallback_gains);
   limiter.reset();
   plant.reset(30.0f);
   next_pid_ms=millis();
@@ -53,7 +54,9 @@ void control_tick() {
       const Gains proposed=rl_gains(error,error_rate,limiter.command(),fallback_gains,covered);
       controller.apply_proposal(proposed,covered);
     } else {
-      controller.apply_proposal(fnn_gains(error,error_rate),generated::kFnnAccepted);
+      controller.apply_proposal(
+          fnn_gains(error,error_rate,limiter.command(),controller.integral_state()),
+          policy_manifest_valid()&&generated::kFnnAccepted);
     }
     const uint32_t elapsed=micros()-started;
     if (elapsed>worst_ai_us) worst_ai_us=elapsed;

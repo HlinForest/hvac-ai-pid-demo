@@ -316,8 +316,17 @@ def write_html_engineering_report(
     katex_available = _ensure_katex_assets(path)
     fnn_training_rows = read_csv_rows("fnn_training_history.csv")
     rl_training_rows = read_csv_rows("rl_training_history.csv")
-    fnn_accepted = not fnn_training_rows or str(fnn_training_rows[-1].get("deployment_accepted", "nan")).lower() == "nan" or float(fnn_training_rows[-1]["deployment_accepted"]) > 0.5
-    rl_accepted = not rl_training_rows or str(rl_training_rows[-1].get("deployment_accepted", "nan")).lower() == "nan" or float(rl_training_rows[-1]["deployment_accepted"]) > 0.5
+    def accepted_fail_closed(rows: list[dict[str, str]]) -> bool:
+        if not rows:
+            return False
+        try:
+            value = float(rows[-1].get("deployment_accepted", "nan"))
+        except (TypeError, ValueError):
+            return False
+        return bool(np.isfinite(value) and value > 0.5)
+
+    fnn_accepted = accepted_fail_closed(fnn_training_rows)
+    rl_accepted = accepted_fail_closed(rl_training_rows)
     display_names = {
         "Bayesian Auto-tune": "贝叶斯自动整定",
         "Ziegler-Nichols": "Z-N 反应曲线法",

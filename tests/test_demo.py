@@ -124,10 +124,16 @@ class LearningTests(unittest.TestCase):
     def test_end_to_end_pipeline_writes_expected_artifacts(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             output = Path(temporary) / "result"
-            run_pipeline(output, train_samples=8, test_samples=3, bo_iterations=1, seed=19)
+            run_pipeline(
+                output, train_samples=8, validation_samples=3, test_samples=3,
+                bo_iterations=1, seed=19, acceptance_seeds=(101,),
+            )
             expected = {
                 "training_labels.csv",
                 "training_scenarios.csv",
+                "validation_scenarios.csv",
+                "dataset_manifest.csv",
+                "deployment_acceptance.csv",
                 "classical_tuning_history.csv",
                 "classical_tuning_steps.csv",
                 "fopdt_fit_history.csv",
@@ -141,6 +147,8 @@ class LearningTests(unittest.TestCase):
                 "imc_lambda_tuning.csv",
                 "fnn_rule_table.npy",
                 "fnn_rule_table_candidate.npy",
+                "fnn_context_coefficients.npy",
+                "fnn_context_coefficients_candidate.npy",
                 "rl_q_table.npy",
                 "rl_q_table_candidate.npy",
                 "holdout_scenarios.csv",
@@ -171,6 +179,8 @@ class LearningTests(unittest.TestCase):
                 "cross_validation_environment.csv",
                 "physical_cross_validation.png",
                 "fopdt_cross_validation.png",
+                "review_defect_matrix.csv",
+                "review_remediation.md",
             }
             self.assertEqual(expected, {item.name for item in output.iterdir()})
             reports = output / "algorithm_reports"

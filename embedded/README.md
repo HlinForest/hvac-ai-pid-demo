@@ -16,7 +16,7 @@ pio device monitor --baud 115200
 - `MODE demo`：100 ms 墙钟运行一次控制任务，并用 200 倍时间加速的虚拟热对象让 5 小时温度过程在 90 秒内可见；FNN/RL 每 2 秒才运行一次候选增益调度；
 - `MODE modbus`：从真实空调控制器/BMS 读取温度、实际频率和告警，并在取得真实寄存器表且显式许可后写容量请求。默认只读，ESP32 不直接驱动压缩机功率器件。
 
-七算法配置由 `run_embedded_demo.py --algorithm all` 生成到 `generated_demo_profiles.hpp`，带版本、清单字符串和 CRC32。Z-N/FNN 当前配置标记为“拒绝并回退”；RL 是冻结策略查表；LLM 只部署已通过上位机仿真门的固定增益。串口命令与接线说明见 `esp32_seven_algorithm_demo/README.md`。
+七算法演示配置由 `run_embedded_demo.py --algorithm all` 生成到 `generated_demo_profiles.hpp`，带版本、清单字符串和 CRC32。正式评审策略则由 `outputs_review_v3` 唯一自动导出，FNN/RL 均通过密封部署门；RL 是冻结策略查表，未覆盖状态回退工厂 IMC；LLM 只部署已通过上位机仿真门的固定增益。串口命令与接线说明见 `esp32_seven_algorithm_demo/README.md`。
 
 真实目标板验收：
 
@@ -33,19 +33,20 @@ python embedded/validate_esp32_serial.py --port COM3 --seconds 600
 | 层级 | 用途 | 当前状态 | 能证明什么 | 不能证明什么 |
 |---|---|---|---|---|
 | PC 软件在环（SIL） | 快速检查纯 C++ 数学逻辑 | 已通过 | 限幅、抗饱和、100 ms/2 s 分频、FNN/RL 查表、异常回退 | 不能代表 MCU ROM、RAM 和最坏周期 |
-| Wokwi 虚拟 MCU | STM32F103C8、ESP32 目标编译与外设交互 | 两目标编译/启动已通过；遥测与资源留证未完成 | 已证明完整代码可目标编译并进入运行态 | 尚未证明串口曲线、ROM/RAM 和最坏周期，也不能替代真实压缩机和传感器 |
+| ESP32 官方目标工具链 | 目标编译与静态资源报告 | 已通过：RAM 22,036 B（6.7%），Flash 296,169 B（22.6%） | 证明当前工程可编译并满足静态容量 | 尚未证明实体板周期、10 分钟可靠性、通信和真实传感器 |
+| Wokwi 虚拟 MCU | STM32F103C8、ESP32 外设交互 | 两目标编译/启动已通过；遥测留证未完成 | 已证明完整代码可进入运行态 | 不能替代真实压缩机和传感器 |
 | 实体开发板 HIL | 最终部署前测试 | 未开始 | 真实时钟、中断抖动、栈、通信和故障注入 | 仍不等于整机认证 |
 
 ## 一键执行 PC 软件在环
 
 ```powershell
 cd "C:\Users\厉飞雨\Documents\New project\hvac_ai_pid_demo"
-python embedded\export_policy.py outputs_adaptive_final_v2
+python embedded\export_policy.py outputs_review_v3
 python embedded\wokwi\prepare_projects.py
-python embedded\run_mcu_validation.py
+python embedded\run_mcu_validation.py --artifact-dir outputs_review_v3
 ```
 
-第一条命令只导出通过验收的部署表，并在 `generated_policy.hpp` 写入版本号、CRC32、FNN/RL验收状态、IMC回退参数、状态边界和策略。FNN/RL候选训练表不能手工复制进C++。结果写入 `outputs/mcu_pc_sil_log.txt` 和 `outputs/mcu_validation_summary.csv`。表内明确标注 PC ABI，不能把 PC 的纳秒耗时或 exe 大小写成 STM32/ESP32 实测值。
+第一条命令只导出通过验收的部署表，并在 `generated_policy.hpp` 写入版本号、CRC32、FNN/RL 验收状态、IMC 回退参数、状态边界、FNN 上下文参数、RL 策略和覆盖掩码。CRC v3 覆盖全部执行字段，固件启动时实际重算；任一字段损坏都使用独立编译的工厂 IMC。FNN/RL 候选训练表不能手工复制进 C++。结果写入 `outputs_review_v3/mcu_pc_sil_log.txt` 和 `mcu_validation_summary.csv`。表内明确标注 PC ABI，不能把 PC 的纳秒耗时或 exe 大小写成 ESP32 实测值。
 
 ## Wokwi 双目标工程
 
@@ -58,6 +59,7 @@ python embedded\wokwi\prepare_projects.py
 - `embedded/wokwi/common/sketch.ino`：两种 MCU 共用的 100 ms PI / 2 s AI 调度入口。
 - `embedded/hvac_pid_controller.hpp`：纯 C++ 控制核心，不访问底层寄存器。
 - `embedded/generated_policy.hpp`：由最终训练目录自动生成的只读部署产物；禁止手工修改。
+- `outputs_review_v3/policy_manifest_v3.json`：与头文件同源生成的可审计策略清单；固件执行内容以自动生成头文件及其 CRC 校验为准。
 
 Wokwi 右侧电路包含设定值旋钮、开门按钮、PWM 指示灯和安全回退指示灯。串口 Plotter 输出：室温、设定值、PWM 百分比、`Kp`、`Ki`、PI/AI 最坏微秒数和回退状态。
 
@@ -65,7 +67,7 @@ Wokwi 右侧电路包含设定值旋钮、开门按钮、PWM 指示灯和安全�
 
 ## 控制核心的资源结构
 
-- FNN：5×5 个规则后件，每个状态只对相邻 4 条规则做双线性插值；训练后参数表为 200 B float32。
+- FNN：5×5 个一阶 TSK 残差规则后件，每个状态只对相邻 4 条规则做双线性插值，并使用实际容量、积分状态、室外温差和慢速负荷估计作为上下文；域外或非法输入回退 IMC。
 - RL：5×5热状态再乘3档上一次实际容量模式。运行时只带75 B动作索引、75 B覆盖掩码和72 B动作目标表，不把完整5×5×3×9浮点Q表部署到MCU。
 - FNN/RL共同使用误差变化率 `ė=Δe/Δt`（°C/min），避免PC的5 min训练节拍与MCU的2 s节拍使用不同含义的`Δe`。
 - 安全 PI：输出限幅、条件积分抗饱和、增益边界和单次±10%增益变化限制；输入异常、算法验收失败或RL未覆盖状态时回退IMC参数。
@@ -82,4 +84,4 @@ Wokwi 右侧电路包含设定值旋钮、开门按钮、PWM 指示灯和安全�
 5. NaN/越界/未覆盖 RL 状态触发回退，红灯和串口标志一致。
 6. STM32 使用 DWT 或 GPIO 翻转测周期；ESP32 使用芯片周期计数器或逻辑分析仪复核最坏时延。
 
-当前纯C++ PC SIL已验证自动导出表、100 ms/2 s调度、异常回退和压缩机基本限制器；目标板ROM/RAM/WCET及真实外设仍未完成。量产前还必须在真实硬件中加入高低压与排气温度联锁、传感器断线检查、看门狗、通信超时、参数CRC校验执行和版本回滚。
+当前纯 C++ PC-SIL 已验证自动导出表、CRC v3 启动重算、75 组 Python/C++ 一致性向量、100 ms/2 s 调度、异常回退和压缩机基本限制器；ESP32 官方工具链已给出 RAM/Flash 静态结果。实体板 10 分钟遥测、板端 WCET、真实传感器和真实空调 Modbus 仍未完成。量产前还必须加入并实测高低压与排气温度联锁、传感器断线检查、看门狗、通信超时和版本回滚。

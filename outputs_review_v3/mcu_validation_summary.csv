@@ -1,0 +1,2 @@
+﻿验证层级,结果,PID周期_ms,AI周期_s,AI调用次数,SafePI状态字节_PC_ABI,虚拟对象状态字节_PC_ABI,RL未覆盖回退次数,NaN回退次数,策略清单版本,Python_CPP一致性向量,Python_CPP最大绝对误差,Python_CPP一致性结果,目标板ROM_RAM周期
+PC 软件在环（不是 STM32/ESP32 目标板实测）,PASS,100,2,200,28,68,167,1,3,75,2.9823864489131324e-08,PASS,ESP32编译通过；RAM/Flash见esp32_build_validation.md；实体板周期待实测

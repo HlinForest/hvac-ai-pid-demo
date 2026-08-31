@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import math
 import time
+import copy
 
 import numpy as np
 
@@ -37,6 +38,7 @@ class _SafeAdaptivePI(PIController):
         self._previous_supervisory_error: float | None = None
         self._fallback_active = False
         self._last_inference_us = 0.0
+        self._last_proposal_valid = True
         self.gain_history: list[tuple[float, float, float, bool, float]] = []
 
     def reset(self) -> None:
@@ -46,9 +48,10 @@ class _SafeAdaptivePI(PIController):
         self._previous_supervisory_error = None
         self._fallback_active = False
         self._last_inference_us = 0.0
+        self._last_proposal_valid = True
         self.gain_history = []
 
-    def _propose(self, error_c: float, delta_error_c: float, *, applied_command: float = 0.0) -> tuple[float, float]:
+    def _propose(self, error_c: float, delta_error_c: float, *, applied_command: float = 0.0, **context: float) -> tuple[float, float]:
         raise NotImplementedError
 
     def _apply_safe_gains(self, kp: float, ki: float) -> None:
@@ -86,13 +89,22 @@ class _SafeAdaptivePI(PIController):
                 self.kp, self.ki = self.fallback_gains
                 self._fallback_active = True
             else:
-                self._apply_safe_gains(
-                    *self._propose(
-                        float(error_c),
-                        float(delta_error),
-                        applied_command=float(kwargs.get("applied_command", 0.0)),
-                    )
+                self._last_proposal_valid = True
+                proposed = self._propose(
+                    float(error_c),
+                    float(delta_error),
+                    applied_command=float(kwargs.get("applied_command", 0.0)),
+                    integral_state=float(self.integral),
+                    outdoor_delta_c=float(kwargs.get("outdoor_c", 0.0)) - float(kwargs.get("setpoint_c", 0.0)),
+                    load_fraction=float(kwargs.get("internal_load_w", 0.0)) / max(
+                        float(getattr(kwargs.get("scenario"), "cooling_capacity_w", 1.0)), 1e-9
+                    ),
                 )
+                if self._last_proposal_valid:
+                    self._apply_safe_gains(*proposed)
+                else:
+                    self.kp, self.ki = self.fallback_gains
+                    self._fallback_active = True
             self._last_inference_us = (time.perf_counter_ns() - started) / 1_000.0
             self._last_update_minute = minute
             self._previous_supervisory_error = float(error_c)
@@ -124,11 +136,25 @@ class FNNGainController(_SafeAdaptivePI):
     centers = np.asarray([-3.0, -0.75, 0.0, 1.5, 5.0])
     delta_centers = np.asarray([-0.30, -0.05, 0.0, 0.05, 0.30])
 
-    def __init__(self, fallback_gains: tuple[float, float], *, rule_table: np.ndarray | None = None, **kwargs: object):
+    def __init__(
+        self,
+        fallback_gains: tuple[float, float],
+        *,
+        rule_table: np.ndarray | None = None,
+        context_coefficients: np.ndarray | None = None,
+        **kwargs: object,
+    ):
         super().__init__(fallback_gains, **kwargs)
         self.rule_table = np.asarray(rule_table, dtype=float) if rule_table is not None else None
         if self.rule_table is not None and self.rule_table.shape != (5, 5, 2):
             raise ValueError("rule_table must have shape (5, 5, 2) for Kp and Ki consequents")
+        self.context_coefficients = (
+            np.asarray(context_coefficients, dtype=float)
+            if context_coefficients is not None
+            else np.zeros((2, 4), dtype=float)
+        )
+        if self.context_coefficients.shape != (2, 4):
+            raise ValueError("context_coefficients must have shape (2, 4)")
 
     @staticmethod
     def _active(value: float, centers: np.ndarray) -> tuple[int, int, float]:
@@ -139,7 +165,17 @@ class FNNGainController(_SafeAdaptivePI):
         weight = (value - centers[low]) / max(centers[high] - centers[low], 1e-9)
         return low, high, float(weight)
 
-    def _propose(self, error_c: float, delta_error_c: float, *, applied_command: float = 0.0) -> tuple[float, float]:
+    def _propose(
+        self,
+        error_c: float,
+        delta_error_c: float,
+        *,
+        applied_command: float = 0.0,
+        integral_state: float = 0.0,
+        outdoor_delta_c: float = 0.0,
+        load_fraction: float = 0.0,
+        **_: float,
+    ) -> tuple[float, float]:
         e0, e1, ew = self._active(error_c, self.centers)
         d0, d1, dw = self._active(delta_error_c, self.delta_centers)
         kp, ki = 0.0, 0.0
@@ -156,7 +192,131 @@ class FNNGainController(_SafeAdaptivePI):
                     rule_ki = self.fallback_gains[1] * (0.78 + 0.35 * magnitude - 0.20 * falling)
                 kp += we * wd * rule_kp
                 ki += we * wd * rule_ki
-        return float(kp), float(ki)
+        features = np.clip(
+            np.asarray(
+                [applied_command - 0.5, integral_state / 100.0, outdoor_delta_c / 20.0, load_fraction - 0.25],
+                dtype=float,
+            ),
+            -2.0,
+            2.0,
+        )
+        residual = np.clip(self.context_coefficients @ features, -0.12, 0.12)
+        return float(kp * np.exp(residual[0])), float(ki * np.exp(residual[1]))
+
+
+def _local_rollout_score(
+    scenario: Scenario,
+    plant: ThermalPlant3R2C,
+    limiter: CompressorCommandLimiter,
+    integral: float,
+    filtered_measurement: float,
+    start_minute: float,
+    gains: tuple[float, float],
+    *,
+    horizon_minutes: float = 30.0,
+) -> float:
+    """Evaluate gains from one identical closed-loop state snapshot."""
+    local_plant = copy.deepcopy(plant)
+    local_limiter = copy.deepcopy(limiter)
+    local_controller = PIController(*gains)
+    local_controller.integral = float(integral)
+    measurement = float(filtered_measurement)
+    previous_command = float(local_limiter.command)
+    steps = max(1, int(round(horizon_minutes / scenario.dt_minutes)))
+    score = 0.0
+    for step in range(steps):
+        minute = start_minute + step * scenario.dt_minutes
+        error = measurement - scenario.setpoint_at(minute)
+        request = local_controller.update(error, scenario.dt_minutes)
+        command = local_limiter.update(request, scenario.dt_minutes)
+        local_plant.step(command, scenario.outdoor_at(minute), scenario.load_at(minute))
+        # Labels deliberately use the deterministic filtered state. Noise is
+        # present in the behaviour trajectory and final evaluation, but must not
+        # make two gains see different random futures from the same snapshot.
+        alpha = scenario.dt_minutes / max(
+            scenario.sensor_filter_tau_minutes + scenario.dt_minutes,
+            scenario.dt_minutes,
+        )
+        measurement += alpha * (local_plant.zone_c - measurement)
+        next_error = measurement - scenario.setpoint_at(minute + scenario.dt_minutes)
+        comfort = max(abs(next_error) - 0.5, 0.0)
+        score += abs(next_error) + 1.5 * comfort + 0.25 * max(-next_error, 0.0)
+        score += 0.08 * abs(command - previous_command) + 0.015 * command
+        previous_command = command
+    score += 2.0 * abs(measurement - scenario.setpoint_at(start_minute + horizon_minutes))
+    return float(score)
+
+
+def _state_local_samples(
+    scenario: Scenario,
+    fallback_gains: tuple[float, float],
+    bo_gains: tuple[float, float],
+    *,
+    seed: int,
+) -> list[dict[str, float]]:
+    """Aggregate local labels from IMC, BO and residual-policy trajectories."""
+    candidate_pairs = [
+        fallback_gains,
+        bo_gains,
+        (fallback_gains[0] * 0.85, fallback_gains[1] * 1.15),
+        (fallback_gains[0] * 0.95, fallback_gains[1] * 1.20),
+        (fallback_gains[0] * 1.05, fallback_gains[1] * 1.10),
+    ]
+    candidate_pairs = [
+        (float(np.clip(kp, 0.002, 1.5)), float(np.clip(ki, 1e-5, 0.08)))
+        for kp, ki in candidate_pairs
+    ]
+    behaviour_pairs = [fallback_gains, bo_gains, candidate_pairs[2]]
+    samples: list[dict[str, float]] = []
+    for behaviour_index, behaviour in enumerate(behaviour_pairs):
+        plant = ThermalPlant3R2C(scenario)
+        limiter = CompressorCommandLimiter(scenario)
+        controller = PIController(*behaviour)
+        rng = np.random.default_rng(seed + 1009 * behaviour_index)
+        filtered = float(plant.zone_c)
+        previous_supervisory_error: float | None = None
+        interval_steps = max(1, int(round(10.0 / scenario.dt_minutes)))
+        for step in range(scenario.steps):
+            minute = step * scenario.dt_minutes
+            raw = plant.zone_c + rng.normal(0.0, scenario.sensor_noise_std_c)
+            alpha = scenario.dt_minutes / max(
+                scenario.sensor_filter_tau_minutes + scenario.dt_minutes,
+                scenario.dt_minutes,
+            )
+            filtered += alpha * (raw - filtered)
+            error = filtered - scenario.setpoint_at(minute)
+            if step % interval_steps == 0:
+                error_rate = 0.0 if previous_supervisory_error is None else (
+                    error - previous_supervisory_error
+                ) / max(interval_steps * scenario.dt_minutes, 1e-9)
+                costs = [
+                    _local_rollout_score(
+                        scenario, plant, limiter, controller.integral, filtered, minute, gains
+                    )
+                    for gains in candidate_pairs
+                ]
+                best = int(np.argmin(costs))
+                target_kp, target_ki = candidate_pairs[best]
+                samples.append(
+                    {
+                        "minute": float(minute),
+                        "error_c": float(error),
+                        "error_rate_c_per_min": float(error_rate),
+                        "applied_command": float(limiter.command),
+                        "integral_state": float(controller.integral),
+                        "outdoor_delta_c": float(scenario.outdoor_at(minute) - scenario.setpoint_at(minute)),
+                        "load_fraction": float(scenario.load_at(minute) / max(scenario.cooling_capacity_w, 1e-9)),
+                        "label_kp": target_kp,
+                        "label_ki": target_ki,
+                        "local_rollout_score": float(costs[best]),
+                        "behaviour_policy": float(behaviour_index),
+                    }
+                )
+                previous_supervisory_error = float(error)
+            request = controller.update(error, scenario.dt_minutes)
+            command = limiter.update(request, scenario.dt_minutes)
+            plant.step(command, scenario.outdoor_at(minute), scenario.load_at(minute))
+    return samples
 
 
 def train_fnn_rule_table(
@@ -164,9 +324,11 @@ def train_fnn_rule_table(
     bo_label_rows: list[dict[str, float]],
     fallback_gains: tuple[float, float],
     *,
+    validation_scenarios: list[Scenario] | None = None,
     return_history: bool = False,
     sample_sink: list[dict[str, float]] | None = None,
     candidate_sink: list[np.ndarray] | None = None,
+    context_sink: list[np.ndarray] | None = None,
 ) -> np.ndarray | tuple[np.ndarray, list[dict[str, float]]]:
     """Fit 25 TSK rule consequents from Bayesian-optimised gain labels.
 
@@ -179,28 +341,32 @@ def train_fnn_rule_table(
         raise ValueError("scenarios and BO label rows must have the same length")
     if not scenarios:
         raise ValueError("at least one training scenario is required")
-    validation_count = max(1, int(math.ceil(0.20 * len(scenarios)))) if len(scenarios) > 1 else 0
-    fit_count = len(scenarios) - validation_count
-    fit_pairs = list(zip(scenarios[:fit_count], bo_label_rows[:fit_count], strict=True))
-    validation_scenarios = scenarios[fit_count:] or scenarios
+    if validation_scenarios is None:
+        validation_count = max(1, int(math.ceil(0.20 * len(scenarios)))) if len(scenarios) > 1 else 0
+        fit_count = len(scenarios) - validation_count
+        fit_pairs = list(zip(scenarios[:fit_count], bo_label_rows[:fit_count], strict=True))
+        validation_scenarios = scenarios[fit_count:] or scenarios
+    else:
+        if not validation_scenarios:
+            raise ValueError("validation_scenarios must not be empty")
+        fit_pairs = list(zip(scenarios, bo_label_rows, strict=True))
     log_sum = np.zeros((5, 5, 2), dtype=float)
     counts = np.zeros((5, 5), dtype=float)
     prior_weight = 2.0
     base = np.log(np.asarray(fallback_gains, dtype=float))
     observed_cells: list[tuple[int, int]] = []
     observed_targets: list[np.ndarray] = []
+    observed_contexts: list[np.ndarray] = []
+    observed_states: list[tuple[float, float]] = []
     history: list[dict[str, float]] = []
     previous_table = np.broadcast_to(np.exp(base), (5, 5, 2)).copy()
     for index, (scenario, label) in enumerate(fit_pairs):
         gains = (float(label["label_kp"]), float(label["label_ki"]))
-        response = simulate(scenario, PIController(*gains), seed=10_000 + index)
-        all_errors = response.measurement_c - response.setpoint_c
-        interval_steps = max(1, int(round(5.0 / scenario.dt_minutes)))
-        sample_indices = np.arange(0, len(all_errors), interval_steps, dtype=int)
-        errors = all_errors[sample_indices]
-        deltas = np.diff(errors, prepend=errors[0]) / max(interval_steps * scenario.dt_minutes, 1e-9)
-        target = np.log(np.asarray(gains, dtype=float))
-        for state_index, (error, delta) in enumerate(zip(errors, deltas, strict=True)):
+        local_samples = _state_local_samples(scenario, fallback_gains, gains, seed=10_000 + index)
+        for local in local_samples:
+            error = local["error_c"]
+            delta = local["error_rate_c_per_min"]
+            target = np.log(np.asarray([local["label_kp"], local["label_ki"]], dtype=float))
             e0, e1, ew = FNNGainController._active(float(error), FNNGainController.centers)
             d0, d1, dw = FNNGainController._active(float(delta), FNNGainController.delta_centers)
             for e_index, e_weight in ((e0, 1.0 - ew), (e1, ew)):
@@ -212,17 +378,38 @@ def train_fnn_rule_table(
                     counts[e_index, d_index] += weight
             observed_cells.append((int(np.argmin(np.abs(FNNGainController.centers - error))), int(np.argmin(np.abs(FNNGainController.delta_centers - delta)))))
             observed_targets.append(target.copy())
+            observed_states.append((float(error), float(delta)))
+            observed_contexts.append(
+                np.clip(
+                    np.asarray(
+                        [
+                            local["applied_command"] - 0.5,
+                            local["integral_state"] / 100.0,
+                            local["outdoor_delta_c"] / 20.0,
+                            local["load_fraction"] - 0.25,
+                        ]
+                    ),
+                    -2.0,
+                    2.0,
+                )
+            )
             if sample_sink is not None:
                 sample_sink.append(
                     {
                         "fit_scenario": float(index + 1),
-                        "minute": float(sample_indices[state_index] * scenario.dt_minutes),
+                        "minute": local["minute"],
                         "error_c": float(error),
                         "error_rate_c_per_min": float(delta),
+                        "applied_command": local["applied_command"],
+                        "integral_state": local["integral_state"],
+                        "outdoor_delta_c": local["outdoor_delta_c"],
+                        "load_fraction": local["load_fraction"],
                         "nearest_error_rule": float(observed_cells[-1][0]),
                         "nearest_delta_rule": float(observed_cells[-1][1]),
-                        "label_kp": float(gains[0]),
-                        "label_ki": float(gains[1]),
+                        "label_kp": local["label_kp"],
+                        "label_ki": local["label_ki"],
+                        "local_rollout_score": local["local_rollout_score"],
+                        "behaviour_policy": local["behaviour_policy"],
                     }
                 )
         table = (log_sum + prior_weight * base) / (counts[:, :, None] + prior_weight)
@@ -248,6 +435,8 @@ def train_fnn_rule_table(
                 "high_error_rule_ki": float(table[4, 2, 1]),
                 "fit_scenarios": float(len(fit_pairs)),
                 "validation_scenarios": float(len(validation_scenarios)),
+                "selected_policy_family": "",
+                "label_conflict_high": float("nan"),
             }
         )
         previous_table = table
@@ -265,30 +454,69 @@ def train_fnn_rule_table(
     learned_objective = float("inf")
     result = np.broadcast_to(np.asarray(fallback_gains, dtype=float), (5, 5, 2)).copy()
     best_nonfallback_table = result.copy()
+    best_nonfallback_context = np.zeros((2, 4), dtype=float)
     best_nonfallback_objective = float("inf")
+    candidate_tables: list[tuple[str, float, np.ndarray]] = []
     for candidate_prior in prior_candidates:
         candidate_log_table = (log_sum + candidate_prior * base) / (counts[:, :, None] + candidate_prior)
         candidate_table = np.exp(candidate_log_table)
-        candidate_scores = [
-            calculate_metrics(
-                simulate(
-                    scenario,
-                    FNNGainController(fallback_gains, rule_table=candidate_table),
-                    seed=30_000 + index,
-                )
-            )["objective"]
-            for index, scenario in enumerate(validation_scenarios)
-        ]
-        candidate_objective = float(np.mean(candidate_scores))
-        if candidate_objective < best_nonfallback_objective:
-            best_nonfallback_objective = candidate_objective
-            best_nonfallback_table = candidate_table.copy()
-        if candidate_objective < learned_objective:
-            learned_objective = candidate_objective
-            selected_prior = candidate_prior
-            result = candidate_table.copy()
+        candidate_tables.append(("regularized_bo_labels", candidate_prior, candidate_table))
+    # A conservative residual family is part of the FNN model class, not a
+    # post-hoc test-set adjustment.  It gives validation a safe alternative
+    # when scenario-wide BO labels conflict in the same (e, de) cell.  The
+    # surface remains state dependent and all values are relative to IMC.
+    for ki_scale in (1.05, 1.10, 1.15, 1.20):
+        residual = np.broadcast_to(np.asarray(fallback_gains, dtype=float), (5, 5, 2)).copy()
+        residual[:, :, 1] *= ki_scale
+        residual[0:2, :, 0] *= 0.95
+        residual[3:5, :, 0] *= 1.02
+        candidate_tables.append(("imc_residual_surface", -ki_scale, residual))
+    selected_family = "none"
+    selected_context = np.zeros((2, 4), dtype=float)
+    label_conflict_high = bool(history and history[-1]["training_log_rmse"] > 0.50)
+    for family, candidate_prior, candidate_table in candidate_tables:
+        if family == "regularized_bo_labels" and label_conflict_high:
+            continue
+        base_predictions = []
+        predictor = FNNGainController(fallback_gains, rule_table=candidate_table)
+        for error, delta in observed_states:
+            predicted = predictor._propose(error, delta)
+            base_predictions.append(np.log(np.asarray(predicted)))
+        residual_targets = np.asarray(observed_targets) - np.asarray(base_predictions)
+        design = np.asarray(observed_contexts)
+        ridge = design.T @ design + 8.0 * np.eye(design.shape[1])
+        fitted_context = np.linalg.solve(ridge, design.T @ residual_targets).T
+        for context_scale in (0.0, 0.25, 0.50, 1.0):
+            candidate_context = fitted_context * context_scale
+            candidate_scores = [
+                calculate_metrics(
+                    simulate(
+                        scenario,
+                        FNNGainController(
+                            fallback_gains,
+                            rule_table=candidate_table,
+                            context_coefficients=candidate_context,
+                        ),
+                        seed=30_000 + index,
+                    )
+                )["objective"]
+                for index, scenario in enumerate(validation_scenarios)
+            ]
+            candidate_objective = float(np.mean(candidate_scores))
+            if candidate_objective < best_nonfallback_objective:
+                best_nonfallback_objective = candidate_objective
+                best_nonfallback_table = candidate_table.copy()
+                best_nonfallback_context = candidate_context.copy()
+            if candidate_objective < learned_objective:
+                learned_objective = candidate_objective
+                selected_prior = candidate_prior
+                selected_family = f"{family}:context_scale={context_scale:g}"
+                selected_context = candidate_context.copy()
+                result = candidate_table.copy()
     if candidate_sink is not None:
         candidate_sink.append(best_nonfallback_table)
+    if context_sink is not None:
+        context_sink.append(best_nonfallback_context)
     final_coverage = float(np.mean(counts > 0.05))
     accepted = learned_objective <= baseline_objective and final_coverage >= 0.80
     if not accepted:
@@ -301,6 +529,7 @@ def train_fnn_rule_table(
                     "validation_learned_objective": float("nan"),
                     "deployment_accepted": float("nan"),
                     "selected_prior_weight": float("nan"),
+                    "selected_candidate_family": "",
                 }
             )
         history[-1].update(
@@ -309,7 +538,9 @@ def train_fnn_rule_table(
                 "validation_learned_objective": learned_objective,
                 "deployment_accepted": float(accepted),
                 "selected_prior_weight": selected_prior,
-            }
+                    "selected_candidate_family": selected_family,
+                    "label_conflict_high": float(label_conflict_high),
+                }
         )
     return (result, history) if return_history else result
 
@@ -340,11 +571,28 @@ class IncrementalRLController(_SafeAdaptivePI):
     delta_edges = np.asarray([-0.15, -0.03, 0.03, 0.15])
     command_edges = np.asarray([0.05, 0.70])
 
-    def __init__(self, fallback_gains: tuple[float, float], *, q_table: np.ndarray | None = None, **kwargs: object):
+    def __init__(
+        self,
+        fallback_gains: tuple[float, float],
+        *,
+        q_table: np.ndarray | None = None,
+        covered_mask: np.ndarray | None = None,
+        **kwargs: object,
+    ):
         super().__init__(fallback_gains, **kwargs)
         self.q_table = np.asarray(q_table, dtype=float) if q_table is not None else None
         if self.q_table is not None and self.q_table.shape != (5, 5, 3, len(self._actions)):
             raise ValueError("q_table must have shape (5, 5, 3, 9)")
+        self.covered_mask = np.asarray(covered_mask, dtype=bool) if covered_mask is not None else None
+        if self.covered_mask is not None and self.covered_mask.shape != (5, 5, 3):
+            raise ValueError("covered_mask must have shape (5, 5, 3)")
+        self._uncovered_proposals = 0
+        self._total_proposals = 0
+
+    def reset(self) -> None:
+        super().reset()
+        self._uncovered_proposals = 0
+        self._total_proposals = 0
 
     @staticmethod
     def _bin(value: float, edges: np.ndarray) -> int:
@@ -384,24 +632,34 @@ class IncrementalRLController(_SafeAdaptivePI):
         )
         return int(table[e_bin, d_bin])
 
-    def _propose(self, error_c: float, delta_error_c: float, *, applied_command: float = 0.0) -> tuple[float, float]:
+    def _propose(self, error_c: float, delta_error_c: float, *, applied_command: float = 0.0, **_: float) -> tuple[float, float]:
+        e_bin = self._bin(error_c, self.error_edges)
+        d_bin = self._bin(delta_error_c, self.delta_edges)
+        command_bin = self._bin(applied_command, self.command_edges)
+        self._total_proposals += 1
+        if self.covered_mask is not None and not self.covered_mask[e_bin, d_bin, command_bin]:
+            self._uncovered_proposals += 1
+            self._last_proposal_valid = False
+            return self.fallback_gains
         target_scale = self._actions[
-            self._policy_action(
-                self._bin(error_c, self.error_edges),
-                self._bin(delta_error_c, self.delta_edges),
-                self._bin(applied_command, self.command_edges),
-            )
+            self._policy_action(e_bin, d_bin, command_bin)
         ]
         return (
             float(self.fallback_gains[0] * target_scale[0]),
             float(self.fallback_gains[1] * target_scale[1]),
         )
 
+    def diagnostics(self) -> dict[str, float | bool]:
+        values = super().diagnostics()
+        values["uncovered_fraction"] = self._uncovered_proposals / max(self._total_proposals, 1)
+        return values
+
 
 def train_offline_q_policy(
     scenarios: list[Scenario] | None = None,
     fallback_gains: tuple[float, float] = (0.1, 0.003),
     *,
+    validation_scenarios: list[Scenario] | None = None,
     seed: int = 7,
     episodes: int = 750,
     horizon: int = 240,
@@ -422,9 +680,14 @@ def train_offline_q_policy(
     scenarios = scenarios or [Scenario(duration_hours=2.0)]
     if not scenarios:
         raise ValueError("at least one training scenario is required")
-    validation_count = max(1, int(math.ceil(0.20 * len(scenarios)))) if len(scenarios) > 1 else 0
-    learning_scenarios = scenarios[:-validation_count] if validation_count else scenarios
-    validation_scenarios = scenarios[-validation_count:] if validation_count else scenarios
+    if validation_scenarios is None:
+        validation_count = max(1, int(math.ceil(0.20 * len(scenarios)))) if len(scenarios) > 1 else 0
+        learning_scenarios = scenarios[:-validation_count] if validation_count else scenarios
+        validation_scenarios = scenarios[-validation_count:] if validation_count else scenarios
+    else:
+        if not validation_scenarios:
+            raise ValueError("validation_scenarios must not be empty")
+        learning_scenarios = scenarios
     rng = np.random.default_rng(seed)
     q = np.zeros((5, 5, 3, len(IncrementalRLController._actions)), dtype=float)
     # An unvisited state must deploy the no-change action.
@@ -592,10 +855,42 @@ def train_offline_q_policy(
                 "best_checkpoint_validation_objective": best_checkpoint_objective,
                 "fit_scenarios": float(len(learning_scenarios)),
                 "validation_scenarios": float(len(validation_scenarios)),
+                "selected_policy_family": "",
             }
         )
         previous_policy = policy
-    q = best_checkpoint_q
+    # Safe policy improvement with baseline bootstrapping (SPIBB-style): the
+    # learned checkpoint must compete on validation against conservative
+    # policies that retain IMC except in physically hot states.  Action 2 lowers
+    # Kp and raises Ki relative to IMC, which avoids the aggressive simultaneous
+    # gain increase that the unconstrained Q table often selects from sparse
+    # long-delay data.  The sealed test set is not used here.
+    policy_candidates: list[tuple[str, np.ndarray]] = [("learned_q_checkpoint", best_checkpoint_q.copy())]
+    for first_hot_bin in (3, 4):
+        bootstrapped = np.zeros_like(q)
+        bootstrapped[:, :, :, no_change_action] = 1.0
+        bootstrapped[first_hot_bin:, :, :, 2] = 2.0
+        policy_candidates.append((f"baseline_bootstrap_hot_bin_{first_hot_bin}", bootstrapped))
+    selected_family = "none"
+    selected_objective = float("inf")
+    selected_q = best_checkpoint_q.copy()
+    for family, candidate_q in policy_candidates:
+        scores = [
+            calculate_metrics(
+                simulate(
+                    scenario,
+                    IncrementalRLController(fallback_gains, q_table=candidate_q),
+                    seed=40_000 + index,
+                )
+            )["objective"]
+            for index, scenario in enumerate(validation_scenarios)
+        ]
+        objective = float(np.mean(scores))
+        if objective < selected_objective:
+            selected_family = family
+            selected_objective = objective
+            selected_q = candidate_q.copy()
+    q = selected_q
     if candidate_sink is not None:
         candidate_sink.append(q.copy())
     learned_scores = [
@@ -618,6 +913,7 @@ def train_offline_q_policy(
                 "validation_baseline_objective": baseline_objective,
                 "validation_learned_objective": learned_objective,
                 "deployment_accepted": float(accepted),
+                "selected_policy_family": selected_family,
             }
         )
     return (q, history) if return_history else q

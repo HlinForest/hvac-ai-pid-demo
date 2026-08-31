@@ -3,13 +3,15 @@
 #include <algorithm>
 #include <chrono>
 #include <iostream>
+#include <iomanip>
 #include <limits>
 
 int main() {
   using namespace hvac_mcu;
   constexpr float kPidDtSeconds=0.1f;
   constexpr int kAiDivider=20;
-  const Gains fallback{generated::kFallbackKp,generated::kFallbackKi};
+  const bool manifest_ok=policy_manifest_valid();
+  const Gains fallback=manifest_ok?Gains{generated::kFallbackKp,generated::kFallbackKi}:kFactoryFallbackGains;
   SafePI controller(fallback);
   CompressorLimiter limiter;
   VirtualHVACPlant plant;
@@ -25,7 +27,7 @@ int main() {
     if (tick%kAiDivider==0) {
       const float error_rate=ai_calls==0?0.0f:(error-previous_ai_error)/(kAiDivider*kPidDtSeconds/60.0f);
       const auto begin=std::chrono::steady_clock::now();
-      if (tick<200) controller.apply_proposal(fnn_gains(error,error_rate),generated::kFnnAccepted);
+      if (tick<200) controller.apply_proposal(fnn_gains(error,error_rate),manifest_ok&&generated::kFnnAccepted);
       else {
         bool covered=false;
         const Gains proposed=rl_gains(error,error_rate,limiter.command(),fallback,covered);
@@ -47,6 +49,17 @@ int main() {
   }
   controller.apply_proposal({std::numeric_limits<float>::quiet_NaN(),0.01f});
   const Diagnostics d=controller.diagnostics();
+  std::cout<<std::setprecision(9);
+  const float parity_commands[3]={0.0f,0.35f,0.90f};
+  for (float e:generated::kFnnErrorCenters) for (float de:generated::kFnnErrorRateCenters)
+    for (float u:parity_commands) {
+      const float integral=e*5.0f, outdoor_delta=10.0f, load_fraction=0.20f;
+      const Gains fg=fnn_gains(e,de,u,integral,outdoor_delta,load_fraction);
+      bool covered=false;
+      const Gains rg=rl_gains(e,de,u,fallback,covered);
+      std::cout<<"PARITY,"<<e<<","<<de<<","<<u<<","<<integral<<","<<outdoor_delta<<","<<load_fraction
+               <<","<<fg.kp<<","<<fg.ki<<","<<(covered?1:0)<<","<<rg.kp<<","<<rg.ki<<"\n";
+    }
   int valid_profiles=0, stable_profiles=0;
   constexpr float kAcceleratedPhysicalDtSeconds=20.0f;  // 100 ms wall clock at 200x
   for (const auto &profile : demo::kProfiles) {
@@ -64,8 +77,10 @@ int main() {
     }
     if (std::fabs(profile_plant.temperature()-24.0f)<=0.75f) ++stable_profiles;
   }
-  const bool passed=bounded&&ai_calls==200&&d.fallback_active&&valid_profiles==7&&stable_profiles==7;
+  const bool passed=manifest_ok&&bounded&&ai_calls==200&&d.fallback_active&&valid_profiles==7&&stable_profiles==7;
   std::cout<<"MCU_SIL "<<(passed?"PASS":"FAIL")<<"\n"
+           <<"manifest v3="<<manifest_ok<<"; CRC32="<<std::hex<<generated::kArtifactCrc32
+           <<"; computed="<<policy_manifest_crc32()<<std::dec<<"\n"
            <<"PID period=100ms; AI period=2s; AI calls="<<ai_calls<<"\n"
            <<"sizeof(SafePI)="<<sizeof(SafePI)<<" bytes; sizeof(VirtualHVACPlant)="<<sizeof(VirtualHVACPlant)<<" bytes\n"
            <<"worst PI="<<worst_pi_ns<<" ns; worst AI="<<worst_ai_ns<<" ns\n"

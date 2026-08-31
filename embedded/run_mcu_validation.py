@@ -6,6 +6,7 @@ It intentionally does not label host timings or binary size as STM32/ESP32 data.
 
 from __future__ import annotations
 
+import argparse
 import csv
 import re
 import shutil
@@ -15,7 +16,6 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 EMBEDDED = ROOT / "embedded"
-OUTPUTS = ROOT / "outputs"
 EXE = EMBEDDED / "testbench.exe"
 
 
@@ -25,6 +25,9 @@ def extract(pattern: str, text: str, default: str = "") -> str:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--artifact-dir", type=Path, default=ROOT / "outputs_review_v3")
+    args = parser.parse_args()
     compiler = shutil.which("g++")
     if compiler is None:
         raise SystemExit("未找到 g++，无法执行 PC 软件在环测试。")
@@ -49,9 +52,33 @@ def main() -> int:
         check=False,
     )
     log = run_result.stdout + run_result.stderr
-    OUTPUTS.mkdir(parents=True, exist_ok=True)
-    (OUTPUTS / "mcu_pc_sil_log.txt").write_text(log, encoding="utf-8")
+    evidence_dir = args.artifact_dir.resolve()
+    evidence_dir.mkdir(parents=True, exist_ok=True)
+    (evidence_dir / "mcu_pc_sil_log.txt").write_text(log, encoding="utf-8")
 
+    expected_path = args.artifact_dir / "policy_parity_vectors.csv"
+    parity_rows = [line.split(",") for line in log.splitlines() if line.startswith("PARITY,")]
+    parity_max_error = float("inf")
+    parity_pass = False
+    if expected_path.exists() and parity_rows:
+        with expected_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            expected = list(csv.DictReader(handle))
+        if len(expected) == len(parity_rows):
+            errors: list[float] = []
+            flags_ok = True
+            for wanted, actual in zip(expected, parity_rows, strict=True):
+                numeric_actual = list(map(float, actual[1:]))
+                wanted_values = [
+                    float(wanted["error_c"]), float(wanted["error_rate_c_per_min"]),
+                    float(wanted["applied_command"]), float(wanted["integral_state"]),
+                    float(wanted["outdoor_delta_c"]), float(wanted["load_fraction"]),
+                    float(wanted["fnn_kp"]), float(wanted["fnn_ki"]), float(wanted["rl_covered"]),
+                    float(wanted["rl_kp"]), float(wanted["rl_ki"]),
+                ]
+                errors.extend(abs(left-right) for left, right in zip(wanted_values, numeric_actual, strict=True))
+                flags_ok = flags_ok and int(wanted_values[8]) == int(numeric_actual[8])
+            parity_max_error = max(errors, default=0.0)
+            parity_pass = flags_ok and parity_max_error <= 1e-5
     summary = {
         "验证层级": "PC 软件在环（不是 STM32/ESP32 目标板实测）",
         "结果": extract(r"MCU_SIL (PASS|FAIL)", log, "FAIL"),
@@ -62,16 +89,24 @@ def main() -> int:
         "虚拟对象状态字节_PC_ABI": extract(r"sizeof\(VirtualHVACPlant\)=(\d+) bytes", log),
         "RL未覆盖回退次数": extract(r"RL uncovered-state fallbacks=(\d+)", log),
         "NaN回退次数": extract(r"NaN fallback=(\d+)", log),
-        "目标板ROM_RAM周期": "待 Wokwi/目标工具链编译实测",
+        "策略清单版本": "3" if extract(r"manifest v3=(\d+)", log) == "1" else "INVALID",
+        "Python_CPP一致性向量": len(parity_rows),
+        "Python_CPP最大绝对误差": parity_max_error,
+        "Python_CPP一致性结果": "PASS" if parity_pass else "FAIL",
+        "目标板ROM_RAM周期": (
+            "ESP32编译通过；RAM/Flash见esp32_build_validation.md；实体板周期待实测"
+            if (evidence_dir / "esp32_build_validation.md").exists()
+            else "待目标工具链编译与实体板周期实测"
+        ),
     }
-    with (OUTPUTS / "mcu_validation_summary.csv").open("w", newline="", encoding="utf-8-sig") as handle:
+    with (evidence_dir / "mcu_validation_summary.csv").open("w", newline="", encoding="utf-8-sig") as handle:
         writer = csv.DictWriter(handle, fieldnames=summary.keys())
         writer.writeheader()
         writer.writerow(summary)
 
     print(log, end="")
-    print(f"验证摘要: {OUTPUTS / 'mcu_validation_summary.csv'}")
-    return 0 if run_result.returncode == 0 and summary["结果"] == "PASS" else 1
+    print(f"验证摘要: {evidence_dir / 'mcu_validation_summary.csv'}")
+    return 0 if run_result.returncode == 0 and summary["结果"] == "PASS" and parity_pass else 1
 
 
 if __name__ == "__main__":

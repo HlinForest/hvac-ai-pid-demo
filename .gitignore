@@ -35,6 +35,7 @@ outputs_adaptive_final/
 outputs_review/
 outputs_review_v2/
 outputs_review_final/
+outputs_review_v3_quick*/
 
 # Learning-manual QA derivatives. The final DOCX remains tracked.
 outputs_adaptive_final_v2/learning_document/*.pdf

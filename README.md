@@ -2,6 +2,19 @@
 
 > 新增风险感知安全 BO，以及真正的工具调用式 LLM Agent 自动整定：Agent 自主选择查看历史、运行候选仿真或停止，宿主安全门负责限幅、试验、验收和回退。详见 [SOTA_LLM_PI_TUNING.md](SOTA_LLM_PI_TUNING.md)。Q-learning 保留为教学/对照方法，不称为 SOTA。
 
+## 评审整改 v3（正式密封测试）
+
+`outputs_review_v3/` 是本轮不覆盖历史结果的正式产物。训练、验证、测试按 48/16/16 个工况三向隔离；每个工况有稳定 `scenario_id` 和 SHA-256，IMC 的 `lambda` 只在训练集搜索，验证后冻结。候选发布使用 5 个新测试种子、每种子 16 个独立工况，共 80 个密封测试场景。
+
+| 策略 | 相对调优 IMC 的平均目标比 | 单侧 95% 上界 | 实际采用非 IMC 比例 | 测试回退率 | 结论 |
+|---|---:|---:|---:|---:|---|
+| FNN | 0.9979 | 1.0067 | 100.0% | 0.0% | 通过非劣与安全门 |
+| RL | 0.9595 | 0.9743 | 39.88% | 0.19% | 通过性能、安全与覆盖门 |
+
+两者稳定率均为 100%，新增运行斜率、最低频率和启停违规均为 0。FNN 的原始状态局部标签仍有较高冲突（训练 log-RMSE 1.059），因此部署门没有采用高冲突拟合表，而选择验证集通过的保守 IMC 残差 TSK 曲面；这是真正产生非 IMC 增益的候选，不是把回退曲线冒充 FNN。RL 部署的是验证集选择的基线约束冻结策略，未覆盖状态强制回退 IMC。
+
+嵌入式策略清单升级为 CRC v3，覆盖全部执行字段。PC-SIL 已验证 100 ms PI、2 s AI 调度、CRC 启动重算、故障回退及 75 组 Python/C++ 一致性向量（最大绝对误差约 `2.98e-8`）。ESP32 官方工具链编译成功，静态 RAM 22,036 B（6.7%）、Flash 296,169 B（22.6%）；这些不是实体板 10 分钟可靠性或 WCET 证据。逐项状态见 [review_remediation.md](outputs_review_v3/review_remediation.md)。
+
 ## ESP32 七算法温度闭环 Demo（新增）
 
 这一版把“温度是否真的稳定”放在算法分数之前。统一场景从 30°C 开始，目标为 24°C；曲线必须进入 24±0.5°C 并保持，随后注入开门扰动，再观察容量升高和温度恢复。90 秒墙钟演示对应 5 小时虚拟物理时间，不能解释为真实房间 90 秒降温。
@@ -32,7 +45,7 @@ streamlit run streamlit_app.py
 - `embedded/modbus_config.hpp`：真实设备寄存器配置，默认 `kWritesEnabled=false`；
 - `embedded/validate_esp32_serial.py`：真实 ESP32 连续 10 分钟、丢周期与 WCET 验收脚本。
 
-当前统一场景中，Z-N 与 FNN 候选未通过部署门，因此实际曲线明确使用 IMC 回退，并同时保留候选影子温度；不能把回退后的稳定曲线写成候选算法成功。LLM Agent 的 `replay` 是无网络录制的工具调用轨迹，不是实时模型调用。`ollama` 和 `openai` 模式会让模型在上位机从 `inspect_history`、`evaluate_candidate`、`finish` 中自主选择下一步；宿主程序仍独立执行硬边界、单轮 ±10%、重复仿真、试验预算和安全门。Agent 不进入 ESP32 的 100 ms 控制循环，也没有写压缩机容量的工具。
+七算法演示目录保留生成当时的候选/回退状态；正式 v3 密封测试则以 `outputs_review_v3/deployment_acceptance.csv` 为准，FNN 与 RL 均已通过。页面必须继续分别显示候选与实际执行曲线，任何新候选未通过时仍明确回退 IMC。LLM Agent 的 `replay` 是无网络录制的工具调用轨迹，不是实时模型调用。`ollama` 和 `openai` 模式会让模型在上位机从 `inspect_history`、`evaluate_candidate`、`finish` 中自主选择下一步；宿主程序仍独立执行硬边界、单轮 ±10%、重复仿真、试验预算和安全门。Agent 不进入 ESP32 的 100 ms 控制循环，也没有写压缩机容量的工具。
 
 LLM Agent 自动整定数据流：
 
@@ -59,7 +72,7 @@ LLM Agent 自动整定数据流：
 
 已实现五类控制器：Z-N、只在训练集整定 λ 的 IMC、全局贝叶斯优化固定 PI、25 规则（每次激活 4 条）的 FNN 自整定 PI、以及安全屏蔽的表格 RL 自整定 PI。RL 使用 5×5 热状态、3 档实际容量模式和 9 个相对 IMC 的绝对增益目标；不再递归累乘隐藏的当前增益。所有方法共用 0/最低稳定频率、量化、运行斜率、最小启停驻留、传感器噪声与滤波约束。
 
-“自动整定”和“在线自整定”严格分开：贝叶斯优化在运行前搜索一组固定 `Kp/Ki`；FNN 先由 BO 标签离线训练规则表、RL 先在相同的虚拟房间中离线训练 Q 表，二者只在运行中低频微调参数，绝不在真实设备上探索。
+“自动整定”和“在线自整定”严格分开：贝叶斯优化在运行前搜索一组固定 `Kp/Ki`；FNN 从闭环状态快照出发做短时域安全候选回放并训练 IMC 残差 TSK 规则，RL 在相同虚拟房间中离线训练并经基线约束筛选，二者只在运行中低频微调参数，绝不在真实设备上探索。
 
 快速运行：
 
@@ -102,22 +115,22 @@ python -m pip install -r requirements.txt
 python main.py --quick
 ```
 
-完整实验（默认 48 个训练工况、16 个留出测试工况）：
+完整实验（默认 48/16/16 训练/验证/测试，并在 5×16 个密封场景验收）：
 
 ```powershell
-python main.py
+python main.py --output outputs_review_v3 --validation-samples 16 --acceptance-seeds 101,211,307,401,503
 ```
 
 运行测试：
 
 ```powershell
-python -m unittest discover -s tests -v
+python -m pytest tests -q
 ```
 
 自定义规模：
 
 ```powershell
-python main.py --train-samples 80 --test-samples 24 --bo-iterations 10 --seed 42 --output outputs_large
+python main.py --train-samples 80 --validation-samples 24 --test-samples 24 --bo-iterations 10 --seed 42 --acceptance-seeds 101,211,307,401,503 --output outputs_large
 ```
 
 ## 演示做了什么
@@ -125,8 +138,8 @@ python main.py --train-samples 80 --test-samples 24 --bo-iterations 10 --seed 42
 ```text
 随机热工况 ──> 有边界的贝叶斯优化 ──> 固定全局 Kp/Ki（自动整定）
                       │
-                      ├──> BO 标签 ──> 训练 25 条 FNN 规则表
-                      └──> 3R2C 虚拟房间 ──> 训练 RL Q 表
+                      ├──> 状态快照局部安全回放 ──> 训练 25 条残差 TSK 规则
+                      └──> 3R2C 虚拟房间 ──> 训练并基线约束 RL 策略
 
 FNN/RL 训练产物 ──> 低频微调 Kp/Ki（在线自整定） ──> 安全 PI ──> HVAC 3R2C 模型
                                                          │
@@ -135,8 +148,8 @@ FNN/RL 训练产物 ──> 低频微调 Kp/Ki（在线自整定） ──> 安�
 
 1. 随机化室外温度、设定温度、初始温差、内部负荷、建筑热容/热阻、制冷能力、执行器延迟和惯性。
 2. 在每个工况的仿真环境中，对 `log(Kp)`、`log(Ki)` 做有边界的贝叶斯优化；稳定性越界会得到高惩罚。
-3. 用优化得到的 `Kp/Ki` 标签训练 FNN 的 25 条规则表，并在同一 3R2C 环境中离线训练 RL Q 表。
-4. 在未参加训练的工况上比较固定 PI、ZN、IMC、FNN 和 RL。
+3. 从真实闭环状态快照对候选增益做局部安全回放，训练 FNN 的 25 条残差 TSK 规则；在同一 3R2C 环境中离线训练并约束 RL 策略。
+4. 在完全冻结的密封测试工况上比较固定 PI、ZN、IMC、FNN 和 RL；查看测试结果后再改模型必须更换测试种子。
 5. 分别运行初次降温、设定点突变、持续外界热扰动三类场景，并生成可视化报告。
 
 ## 输入、输出与指标
@@ -164,7 +177,7 @@ AI 输出：
 
 ## 生成文件
 
-默认写入 `outputs/`：
+默认写入 `outputs/`；本轮正式评审证据写入 `outputs_review_v3/`：
 
 - `training_labels.csv`：训练数据、`Kp/Ki` 标签、ZN/IMC 对照分数；
 - `global_bayesian_tuning.csv`：跨训练工况搜索得到的一套固定全局 `Kp/Ki`；
@@ -175,7 +188,11 @@ AI 输出：
 - `rl_q_table.npy`：验收后可部署的 5×5×3×9 RL Q 表；若验收失败则为IMC不改增益回退表；
 - `rl_q_table_candidate.npy`：验收前候选Q表，用于审计而不直接部署；
 - `fnn_rule_table_candidate.npy`：验收前候选FNN规则表；
-- `training_scenarios.csv`、`fnn_training_samples.csv`、`rl_training_transitions.csv`、`holdout_scenarios.csv`：训练/验证所用工况、逐状态监督样本、逐步RL转移和独立留出工况；
+- `dataset_manifest.csv`：训练/验证/测试工况 ID、种子、分区及 SHA-256，用于拒绝数据泄漏；
+- `deployment_acceptance.csv`：5×16 个密封场景中 FNN/RL 相对 IMC 的配对结果、95% 上界、安全事件、实际采用率和回退率；
+- `policy_parity_vectors.csv`：Python/C++ 的 FNN、RL 和故障回退一致性测试向量；
+- `policy_manifest_v3.json`：版本、验收标志、增益边界、FNN 参数、RL 冻结策略、覆盖掩码及 CRC 的可审计清单；
+- `training_scenarios.csv`、`validation_scenarios.csv`、`fnn_training_samples.csv`、`rl_training_transitions.csv`、`holdout_scenarios.csv`：三向数据、逐状态监督样本、逐步 RL 转移和密封测试工况；
 - `rl_training_history.csv`：RL 每回合奖励、TD 误差、探索率、状态覆盖率、策略变化和 Kp/Ki；
 - `classical_tuning_history.csv`：Z-N/IMC 共用的 168 h 虚拟阶跃逐分钟响应；
 - `fopdt_fit_history.csv`：有界最小二乘实际评价过的每一组 K、τ、L 候选与拟合误差；
