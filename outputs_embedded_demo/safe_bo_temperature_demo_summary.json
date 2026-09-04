@@ -1,0 +1,23 @@
+{
+  "algorithm": "safe-bo",
+  "display_name": "风险感知安全 BO",
+  "kp_initial": 0.38378310556466666,
+  "ki_initial": 0.0044410980778422605,
+  "kp_final": 0.38378310556466666,
+  "ki_final": 0.0044410980778422605,
+  "first_in_band_minute": 34.0,
+  "stable_first_minute": 78.0,
+  "door_event_minute": 189.0,
+  "door_recovery_minutes": 25.0,
+  "final_temperature_c": 23.943203114338953,
+  "objective": 43.23104581248702,
+  "max_overheat_c": 6.201623275256168,
+  "max_undershoot_c": 0.9331191041719613,
+  "control_movement": 5.300000000000001,
+  "stable": 1,
+  "fallback_used": 0,
+  "description": "在性能均值之外惩罚噪声方差，并用安全代理限制候选。",
+  "source": "RaGoOSE-style risk-aware safe BO artifact",
+  "deployment_accepted": 1,
+  "provider": "not_applicable"
+}

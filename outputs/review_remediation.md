@@ -1,0 +1,25 @@
+## 评审缺陷 A1–E5 闭环矩阵
+
+状态由本次产物动态生成；算法未通过时保持拒绝并使用IMC，真实ESP32/BMS证据不在本轮软件验收范围内。
+
+|编号|评审问题|状态|证据|可核查结果|
+|---|---|---|---|---|
+|A1|统一执行器约束|已闭环|`simulator.py / actuator.py`|全部算法共用最低容量、量化、斜率和启停限制|
+|A2|噪声与滤波|已闭环|`dataset_manifest.csv`|训练、验证和测试工况均包含传感器噪声与滤波|
+|A3|IMC公平调参|已闭环|`imc_lambda_tuning.csv`|lambda只在训练集选择，进入验证和密封测试后冻结|
+|B1|FNN标签混叠|已闭环|`fnn_training_samples.csv`|同一热状态快照执行30分钟局部候选回放，并记录容量、积分、室外温差和负荷|
+|B2|FNN规则覆盖|已闭环|`fnn_training_history.csv`|有效规则覆盖率=100.0%|
+|B3|FNN离策略压缩|已闭环|`fnn_training_samples.csv`|聚合IMC、BO和安全残差策略三类物理轨迹|
+|B4|FNN独立部署门|已闭环|`deployment_acceptance.csv`|密封测试均值比=0.9890，95%上界=0.9969|
+|C1|RL伪造状态覆盖|已闭环|`rl_training_transitions.csv`|仅记录3R2C物理轨迹真实到达状态|
+|C2|未访问状态默认偏置|已闭环|`generated_policy.hpp`|未覆盖组合使用动作4且触发IMC回退|
+|C3|训练时域过短|已闭环|`rl_training_history.csv`|750回合、最长240分钟、5分钟决策|
+|C4|RL状态非严格Markov|部分闭环|`rl_training_transitions.csv`|容量已进入Q状态；积分、限制器和负荷作为安全上下文记录，真实负荷仍是估计量|
+|C5|增益累积漂移与奖励不一致|已闭环|`ai_controllers.py`|动作改为相对IMC绝对目标，并采用基线约束策略改进|
+|C6|RL独立部署门|已闭环|`deployment_acceptance.csv`|密封测试均值比=0.9800，95%上界=0.9978|
+|D1-D3|指标与时序审计|已闭环|`dynamic_timeseries.csv`|真实/测量温度、请求/实际命令、增益、回退和约束指标分别记录|
+|E1|全量测试入口|已闭环|`pytest.ini`|统一使用pytest并包含Python、HTML和嵌入式测试|
+|E2|训练验证测试隔离|已闭环|`dataset_manifest.csv`|默认48/16/16，并对每个工况写入SHA-256且拒绝重复|
+|E3|报告fail-open|已闭环|`report.py`|缺失、NaN、非法验收值一律判为未通过|
+|E4|加速演示时间基准|已闭环|`testbench.cpp / mcu_validation_summary.csv`|PI积分、限幅器与监督误差率统一使用200×模拟时间（与ESP32固件一致）；SIL判据含未覆盖回退占比≤10%门，实测0/190|
+|E5|策略导出与CRC|已闭环|`policy_parity_vectors.csv`|CRC v3覆盖固件执行字段并完成Python/C++逐向量一致性|

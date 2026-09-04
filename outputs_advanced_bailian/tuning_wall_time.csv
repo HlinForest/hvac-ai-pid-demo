@@ -1,0 +1,5 @@
+﻿method,wall_seconds,evaluations
+IMC lambda tuning,0.7193024999869522,13
+ordinary Bayesian optimization,0.674289199989289,10
+RaGoOSE-style risk-aware safe BO,0.9092617999995127,7
+LLM supervisor: OpenAI-compatible chat/qwen-max,30.372380000015255,4

@@ -1,21 +1,14 @@
 # 评审意见核查与整改答复
 
-## 第三轮闭环结果（`outputs_review_v3`）
-
-本轮按 48/16/16 划分训练、验证、测试，所有工况写入稳定 ID 和 SHA-256；IMC 仅用训练集整定 `lambda`，验证后冻结。最终候选在种子 101、211、307、401、503 的 80 个全新场景上密封验收。
-
-| 算法 | 平均目标比（候选/IMC） | 单侧 95% 上界 | 非 IMC 决策 | 回退率 | 稳定率 | 结论 |
-|---|---:|---:|---:|---:|---:|---|
-| FNN | 0.9979 | 1.0067 | 100.0% | 0.0% | 100% | 通过 |
-| RL | 0.9595 | 0.9743 | 39.88% | 0.19% | 100% | 通过 |
-
-两种算法均无新增斜率、最低频率或启停违规，并满足“至少 10% 决策真正使用非 IMC”的防伪门。FNN 规则有效覆盖为 100%；RL 的物理热状态覆盖为 100%，测试未覆盖回退率为 0.19%。完整笛卡尔 Q 状态覆盖 46/75（61.33%），其余主要是物理不可达组合，固件绝不靠 `argmax` 默认动作，而是回退工厂 IMC。
-
-FNN 的训练 log-RMSE 仍为 1.059，说明从局部最优标签直接拟合仍有冲突。系统因此拒绝高冲突拟合表，采用验证集选出的保守 IMC 残差 TSK 曲面；它在测试中 100% 产生非 IMC 候选，故不是用 IMC 回退冒充通过。RL 使用验证集选择的安全基线约束冻结策略。严格 Markov 问题仍只部分闭环：容量已进入 Q 状态，积分、限制器阶段和负荷被记录并参与安全判断，但真实负荷仍是估计量。
-
-嵌入式方面，策略清单 v3 的 CRC 覆盖全部部署字段，固件启动会重算；版本、CRC 或字段异常时禁用 AI，并使用独立编译的工厂 IMC。PC-SIL 通过 75 组 Python/C++ 向量一致性验证，最大绝对误差约 `2.98e-8`。ESP32 工具链编译成功，RAM 22,036 B（6.7%）、Flash 296,169 B（22.6%）。这些仍不能代替实体 ESP32 连续 10 分钟、板端 WCET、真实传感器和 Modbus 空调测试。
-
-可核查文件：`outputs_review_v3/dataset_manifest.csv`、`deployment_acceptance.csv`、`policy_parity_vectors.csv`、`mcu_validation_summary.csv`、`esp32_build_validation.md` 和 `review_remediation.md`。以下章节保留第一、二轮历史结论，不能用于代表 v3 的最终验收状态。
+> **2026-08-31 第二轮评审后的补充整改**：第二轮评审指出测试命令、依赖声明、产物入库与文档数值四类工程卫生问题，已在本轮修复：
+>
+> - **验收协议升级**：FNN/RL 训练数据改为三向切分（train/validation/test ≈ 60/20/20）。先验权重与 RL checkpoint 只在 validation 切片上选择，部署验收改在与训练不相交的 test 切片上与 IMC 基线比较；训练历史 CSV 新增 `test_baseline_objective`、`test_learned_objective`、`validation_overlaps_training`、`test_overlaps_training`、`test_overlaps_validation`、`test_scenarios` 列，切片重叠时显式标记而非静默复用。
+> - **报告 fail-closed**：所有结论性数字改为动态生成（MD/HTML 共用读取器），验收证据缺失时默认"未通过"；新增七算法统一投运调试门、AI vs λ-tuned IMC 基线指标、FNN/RL 原始候选诊断行与调节时间删失统计披露；历史 MCU 证据标注"一次性实测，非本次生成"。
+> - **嵌入式时基修复**：DEMO 模式下 PI 积分、限幅器与监督层三处时间基准均误用墙钟时间而非 200 倍加速的模拟时间（其中监督层误差变化率除数被放大 200 倍），复合效应导致 RL 未覆盖回退 167/190 次调用；三处统一改用模拟时间后为 0/190（单处回归实测仅 1/190，故 SIL 判据中的 RL 覆盖率门是纵深防御而非时基正确性证明）。`generated_policy.hpp` 产物 CRC 升级为 v3（覆盖全部字段，Python 导出、PC SIL 与固件三方一致），SIL 通过判据加入 CRC 与 RL 覆盖率门（未覆盖回退占比 ≤10%）。
+> - **测试与 CI**：测试命令统一为 `python -m pytest tests -q`（旧的 `unittest discover` 只能收集 `test_demo.py`，静默漏掉安全门/嵌入式测试，已废弃）；新增验收门行为测试（FNN/RL 拒绝时导出 IMC 回退表、IMC λ 整定不劣于公式默认值、目标函数权重、纯 Python 交叉验证）；GitHub Actions CI 覆盖 pytest 全量测试与两个 Node 校验脚本；`requirements.txt` 与真实运行环境（numpy 2.x）对齐。
+> - **仓库卫生**：`outputs*/` 全部移出 git 跟踪（本地保留、可由源码再生成）；补 MIT `LICENSE` 与 `vendor/katex/LICENSE`；清除文档中的个人硬编码路径。
+>
+> 以下正文为第一轮评审的答复，保留作为背景；其中 `outputs_review_final/` 复现命令部分已被本轮整改取代（该目录不再存在，核查证据改为 pytest 测试与 `outputs*/` 磁盘工件）。
 
 ## 结论
 
@@ -70,11 +63,15 @@ FNN 的训练 log-RMSE 仍为 1.059，说明从局部最优标签直接拟合仍
 
 ## 复现
 
-小规模核查结果在 `outputs_review_final/`。命令：
+第一轮整改时的小规模核查结果曾写入 `outputs_review_final/`（该目录连同所有 `outputs*/` 已于 2026-08-31 第二轮整改后移出 git 跟踪，本地不再保留）。当时的核查命令为：
 
 ```powershell
 python main.py --train-samples 8 --test-samples 4 --bo-iterations 2 --seed 23 --output outputs_review_final
-python -m unittest discover -s tests -v
+python -m pytest tests -q
 ```
+
+（第一轮文档误写为 `python -m unittest discover`，该命令只能收集 `test_demo.py` 的 unittest 用例，会静默漏掉安全门与嵌入式测试；现全仓库统一使用 pytest。）
+
+现在同类结论通过以下方式复核：`python -m pytest tests -q`（含验收门行为测试），以及按上节规模重跑管线后在 `outputs/` 或 `outputs_adaptive_final_v2/` 磁盘工件中检查 `fnn_training_history.csv` / `rl_training_history.csv` 的 `test_*` 验收列。
 
 正式对比应运行默认 48/16 配置，并至少增加 5 个随机种子，报告均值、标准差、95% 置信区间以及每个部署验收门的通过率。真实设备上线前，还必须用 BMS/台架数据校准 3R2C/FOPDT、最低频率和启停约束，并把 Python 执行器约束同步到 MCU 安全层。

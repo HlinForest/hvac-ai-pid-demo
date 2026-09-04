@@ -10,6 +10,7 @@ import numpy as np
 from hvac_pid.advanced_tuning import (
     LLMSupervisoryTuner,
     OllamaPIDProposer,
+    OpenAICompatibleChatProposer,
     OpenAIResponsesPIDProposer,
     PhysicsInformedHeuristicProposer,
     RiskAwareSafeBOTuner,
@@ -18,6 +19,7 @@ from hvac_pid.advanced_tuning import (
 )
 from hvac_pid.config import sample_adaptive_scenarios
 from hvac_pid.controllers import identify_fopdt, imc_pi
+from hvac_pid.env import load_project_env
 from hvac_pid.tuning import tune_global_fixed, tune_global_imc_lambda
 
 
@@ -43,6 +45,8 @@ def _provider(args: argparse.Namespace):
         return OpenAIResponsesPIDProposer(args.llm_model, base_url=args.llm_base_url or "https://api.openai.com/v1")
     if args.llm_provider == "ollama":
         return OllamaPIDProposer(args.llm_model, base_url=args.llm_base_url or "http://localhost:11434")
+    if args.llm_provider == "openai-compatible":
+        return OpenAICompatibleChatProposer(args.llm_model, base_url=args.llm_base_url, api_key_env=args.llm_api_key_env)
     return None
 
 
@@ -53,13 +57,22 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--test-samples", type=int, default=8)
     parser.add_argument("--safe-bo-iterations", type=int, default=8)
     parser.add_argument("--llm-rounds", type=int, default=6)
-    parser.add_argument("--llm-provider", choices=("none", "heuristic", "openai", "ollama"), default="heuristic")
-    parser.add_argument("--llm-model", default="", help="required for openai/ollama; never silently chooses a model")
+    parser.add_argument(
+        "--llm-provider",
+        choices=("none", "heuristic", "openai", "ollama", "openai-compatible"),
+        default="heuristic",
+    )
+    parser.add_argument("--llm-model", default="", help="required for openai/ollama/openai-compatible; never silently chooses a model")
     parser.add_argument("--llm-base-url", default="")
+    parser.add_argument(
+        "--llm-api-key-env",
+        default="",
+        help="environment variable holding the API key for openai-compatible; default DASHSCOPE_API_KEY",
+    )
     parser.add_argument("--seed", type=int, default=41)
     parser.add_argument("--quick", action="store_true")
     args = parser.parse_args()
-    if args.llm_provider in {"openai", "ollama"} and not args.llm_model:
+    if args.llm_provider in {"openai", "ollama", "openai-compatible"} and not args.llm_model:
         parser.error("--llm-model is required for a real LLM provider")
     if args.quick:
         args.train_samples, args.test_samples = 7, 4
@@ -68,6 +81,7 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
+    load_project_env()
     args = parse_args()
     output = args.output
     output.mkdir(parents=True, exist_ok=True)

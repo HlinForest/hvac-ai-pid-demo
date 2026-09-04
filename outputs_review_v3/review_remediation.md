@@ -21,5 +21,5 @@
 |E1|全量测试入口|已闭环|`pytest.ini`|统一使用pytest并包含Python、HTML和嵌入式测试|
 |E2|训练验证测试隔离|已闭环|`dataset_manifest.csv`|默认48/16/16，并对每个工况写入SHA-256且拒绝重复|
 |E3|报告fail-open|已闭环|`report.py`|缺失、NaN、非法验收值一律判为未通过|
-|E4|加速演示时间基准|已闭环|`testbench.cpp`|PI和调度使用明确物理时间；页面单独显示墙钟与模拟时间|
+|E4|加速演示时间基准|已闭环|`testbench.cpp / mcu_validation_summary.csv`|PI积分、限幅器与监督误差率统一使用200×模拟时间（与ESP32固件一致）；SIL判据含未覆盖回退占比≤10%门，实测0/190|
 |E5|策略导出与CRC|已闭环|`policy_parity_vectors.csv`|CRC v3覆盖固件执行字段并完成Python/C++逐向量一致性|

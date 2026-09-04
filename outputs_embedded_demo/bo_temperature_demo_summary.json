@@ -1,0 +1,23 @@
+{
+  "algorithm": "bo",
+  "display_name": "普通贝叶斯优化固定 PI",
+  "kp_initial": 0.588236022016932,
+  "ki_initial": 0.005270965473652878,
+  "kp_final": 0.588236022016932,
+  "ki_final": 0.005270965473652878,
+  "first_in_band_minute": 34.0,
+  "stable_first_minute": 142.0,
+  "door_event_minute": 189.0,
+  "door_recovery_minutes": 44.0,
+  "final_temperature_c": 23.651215115025323,
+  "objective": 51.38283911556781,
+  "max_overheat_c": 6.201623275256168,
+  "max_undershoot_c": 1.4299900085436867,
+  "control_movement": 10.020000000000001,
+  "stable": 1,
+  "fallback_used": 0,
+  "description": "上位机离线搜索固定 Kp/Ki，部署后不再在线探索。",
+  "source": "offline bounded Bayesian optimization artifact",
+  "deployment_accepted": 1,
+  "provider": "not_applicable"
+}

@@ -1,0 +1,23 @@
+{
+  "algorithm": "zn",
+  "display_name": "Z-N 反应曲线法",
+  "kp_initial": 0.45082372186615355,
+  "ki_initial": 0.003076518486521097,
+  "kp_final": 0.45082372186615355,
+  "ki_final": 0.003076518486521097,
+  "first_in_band_minute": 34.0,
+  "stable_first_minute": 115.0,
+  "door_event_minute": 189.0,
+  "door_recovery_minutes": 42.0,
+  "final_temperature_c": 24.02822863157463,
+  "objective": 46.06719212739383,
+  "max_overheat_c": 6.201623275256168,
+  "max_undershoot_c": 1.0043998863303045,
+  "control_movement": 5.640000000000001,
+  "stable": 1,
+  "fallback_used": 1,
+  "description": "上位机辨识后按经验公式计算固定增益，ESP32 只执行安全 PI。",
+  "source": "FOPDT identification + Z-N formula; candidate rejected by visible commissioning gate, IMC fallback deployed",
+  "deployment_accepted": 0,
+  "provider": "not_applicable"
+}

@@ -1,0 +1,23 @@
+{
+  "algorithm": "fnn",
+  "display_name": "FNN 规则自整定",
+  "kp_initial": 0.45082372186615355,
+  "ki_initial": 0.003076518486521097,
+  "kp_final": 0.45082372186615355,
+  "ki_final": 0.003076518486521097,
+  "first_in_band_minute": 34.0,
+  "stable_first_minute": 115.0,
+  "door_event_minute": 189.0,
+  "door_recovery_minutes": 42.0,
+  "final_temperature_c": 24.02822863157463,
+  "objective": 46.06719212739383,
+  "max_overheat_c": 6.201623275256168,
+  "max_undershoot_c": 1.0043998863303045,
+  "control_movement": 5.640000000000001,
+  "stable": 1,
+  "fallback_used": 1,
+  "description": "ESP32 每 2 s 用误差和误差变化率插值四条规则；未通过验收时只做影子计算。",
+  "source": "rejected FNN candidate in shadow mode + IMC fallback",
+  "deployment_accepted": 0,
+  "provider": "not_applicable"
+}

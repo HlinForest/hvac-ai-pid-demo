@@ -48,3 +48,13 @@ outputs_adaptive_final_v2/learning_document/figures/
 .idea/
 .DS_Store
 Thumbs.db
+
+# Local API credentials (DASHSCOPE_API_KEY etc.); .env.example is the template.
+.env
+
+# md2docx formula render cache (regenerated on every conversion)
+reports/figures/equations/
+
+# local edit backups and Word lock files
+reports/分报告/.bak_*/
+reports/分报告/~$*

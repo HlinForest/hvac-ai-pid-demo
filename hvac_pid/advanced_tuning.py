@@ -313,6 +313,22 @@ def _parse_proposal(text: str) -> LLMGainProposal:
     )
 
 
+def _post_llm_json(url: str, payload: dict[str, object], *, api_key: str | None = None, timeout_s: float) -> dict[str, object]:
+    """Shared HTTP transport for every LLM provider.
+
+    One tested seam for request construction, the optional bearer header,
+    the timeout and JSON parsing.  Each provider only shapes its payload and
+    interprets the response body; it never touches urlopen directly.
+    """
+
+    headers = {"Content-Type": "application/json"}
+    if api_key:
+        headers["Authorization"] = f"Bearer {api_key}"
+    req = request.Request(url, data=json.dumps(payload).encode("utf-8"), headers=headers, method="POST")
+    with request.urlopen(req, timeout=timeout_s) as response:  # noqa: S310 - configured endpoint
+        return json.loads(response.read().decode("utf-8"))
+
+
 class OpenAIResponsesPIDProposer:
     """OpenAI Responses API adapter; credentials are read only at call time."""
 
@@ -338,14 +354,7 @@ class OpenAIResponsesPIDProposer:
             "text": {"format": {"type": "json_schema", "name": "pi_gain_proposal", "strict": True, "schema": _PROPOSAL_SCHEMA}},
             "max_output_tokens": 500,
         }
-        req = request.Request(
-            f"{self.base_url}/responses",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            method="POST",
-        )
-        with request.urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310 - configured API endpoint
-            body = json.loads(response.read().decode("utf-8"))
+        body = _post_llm_json(f"{self.base_url}/responses", payload, api_key=api_key, timeout_s=self.timeout_s)
         text = body.get("output_text", "")
         if not text:
             for item in body.get("output", []):
@@ -374,10 +383,57 @@ class OllamaPIDProposer:
                 {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
             ],
         }
-        req = request.Request(f"{self.base_url}/api/chat", data=json.dumps(payload).encode(), headers={"Content-Type": "application/json"}, method="POST")
-        with request.urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310 - user-selected local endpoint
-            body = json.loads(response.read().decode("utf-8"))
+        body = _post_llm_json(f"{self.base_url}/api/chat", payload, timeout_s=self.timeout_s)
         return _parse_proposal(body["message"]["content"])
+
+
+class OpenAICompatibleChatProposer:
+    """OpenAI-compatible /chat/completions proposer; defaults target Alibaba Bailian (DashScope)."""
+
+    default_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    default_api_key_env = "DASHSCOPE_API_KEY"
+
+    def __init__(
+        self,
+        model: str,
+        *,
+        base_url: str = "",
+        api_key_env: str = "",
+        timeout_s: float = 60.0,
+    ) -> None:
+        if not model:
+            raise ValueError("an explicit model name is required")
+        self.model = model
+        self.base_url = (base_url or self.default_base_url).rstrip("/")
+        self.api_key_env = api_key_env or self.default_api_key_env
+        self.timeout_s = timeout_s
+        self.name = f"OpenAI-compatible chat/{model}"
+
+    def propose(self, context: dict[str, object]) -> LLMGainProposal:
+        api_key = os.environ.get(self.api_key_env)
+        if not api_key:
+            raise RuntimeError(f"{self.api_key_env} is not set")
+        payload = {
+            "model": self.model,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an offline HVAC PI tuning supervisor. Diagnose metrics and propose one conservative "
+                        "Kp/Ki pair as schema-valid JSON (kp, ki, diagnosis, rationale, confidence). Never propose "
+                        "actuator commands. Stay within supplied bounds and keep each change at or below 10%. "
+                        "A deterministic simulator and safety gate, not you, has final authority."
+                    ),
+                },
+                {"role": "user", "content": json.dumps(context, ensure_ascii=False)},
+            ],
+        }
+        body = _post_llm_json(f"{self.base_url}/chat/completions", payload, api_key=api_key, timeout_s=self.timeout_s)
+        content = body.get("choices", [{}])[0].get("message", {}).get("content", "")
+        if not content:
+            raise RuntimeError("chat/completions returned no message content")
+        return _parse_proposal(content)
 
 
 class PhysicsInformedHeuristicProposer:
@@ -625,14 +681,7 @@ class OpenAIResponsesPIDAgentPolicy:
             "parallel_tool_calls": False,
             "max_output_tokens": 500,
         }
-        req = request.Request(
-            f"{self.base_url}/responses",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            method="POST",
-        )
-        with request.urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310 - configured official endpoint
-            body = json.loads(response.read().decode("utf-8"))
+        body = _post_llm_json(f"{self.base_url}/responses", payload, api_key=api_key, timeout_s=self.timeout_s)
         for item in body.get("output", []):
             if item.get("type") == "function_call":
                 return _agent_action_from_function_call(item)
@@ -675,17 +724,70 @@ class OllamaPIDAgentPolicy:
             ],
             "tools": ollama_tools,
         }
-        req = request.Request(
-            f"{self.base_url}/api/chat",
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
-            method="POST",
-        )
-        with request.urlopen(req, timeout=self.timeout_s) as response:  # noqa: S310 - user-selected local endpoint
-            body = json.loads(response.read().decode("utf-8"))
+        body = _post_llm_json(f"{self.base_url}/api/chat", payload, timeout_s=self.timeout_s)
         calls = body.get("message", {}).get("tool_calls", [])
         if not calls:
             raise RuntimeError("Ollama agent returned no tool call")
+        return _agent_action_from_function_call(calls[0].get("function", {}))
+
+
+class OpenAICompatibleChatAgentPolicy:
+    """/chat/completions function-calling policy; defaults target Alibaba Bailian (DashScope)."""
+
+    default_base_url = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    default_api_key_env = "DASHSCOPE_API_KEY"
+
+    def __init__(
+        self,
+        model: str,
+        *,
+        base_url: str = "",
+        api_key_env: str = "",
+        timeout_s: float = 60.0,
+    ) -> None:
+        if not model:
+            raise ValueError("an explicit model name is required")
+        self.model = model
+        self.base_url = (base_url or self.default_base_url).rstrip("/")
+        self.api_key_env = api_key_env or self.default_api_key_env
+        self.timeout_s = timeout_s
+        self.name = f"OpenAI-compatible chat tool agent/{model}"
+
+    def decide(self, state: dict[str, object]) -> AgentAction:
+        api_key = os.environ.get(self.api_key_env)
+        if not api_key:
+            raise RuntimeError(f"{self.api_key_env} is not set")
+        chat_tools = [
+            {
+                "type": "function",
+                "function": {
+                    "name": tool["name"],
+                    "description": tool["description"],
+                    "parameters": tool["parameters"],
+                },
+            }
+            for tool in _AGENT_TOOLS
+        ]
+        payload = {
+            "model": self.model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are an offline HVAC PI auto-tuning agent. Choose exactly one provided function tool. "
+                        "Use inspect_history when evidence is insufficient, evaluate_candidate for one conservative experiment, "
+                        "and finish when the remaining budget is not worth the risk. Never output actuator commands. "
+                        "The deterministic host clamps gains and has sole authority to accept, reject, deploy, or fall back."
+                    ),
+                },
+                {"role": "user", "content": json.dumps(state, ensure_ascii=False)},
+            ],
+            "tools": chat_tools,
+        }
+        body = _post_llm_json(f"{self.base_url}/chat/completions", payload, api_key=api_key, timeout_s=self.timeout_s)
+        calls = body.get("choices", [{}])[0].get("message", {}).get("tool_calls", [])
+        if not calls:
+            raise RuntimeError("chat/completions agent returned no tool call")
         return _agent_action_from_function_call(calls[0].get("function", {}))
 
 

@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 import csv
+import shutil
+import subprocess
+import sys
 from dataclasses import asdict
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 from embedded.export_policy import _accepted, _manifest_crc
 from hvac_pid.ai_controllers import FNNGainController, IncrementalRLController, _state_local_samples
 from hvac_pid.config import Scenario, sample_adaptive_scenarios
 from hvac_pid.pipeline import _dataset_manifest_rows
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def test_three_way_manifest_has_stable_unique_hashes() -> None:
@@ -93,3 +100,30 @@ def test_manifest_crc_v3_covers_every_deployed_category() -> None:
         crc(policy=changed_policy),
         crc(covered=changed_covered),
     }) == 8
+
+
+def test_pc_sil_enforces_rl_coverage_gate(tmp_path: Path) -> None:
+    # End-to-end: rebuild the PC SIL testbench, run it, and require the
+    # RL uncovered-fallback gate (<=10%) in the summary and the exit code.
+    # A supervisory-interval time-base regression (wall vs simulated time)
+    # pushes the fallback fraction to ~83% and must fail this test.
+    if shutil.which("g++") is None:
+        pytest.skip("g++ unavailable on this runner")
+    parity_source = ROOT / "outputs_review_v3" / "policy_parity_vectors.csv"
+    if not parity_source.exists():
+        pytest.skip("policy parity vectors not generated")
+    shutil.copy2(parity_source, tmp_path / "policy_parity_vectors.csv")
+    result = subprocess.run(
+        [sys.executable, str(ROOT / "embedded" / "run_mcu_validation.py"),
+         "--artifact-dir", str(tmp_path)],
+        capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
+    )
+    assert result.returncode == 0, result.stdout[-2000:]
+    with (tmp_path / "mcu_validation_summary.csv").open("r", encoding="utf-8-sig", newline="") as handle:
+        rows = list(csv.DictReader(handle))
+    assert len(rows) == 1
+    row = rows[0]
+    assert row["结果"] == "PASS"
+    assert row["RL覆盖率门结果"] == "PASS"
+    assert float(row["RL未覆盖回退占比百分比"]) <= float(row["RL覆盖率门_百分比"])
+    assert row["Python_CPP一致性结果"] == "PASS"

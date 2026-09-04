@@ -14,6 +14,15 @@ const int PIN_SETPOINT=PA0, PIN_DOOR=PB11, PIN_PWM=PB0, PIN_FALLBACK=PB1;
 constexpr bool USE_RL_POLICY=false;
 constexpr uint32_t PID_PERIOD_MS=100;
 constexpr uint32_t AI_DIVIDER=20;  // 20 * 100 ms = 2 s
+// Accelerated demo timing (matches the ESP32 firmware and the PC testbench):
+// the control task runs every 100 ms of *wall* time, but each tick advances
+// the virtual plant by kDemoPhysicalDtSeconds of *simulated* time (200x).
+// The PI integrator, the compressor slew/dwell constraints and the
+// supervisory error rate all have to use simulated time; mixing wall time
+// into any of them scales that term by 200x and silently detunes the loop.
+constexpr float kDemoPhysicalDtSeconds=20.0f;
+constexpr float kSimMinutesPerTick=kDemoPhysicalDtSeconds/60.0f;
+constexpr float kAiIntervalSimMinutes=(AI_DIVIDER*kDemoPhysicalDtSeconds)/60.0f;
 
 Gains fallback_gains=kFactoryFallbackGains;
 SafePI controller(kFactoryFallbackGains);
@@ -21,7 +30,6 @@ CompressorLimiter limiter;
 VirtualHVACPlant plant;
 uint32_t next_pid_ms=0, tick_count=0;
 float previous_ai_error=0.0f;
-uint32_t previous_ai_ms=0;
 bool ai_state_initialized=false;
 uint32_t worst_pi_us=0, worst_ai_us=0;
 
@@ -45,9 +53,9 @@ void control_tick() {
   const float error=plant.temperature()-setpoint;
 
   if (tick_count%AI_DIVIDER==0) {
-    const uint32_t now_ms=millis();
-    const float elapsed_minutes=ai_state_initialized?static_cast<float>(now_ms-previous_ai_ms)/60000.0f:0.0f;
-    const float error_rate=ai_state_initialized?(error-previous_ai_error)/fmaxf(elapsed_minutes,1.0e-6f):0.0f;
+    // Error rate in degC per *simulated* minute over the supervisory
+    // interval, the same unit the FNN centres and RL edges were trained in.
+    const float error_rate=ai_state_initialized?(error-previous_ai_error)/kAiIntervalSimMinutes:0.0f;
     const uint32_t started=micros();
     if (USE_RL_POLICY) {
       bool covered=false;
@@ -61,16 +69,15 @@ void control_tick() {
     const uint32_t elapsed=micros()-started;
     if (elapsed>worst_ai_us) worst_ai_us=elapsed;
     previous_ai_error=error;
-    previous_ai_ms=now_ms;
     ai_state_initialized=true;
   }
 
   const uint32_t started=micros();
-  const float requested=controller.update(error,PID_PERIOD_MS/1000.0f);
-  const float command=limiter.update(requested,PID_PERIOD_MS/1000.0f);
+  const float requested=controller.update(error,kDemoPhysicalDtSeconds);
+  const float command=limiter.update(requested,kDemoPhysicalDtSeconds);
   const uint32_t elapsed=micros()-started;
   if (elapsed>worst_pi_us) worst_pi_us=elapsed;
-  plant.step(command,door_open);
+  plant.step(command,door_open,kSimMinutesPerTick);
   analogWrite(PIN_PWM,static_cast<int>(255.0f*command));
   const Diagnostics d=controller.diagnostics();
   digitalWrite(PIN_FALLBACK,d.fallback_active?HIGH:LOW);

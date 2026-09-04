@@ -130,6 +130,23 @@ $env:OPENAI_API_KEY="你的密钥"
 python run_llm_agent_demo.py --provider openai --model "明确指定的模型名" --output outputs_llm_agent_openai
 ```
 
+阿里云百炼（DashScope OpenAI 兼容模式，`/chat/completions` 端点）。密钥推荐写入项目根目录 `.env`（模板见 `.env.example`，已被 gitignore，不会提交；也可用环境变量，真实环境变量优先于 `.env`）：
+
+```powershell
+# 二选一：写入 .env（DASHSCOPE_API_KEY=sk-...），或设置环境变量后直接运行
+$env:DASHSCOPE_API_KEY="你的百炼API-KEY"
+python run_llm_agent_demo.py --provider openai-compatible --model qwen-plus --output outputs_llm_agent_bailian
+# 监督整定基准同样支持：
+python run_advanced_tuning_benchmark.py --llm-provider openai-compatible --llm-model qwen-plus
+```
+
+其他 OpenAI 兼容服务商（DeepSeek、Kimi 等）通过 `--base-url` 和 `--api-key-env` 覆盖，例如：
+
+```powershell
+$env:DEEPSEEK_API_KEY="你的密钥"
+python run_llm_agent_demo.py --provider openai-compatible --model deepseek-chat --base-url https://api.deepseek.com/v1 --api-key-env DEEPSEEK_API_KEY
+```
+
 程序不会默认猜模型名。调用会产生费用。使用本地 Ollama：
 
 ```powershell

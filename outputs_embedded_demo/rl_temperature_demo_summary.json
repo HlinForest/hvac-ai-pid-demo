@@ -1,0 +1,23 @@
+{
+  "algorithm": "rl",
+  "display_name": "RL 冻结策略自整定",
+  "kp_initial": 0.4959060940527689,
+  "ki_initial": 0.0027688666378689877,
+  "kp_final": 0.5860708384259996,
+  "ki_final": 0.0023073888648908226,
+  "first_in_band_minute": 34.0,
+  "stable_first_minute": 76.0,
+  "door_event_minute": 189.0,
+  "door_recovery_minutes": 24.0,
+  "final_temperature_c": 24.045720702707737,
+  "objective": 44.4148307600807,
+  "max_overheat_c": 6.201623275256168,
+  "max_undershoot_c": 0.9592354994486172,
+  "control_movement": 5.91,
+  "stable": 1,
+  "fallback_used": 0,
+  "description": "训练在虚拟对象上完成，ESP32 只查冻结策略，不进行随机探索。",
+  "source": "validated frozen RL policy",
+  "deployment_accepted": 1,
+  "provider": "not_applicable"
+}

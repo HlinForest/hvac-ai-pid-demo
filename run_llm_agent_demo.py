@@ -13,6 +13,7 @@ from hvac_pid.embedded_demo import (
     write_interactive_html,
     write_trace_csv,
 )
+from hvac_pid.env import load_project_env
 
 
 ROOT = Path(__file__).resolve().parent
@@ -20,8 +21,22 @@ ROOT = Path(__file__).resolve().parent
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Tool-using LLM Agent HVAC PI auto-tuning demo")
-    parser.add_argument("--provider", choices=("replay", "ollama", "openai"), default="replay")
-    parser.add_argument("--model", default="", help="required for OpenAI; optional Ollama override")
+    parser.add_argument(
+        "--provider",
+        choices=("replay", "ollama", "openai", "openai-compatible"),
+        default="replay",
+    )
+    parser.add_argument("--model", default="", help="required for OpenAI/openai-compatible; optional Ollama override")
+    parser.add_argument(
+        "--base-url",
+        default="",
+        help="openai-compatible endpoint override; default is Alibaba Bailian (DashScope) compatible mode",
+    )
+    parser.add_argument(
+        "--api-key-env",
+        default="",
+        help="environment variable holding the API key for openai-compatible; default DASHSCOPE_API_KEY",
+    )
     parser.add_argument("--setpoint", type=float, default=24.0)
     parser.add_argument("--door-load", type=float, default=3200.0)
     parser.add_argument("--seed", type=int, default=71)
@@ -31,6 +46,7 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
+    load_project_env(ROOT)
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     trace = run_algorithm_demo(
@@ -39,6 +55,8 @@ def main() -> None:
         scenario=demo_scenario(setpoint_c=args.setpoint, door_load_w=args.door_load),
         provider=args.provider,
         model=args.model,
+        base_url=args.base_url,
+        api_key_env=args.api_key_env,
         seed=args.seed,
     )
     html_path = output / "llm_agent_temperature_demo.html"

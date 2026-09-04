@@ -1,0 +1,2 @@
+﻿step,provider,tool,decision
+1,OpenAI-compatible chat tool agent/qwen-plus,provider_error,agent provider error: URLError: <urlopen error Tunnel connection failed: 502 Bad Gateway>

@@ -79,6 +79,18 @@ def main() -> int:
                 flags_ok = flags_ok and int(wanted_values[8]) == int(numeric_actual[8])
             parity_max_error = max(errors, default=0.0)
             parity_pass = flags_ok and parity_max_error <= 1e-5
+    # Gate: the testbench fails the run when the RL uncovered-state fallback
+    # fraction exceeds 10% (systematic state-grid misses, e.g. a time-base
+    # bug).  Re-derive the fraction here so the summary and the exit code both
+    # fail closed even if the testbench binary were stale or hand-edited.
+    fallback_events = extract(r"RL uncovered-state fallbacks=(\d+)/", log)
+    rl_calls = extract(r"RL uncovered-state fallbacks=\d+/(\d+)", log)
+    fallback_fraction_pct = None
+    if fallback_events and rl_calls:
+        fallback_fraction_pct = 100.0 * int(fallback_events) / int(rl_calls)
+    rl_coverage_gate_pct = 10.0
+    rl_coverage_pass = fallback_fraction_pct is not None and fallback_fraction_pct <= rl_coverage_gate_pct
+
     summary = {
         "验证层级": "PC 软件在环（不是 STM32/ESP32 目标板实测）",
         "结果": extract(r"MCU_SIL (PASS|FAIL)", log, "FAIL"),
@@ -88,6 +100,11 @@ def main() -> int:
         "SafePI状态字节_PC_ABI": extract(r"sizeof\(SafePI\)=(\d+) bytes", log),
         "虚拟对象状态字节_PC_ABI": extract(r"sizeof\(VirtualHVACPlant\)=(\d+) bytes", log),
         "RL未覆盖回退次数": extract(r"RL uncovered-state fallbacks=(\d+)", log),
+        "RL未覆盖回退占比百分比": (
+            round(fallback_fraction_pct, 4) if fallback_fraction_pct is not None else "nan"
+        ),
+        "RL覆盖率门_百分比": rl_coverage_gate_pct,
+        "RL覆盖率门结果": "PASS" if rl_coverage_pass else "FAIL",
         "NaN回退次数": extract(r"NaN fallback=(\d+)", log),
         "策略清单版本": "3" if extract(r"manifest v3=(\d+)", log) == "1" else "INVALID",
         "Python_CPP一致性向量": len(parity_rows),
@@ -106,7 +123,12 @@ def main() -> int:
 
     print(log, end="")
     print(f"验证摘要: {evidence_dir / 'mcu_validation_summary.csv'}")
-    return 0 if run_result.returncode == 0 and summary["结果"] == "PASS" and parity_pass else 1
+    return 0 if (
+        run_result.returncode == 0
+        and summary["结果"] == "PASS"
+        and parity_pass
+        and rl_coverage_pass
+    ) else 1
 
 
 if __name__ == "__main__":

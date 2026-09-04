@@ -8,8 +8,23 @@
 
 int main() {
   using namespace hvac_mcu;
-  constexpr float kPidDtSeconds=0.1f;
+  // Accelerated demo timing (matches the ESP32 firmware): the control task
+  // runs every 100 ms of *wall* time, but each tick advances the virtual plant
+  // by kDemoPhysicalDtSeconds of *simulated* time (200x).  The PI integrator,
+  // the compressor slew/dwell constraints and the supervisory error rate
+  // therefore all have to use simulated time; mixing wall time into any of
+  // them scales that term by 200x and silently detunes the loop.
+  constexpr float kDemoPhysicalDtSeconds=20.0f;
+  constexpr float kSimMinutesPerTick=kDemoPhysicalDtSeconds/60.0f;
   constexpr int kAiDivider=20;
+  constexpr float kAiIntervalSimMinutes=kAiDivider*kSimMinutesPerTick;
+  // Gate: the exported RL policy covers 46/75 (state x command) cells.  A
+  // correctly time-based loop stays inside covered states almost always.  A
+  // fallback ratio above 10% means the state grid is being missed
+  // systematically - for example a supervisory-interval time-base bug - so the
+  // run must FAIL even though every individual fallback is itself a safe
+  // transition.
+  constexpr double kMaxRlFallbackFraction=0.10;
   const bool manifest_ok=policy_manifest_valid();
   const Gains fallback=manifest_ok?Gains{generated::kFallbackKp,generated::kFallbackKi}:kFactoryFallbackGains;
   SafePI controller(fallback);
@@ -25,7 +40,9 @@ int main() {
     const bool door_open=tick>=240&&tick<280;
     const float error=plant.temperature()-setpoint;
     if (tick%kAiDivider==0) {
-      const float error_rate=ai_calls==0?0.0f:(error-previous_ai_error)/(kAiDivider*kPidDtSeconds/60.0f);
+      // Error rate in degC per *simulated* minute over the supervisory
+      // interval, the same unit the FNN centres and RL edges were trained in.
+      const float error_rate=ai_calls==0?0.0f:(error-previous_ai_error)/kAiIntervalSimMinutes;
       const auto begin=std::chrono::steady_clock::now();
       if (tick<200) controller.apply_proposal(fnn_gains(error,error_rate),manifest_ok&&generated::kFnnAccepted);
       else {
@@ -40,15 +57,19 @@ int main() {
       ++ai_calls;
     }
     const auto begin=std::chrono::steady_clock::now();
-    const float requested=controller.update(error,kPidDtSeconds);
-    command=limiter.update(requested,kPidDtSeconds);
+    const float requested=controller.update(error,kDemoPhysicalDtSeconds);
+    command=limiter.update(requested,kDemoPhysicalDtSeconds);
     const auto end=std::chrono::steady_clock::now();
     worst_pi_ns=std::max(worst_pi_ns,std::chrono::duration_cast<std::chrono::nanoseconds>(end-begin).count());
     bounded=bounded&&command>=0.0f&&command<=1.0f;
-    plant.step(command,door_open);
+    plant.step(command,door_open,kSimMinutesPerTick);
   }
   controller.apply_proposal({std::numeric_limits<float>::quiet_NaN(),0.01f});
   const Diagnostics d=controller.diagnostics();
+  const int rl_calls=ai_calls-10;  // first 10 AI calls exercise the FNN path
+  const double rl_fallback_fraction=
+      rl_calls>0?static_cast<double>(fallback_events)/static_cast<double>(rl_calls):1.0;
+  const bool rl_coverage_ok=rl_fallback_fraction<=kMaxRlFallbackFraction;
   std::cout<<std::setprecision(9);
   const float parity_commands[3]={0.0f,0.35f,0.90f};
   for (float e:generated::kFnnErrorCenters) for (float de:generated::kFnnErrorRateCenters)
@@ -77,15 +98,18 @@ int main() {
     }
     if (std::fabs(profile_plant.temperature()-24.0f)<=0.75f) ++stable_profiles;
   }
-  const bool passed=manifest_ok&&bounded&&ai_calls==200&&d.fallback_active&&valid_profiles==7&&stable_profiles==7;
+  const bool passed=manifest_ok&&bounded&&ai_calls==200&&d.fallback_active&&valid_profiles==7&&stable_profiles==7&&rl_coverage_ok;
   std::cout<<"MCU_SIL "<<(passed?"PASS":"FAIL")<<"\n"
            <<"manifest v3="<<manifest_ok<<"; CRC32="<<std::hex<<generated::kArtifactCrc32
            <<"; computed="<<policy_manifest_crc32()<<std::dec<<"\n"
-           <<"PID period=100ms; AI period=2s; AI calls="<<ai_calls<<"\n"
+           <<"PID period=100ms (sim dt 20s at 200x); AI period=2s wall / "
+           <<kAiIntervalSimMinutes<<" sim-min; AI calls="<<ai_calls<<"\n"
            <<"sizeof(SafePI)="<<sizeof(SafePI)<<" bytes; sizeof(VirtualHVACPlant)="<<sizeof(VirtualHVACPlant)<<" bytes\n"
            <<"worst PI="<<worst_pi_ns<<" ns; worst AI="<<worst_ai_ns<<" ns\n"
            <<"seven profiles valid="<<valid_profiles<<"; stable after 90s demo="<<stable_profiles<<"\n"
            <<"final temperature="<<plant.temperature()<<" C; u="<<command<<"; Kp="<<d.gains.kp<<"; Ki="<<d.gains.ki<<"\n"
-           <<"RL uncovered-state fallbacks="<<fallback_events<<"; NaN fallback="<<d.fallback_active<<"\n";
+           <<"RL uncovered-state fallbacks="<<fallback_events<<"/"<<rl_calls
+           <<" ("<<rl_fallback_fraction*100.0<<"%; gate "<<kMaxRlFallbackFraction*100.0<<"%); "
+           <<"NaN fallback="<<d.fallback_active<<"\n";
   return passed?0:1;
 }

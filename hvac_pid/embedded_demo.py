@@ -13,8 +13,10 @@ import zlib
 import numpy as np
 
 from .advanced_tuning import (
+    AgentPolicy,
     LLMAgentAutoTuner,
     OllamaPIDAgentPolicy,
+    OpenAICompatibleChatAgentPolicy,
     OpenAIResponsesPIDAgentPolicy,
     ReplayPIDAgentPolicy,
     RiskAwareSafeBOTuner,
@@ -90,6 +92,35 @@ def demo_scenario(*, setpoint_c: float = 24.0, door_load_w: float = 3200.0) -> S
         door_open_duration_minutes=15.0,
         door_open_load_w=float(door_load_w),
     )
+
+
+def _commissioning_training_scenarios(scenario: Scenario, *, count: int = 2, seed: int = 0) -> list[Scenario]:
+    """Short variants of the visible commissioning scenario.
+
+    The LLM agent used to tune exclusively on the fixed
+    ``sample_adaptive_scenarios`` curriculum, i.e. it optimised a different
+    distribution from the one it was later deployed on ("blind tuning").
+    Mixing in shortened, jittered variants of the commissioning scenario lets
+    the safety gate judge candidates on the deployment distribution too.
+    """
+
+    rng = np.random.default_rng(seed)
+    variants: list[Scenario] = []
+    for _ in range(max(0, count)):
+        door_hour = scenario.door_open_hour
+        if door_hour is not None:
+            door_hour = float(rng.uniform(1.6, 2.3))
+        variants.append(
+            replace(
+                scenario,
+                duration_hours=3.0,
+                initial_zone_c=float(scenario.initial_zone_c + rng.uniform(-1.5, 1.5)),
+                outdoor_c=float(scenario.outdoor_c + rng.uniform(-1.0, 1.0)),
+                door_open_hour=door_hour,
+                door_open_load_w=float(scenario.door_open_load_w * rng.uniform(0.85, 1.15)),
+            )
+        )
+    return variants
 
 
 def _last_csv(path: Path) -> dict[str, str] | None:
@@ -236,6 +267,169 @@ def _settles_before_disturbance(result: SimulationResult, scenario: Scenario, *,
     return False
 
 
+@dataclass(frozen=True)
+class _DemoContext:
+    """Shared inputs every algorithm preparation may need."""
+
+    root: Path
+    artifact_dir: Path
+    scenario: Scenario
+    model_fopdt: object
+    fallback: tuple[float, float]
+    seed: int
+    provider: str
+    model: str
+    base_url: str
+    api_key_env: str
+
+
+@dataclass(frozen=True)
+class _PreparedDemo:
+    """One algorithm's controller and provenance, before the commissioning gate."""
+
+    controller: PIController
+    source: str
+    deployment_accepted: bool = True
+    forced_fallback: bool = False
+    candidate_result: SimulationResult | None = None
+    agent_trace: tuple[dict[str, object], ...] = ()
+    agent_baseline_gains: tuple[float, float] | None = None
+    agent_deployed_gains: tuple[float, float] | None = None
+
+
+def _prepare_zn(context: _DemoContext) -> _PreparedDemo:
+    return _PreparedDemo(
+        controller=PIController(*ziegler_nichols_pi(context.model_fopdt)),
+        source="FOPDT identification + Z-N formula",
+    )
+
+
+def _prepare_imc(context: _DemoContext) -> _PreparedDemo:
+    return _PreparedDemo(
+        controller=PIController(*context.fallback),
+        source="selected IMC lambda artifact",
+    )
+
+
+def _prepare_bo(context: _DemoContext) -> _PreparedDemo:
+    gains = _advanced_gain(context.root, "ordinary BO")
+    if gains is None:
+        training = sample_adaptive_scenarios(5, seed=context.seed + 10, duration_hours=3.0)
+        tuned = tune_global_fixed(training, iterations=2, seed=context.seed + 11)
+        gains = (tuned.kp, tuned.ki)
+    return _PreparedDemo(
+        controller=PIController(*gains),
+        source="offline bounded Bayesian optimization artifact",
+    )
+
+
+def _prepare_safe_bo(context: _DemoContext) -> _PreparedDemo:
+    gains = _advanced_gain(context.root, "risk-aware safe BO")
+    if gains is None:
+        training = sample_adaptive_scenarios(5, seed=context.seed + 20, duration_hours=3.0)
+        tuned = RiskAwareSafeBOTuner(
+            iterations=3,
+            candidates=256,
+            config=RiskSafetyConfig(repeats=1, max_undershoot_c=4.0),
+        ).tune(training, context.fallback, seed=context.seed + 21)
+        gains = (tuned.kp, tuned.ki)
+    return _PreparedDemo(
+        controller=PIController(*gains),
+        source="RaGoOSE-style risk-aware safe BO artifact",
+    )
+
+
+def _prepare_fnn(context: _DemoContext) -> _PreparedDemo:
+    accepted = _accepted(context.artifact_dir, "fnn_training_history.csv")
+    candidate_path = context.artifact_dir / "fnn_rule_table_candidate.npy"
+    deployed_path = context.artifact_dir / "fnn_rule_table.npy"
+    candidate_table = np.load(candidate_path if candidate_path.exists() else deployed_path)
+    shadow: SimulationResult | None = None
+    if accepted:
+        controller: PIController = FNNGainController(
+            context.fallback, rule_table=np.load(deployed_path), update_interval_seconds=120.0
+        )
+    else:
+        controller = PIController(*context.fallback)
+        shadow = simulate(
+            context.scenario,
+            FNNGainController(context.fallback, rule_table=candidate_table, update_interval_seconds=120.0),
+            seed=context.seed,
+        )
+    return _PreparedDemo(
+        controller=controller,
+        source="validated FNN table" if accepted else "rejected FNN candidate in shadow mode + IMC fallback",
+        deployment_accepted=accepted,
+        forced_fallback=not accepted,
+        candidate_result=shadow,
+    )
+
+
+def _prepare_rl(context: _DemoContext) -> _PreparedDemo:
+    accepted = _accepted(context.artifact_dir, "rl_training_history.csv")
+    table_path = context.artifact_dir / ("rl_q_table.npy" if accepted else "rl_q_table_candidate.npy")
+    if accepted and table_path.exists():
+        controller: PIController = IncrementalRLController(
+            context.fallback, q_table=np.load(table_path), update_interval_seconds=120.0
+        )
+        forced = False
+    else:
+        controller = PIController(*context.fallback)
+        forced = True
+    return _PreparedDemo(
+        controller=controller,
+        source="validated frozen RL policy" if accepted else "RL candidate rejected + IMC fallback",
+        deployment_accepted=accepted,
+        forced_fallback=forced,
+    )
+
+
+def _prepare_llm(context: _DemoContext) -> _PreparedDemo:
+    if context.provider == "replay":
+        policy: AgentPolicy = ReplayPIDAgentPolicy()
+    elif context.provider == "ollama":
+        policy = OllamaPIDAgentPolicy(context.model or "qwen3:0.6b")
+    elif context.provider == "openai":
+        if not context.model:
+            raise ValueError("--model is required for the OpenAI provider")
+        policy = OpenAIResponsesPIDAgentPolicy(context.model)
+    elif context.provider == "openai-compatible":
+        if not context.model:
+            raise ValueError("--model is required for the openai-compatible provider")
+        policy = OpenAICompatibleChatAgentPolicy(context.model, base_url=context.base_url, api_key_env=context.api_key_env)
+    else:
+        raise ValueError("provider must be replay, ollama, openai, or openai-compatible")
+    training = sample_adaptive_scenarios(4, seed=context.seed + 30, duration_hours=3.0)
+    training = training + _commissioning_training_scenarios(context.scenario, count=2, seed=context.seed + 32)
+    tuned = LLMAgentAutoTuner(
+        policy,
+        max_steps=6,
+        max_trials=3,
+        max_change_fraction=0.10,
+        config=RiskSafetyConfig(repeats=2, max_undershoot_c=4.0),
+    ).tune(training, context.fallback, seed=context.seed + 31)
+    return _PreparedDemo(
+        controller=PIController(tuned.kp, tuned.ki),
+        source=policy.name,
+        deployment_accepted=bool(tuned.accepted or not tuned.fallback_used),
+        forced_fallback=bool(tuned.fallback_used),
+        agent_trace=tuned.trace,
+        agent_baseline_gains=(float(context.fallback[0]), float(context.fallback[1])),
+        agent_deployed_gains=(float(tuned.kp), float(tuned.ki)),
+    )
+
+
+_DEMO_PREPARATIONS: dict[str, Callable[[_DemoContext], _PreparedDemo]] = {
+    "zn": _prepare_zn,
+    "imc": _prepare_imc,
+    "bo": _prepare_bo,
+    "safe-bo": _prepare_safe_bo,
+    "fnn": _prepare_fnn,
+    "rl": _prepare_rl,
+    "llm": _prepare_llm,
+}
+
+
 def run_algorithm_demo(
     algorithm: str,
     *,
@@ -243,6 +437,8 @@ def run_algorithm_demo(
     scenario: Scenario | None = None,
     provider: str = "replay",
     model: str = "",
+    base_url: str = "",
+    api_key_env: str = "",
     seed: int = 71,
 ) -> DemoTrace:
     if algorithm not in ALGORITHM_ORDER:
@@ -251,147 +447,100 @@ def run_algorithm_demo(
     scenario = scenario or demo_scenario()
     artifact_dir = root / "outputs_adaptive_final_v2"
     model_fopdt = identify_fopdt(scenario)
-    conservative = imc_pi(model_fopdt)
-    fallback = _selected_imc(artifact_dir, conservative)
-    deployment_accepted = True
-    forced_fallback = False
-    candidate_result: SimulationResult | None = None
-    llm_agent_trace: tuple[dict[str, object], ...] = ()
-    source = "computed for this demo"
-
-    controller: PIController
-    if algorithm == "zn":
-        controller = PIController(*ziegler_nichols_pi(model_fopdt))
-        source = "FOPDT identification + Z-N formula"
-    elif algorithm == "imc":
-        controller = PIController(*fallback)
-        source = "selected IMC lambda artifact"
-    elif algorithm == "bo":
-        gains = _advanced_gain(root, "ordinary BO")
-        if gains is None:
-            training = sample_adaptive_scenarios(5, seed=seed + 10, duration_hours=3.0)
-            tuned = tune_global_fixed(training, iterations=2, seed=seed + 11)
-            gains = (tuned.kp, tuned.ki)
-        controller = PIController(*gains)
-        source = "offline bounded Bayesian optimization artifact"
-    elif algorithm == "safe-bo":
-        gains = _advanced_gain(root, "risk-aware safe BO")
-        if gains is None:
-            training = sample_adaptive_scenarios(5, seed=seed + 20, duration_hours=3.0)
-            tuned = RiskAwareSafeBOTuner(
-                iterations=3,
-                candidates=256,
-                config=RiskSafetyConfig(repeats=1, max_undershoot_c=4.0),
-            ).tune(training, fallback, seed=seed + 21)
-            gains = (tuned.kp, tuned.ki)
-        controller = PIController(*gains)
-        source = "RaGoOSE-style risk-aware safe BO artifact"
-    elif algorithm == "fnn":
-        accepted = _accepted(artifact_dir, "fnn_training_history.csv")
-        deployment_accepted = accepted
-        candidate_path = artifact_dir / "fnn_rule_table_candidate.npy"
-        deployed_path = artifact_dir / "fnn_rule_table.npy"
-        candidate_table = np.load(candidate_path if candidate_path.exists() else deployed_path)
-        if accepted:
-            controller = FNNGainController(fallback, rule_table=np.load(deployed_path), update_interval_seconds=120.0)
-        else:
-            controller = PIController(*fallback)
-            forced_fallback = True
-            candidate_result = simulate(
-                scenario,
-                FNNGainController(fallback, rule_table=candidate_table, update_interval_seconds=120.0),
-                seed=seed,
-            )
-        source = "validated FNN table" if accepted else "rejected FNN candidate in shadow mode + IMC fallback"
-    elif algorithm == "rl":
-        accepted = _accepted(artifact_dir, "rl_training_history.csv")
-        deployment_accepted = accepted
-        table_path = artifact_dir / ("rl_q_table.npy" if accepted else "rl_q_table_candidate.npy")
-        if accepted and table_path.exists():
-            controller = IncrementalRLController(fallback, q_table=np.load(table_path), update_interval_seconds=120.0)
-        else:
-            controller = PIController(*fallback)
-            forced_fallback = True
-        source = "validated frozen RL policy" if accepted else "RL candidate rejected + IMC fallback"
-    else:
-        training = sample_adaptive_scenarios(5, seed=seed + 30, duration_hours=3.0)
-        if provider == "replay":
-            policy = ReplayPIDAgentPolicy()
-        elif provider == "ollama":
-            policy = OllamaPIDAgentPolicy(model or "qwen3:0.6b")
-        elif provider == "openai":
-            if not model:
-                raise ValueError("--model is required for the OpenAI provider")
-            policy = OpenAIResponsesPIDAgentPolicy(model)
-        else:
-            raise ValueError("provider must be replay, ollama, or openai")
-        tuned = LLMAgentAutoTuner(
-            policy,
-            max_steps=6,
-            max_trials=3,
-            max_change_fraction=0.10,
-            config=RiskSafetyConfig(repeats=2, max_undershoot_c=4.0),
-        ).tune(training, fallback, seed=seed + 31)
-        llm_agent_trace = tuned.trace
-        controller = PIController(tuned.kp, tuned.ki)
-        deployment_accepted = bool(tuned.accepted or not tuned.fallback_used)
-        forced_fallback = bool(tuned.fallback_used)
-        source = policy.name
-
-    result = simulate(scenario, controller, seed=seed)
-    # A formula/optimizer/LLM artifact that fails the visible commissioning
-    # scenario may still be shown as a dashed shadow curve, but it is not given
-    # authority over the deployed output.  This keeps all seven demos stable
-    # without pretending that every candidate passed the same safety gate.
-    if algorithm in {"zn", "bo", "safe-bo", "llm"} and not _settles_before_disturbance(result, scenario):
-        candidate_result = result
-        result = simulate(scenario, PIController(*fallback), seed=seed)
-        deployment_accepted = False
-        forced_fallback = True
-        source += "; candidate rejected by visible commissioning gate, IMC fallback deployed"
+    context = _DemoContext(
+        root=root,
+        artifact_dir=artifact_dir,
+        scenario=scenario,
+        model_fopdt=model_fopdt,
+        fallback=_selected_imc(artifact_dir, imc_pi(model_fopdt)),
+        seed=seed,
+        provider=provider,
+        model=model,
+        base_url=base_url,
+        api_key_env=api_key_env,
+    )
+    prepared = _DEMO_PREPARATIONS[algorithm](context)
+    result = simulate(scenario, prepared.controller, seed=seed)
+    # One commissioning gate for every algorithm: the controller must settle
+    # the visible scenario before the door disturbance, or the deterministic
+    # IMC fallback deploys and the candidate survives only as a shadow curve.
+    if not _settles_before_disturbance(result, scenario):
+        prepared = replace(
+            prepared,
+            controller=PIController(*context.fallback),
+            candidate_result=result,
+            deployment_accepted=False,
+            forced_fallback=True,
+            source=prepared.source + "; candidate rejected by visible commissioning gate, IMC fallback deployed",
+        )
+        result = simulate(scenario, prepared.controller, seed=seed)
     rows, summary = _status_rows(
         scenario,
         result,
         algorithm=algorithm,
-        forced_fallback=forced_fallback,
-        candidate_result=candidate_result,
+        forced_fallback=prepared.forced_fallback,
+        candidate_result=prepared.candidate_result,
     )
     summary.update(
         {
             "description": DESCRIPTIONS[algorithm],
-            "source": source,
-            "deployment_accepted": int(deployment_accepted),
+            "source": prepared.source,
+            "deployment_accepted": int(prepared.deployment_accepted),
             "provider": provider if algorithm == "llm" else "not_applicable",
         }
     )
-    evaluated_agent_rows = [row for row in llm_agent_trace if row.get("tool") == "evaluate_candidate"]
+    evaluated_agent_rows = [row for row in prepared.agent_trace if row.get("tool") == "evaluate_candidate"]
     if evaluated_agent_rows:
-        last = evaluated_agent_rows[-1]
+        accepted_rows = [row for row in evaluated_agent_rows if int(row.get("accepted", 0)) == 1]
+        described = accepted_rows[-1] if accepted_rows else evaluated_agent_rows[-1]
+        baseline = prepared.agent_baseline_gains or (float("nan"), float("nan"))
+        deployed = prepared.agent_deployed_gains or (float("nan"), float("nan"))
         summary.update(
             {
-                "llm_raw_kp": float(last["raw_kp"]),
-                "llm_raw_ki": float(last["raw_ki"]),
-                "llm_limited_kp": float(last["limited_kp"]),
-                "llm_limited_ki": float(last["limited_ki"]),
+                "llm_baseline_kp": float(baseline[0]),
+                "llm_baseline_ki": float(baseline[1]),
+                "llm_deployed_kp": float(deployed[0]),
+                "llm_deployed_ki": float(deployed[1]),
+                "llm_final_kp_change_pct": 100.0 * (float(deployed[0]) - float(baseline[0])) / float(baseline[0]),
+                "llm_final_ki_change_pct": 100.0 * (float(deployed[1]) - float(baseline[1])) / float(baseline[1]),
+                "llm_raw_kp": float(described["raw_kp"]),
+                "llm_raw_ki": float(described["raw_ki"]),
+                "llm_limited_kp": float(described["limited_kp"]),
+                "llm_limited_ki": float(described["limited_ki"]),
+                "llm_described_trial": "accepted" if accepted_rows else "last_rejected",
+                "llm_accepted_trials": len(accepted_rows),
                 "llm_diagnosis": "Agent自主选择工具与候选试验",
-                "llm_rationale": str(last.get("reason", "")),
-                "llm_decision": str(last["decision"]),
+                "llm_rationale": str(described.get("reason", "")),
+                "llm_decision": str(described["decision"]),
                 "llm_replay_disclosure": int(provider == "replay"),
-                "llm_agent_steps": len(llm_agent_trace),
+                "llm_agent_steps": len(prepared.agent_trace),
                 "llm_agent_trials": len(evaluated_agent_rows),
+                "llm_trials_log": [
+                    {
+                        "step": row["step"],
+                        "raw_kp": row["raw_kp"],
+                        "raw_ki": row["raw_ki"],
+                        "limited_kp": row["limited_kp"],
+                        "limited_ki": row["limited_ki"],
+                        "improvement_fraction": row.get("improvement_fraction"),
+                        "accepted": row["accepted"],
+                        "decision": row["decision"],
+                    }
+                    for row in evaluated_agent_rows
+                ],
             }
         )
     return DemoTrace(
         algorithm,
         DISPLAY_NAMES[algorithm],
         DESCRIPTIONS[algorithm],
-        source,
+        prepared.source,
         result,
         rows,
         summary,
-        deployment_accepted,
-        forced_fallback,
-        llm_agent_trace,
+        prepared.deployment_accepted,
+        prepared.forced_fallback,
+        prepared.agent_trace,
     )
 
 
@@ -401,6 +550,8 @@ def run_all_demos(
     scenario: Scenario | None = None,
     provider: str = "replay",
     model: str = "",
+    base_url: str = "",
+    api_key_env: str = "",
     seed: int = 71,
 ) -> dict[str, DemoTrace]:
     scenario = scenario or demo_scenario()
@@ -411,6 +562,8 @@ def run_all_demos(
             scenario=scenario,
             provider=provider,
             model=model,
+            base_url=base_url,
+            api_key_env=api_key_env,
             seed=seed,
         )
         for algorithm in ALGORITHM_ORDER
@@ -491,14 +644,14 @@ def _system_diagram_svg() -> str:
     <path d="M156 250H265"/><path d="M365 250H470"/><path d="M600 250H700"/><path d="M850 250H960"/>
     <path d="M1040 300V420H315V300"/><path d="M555 135V205"/><path d="M555 330V295"/>
   </g>
-  <g id="node-host" class="node" fill="#11243a"><rect x="350" y="15" width="410" height="120" fill="#e8f2ff" stroke="#1677ff" stroke-width="2"/><text x="555" y="43">离线调参 / 训练 / Agent 上位机</text><text x="555" y="70" class="small">经典：Z-N · IMC · BO · Safe BO</text><text x="555" y="94" class="small">智能：FNN · RL · LLM Agent</text><text x="555" y="117" class="tiny">仅下发已验收参数或冻结策略</text></g>
-  <g id="node-setpoint" class="node" fill="#11243a"><rect x="30" y="215" width="126" height="70" fill="#ffffff" stroke="#91a4b8" stroke-width="2"/><text x="93" y="246">目标温度 r</text><text x="93" y="270" class="small">例如 24°C</text></g>
-  <g id="node-error" class="node" fill="#11243a"><circle cx="315" cy="250" r="50" fill="#ffffff" stroke="#1677ff" stroke-width="2"/><text x="315" y="245">误差 Σ</text><text x="315" y="270" class="small">e = T-r</text></g>
-  <g id="node-pi" class="node" fill="#11243a"><rect x="470" y="205" width="130" height="90" fill="#e7f6ee" stroke="#17864b" stroke-width="2"/><text x="535" y="242">安全 PI</text><text x="535" y="270" class="small">100 ms</text></g>
-  <g id="node-limiter" class="node" fill="#11243a"><rect x="700" y="200" width="150" height="100" fill="#fff4df" stroke="#e37a12" stroke-width="2"/><text x="775" y="235">压缩机限制器</text><text x="775" y="263" class="small">斜率 · 量化</text><text x="775" y="285" class="small">最低频率 · 启停</text></g>
-  <g id="node-plant" class="node" fill="#11243a"><rect x="960" y="195" width="170" height="110" fill="#e8f2ff" stroke="#1677ff" stroke-width="2"/><text x="1045" y="232">空调 / 虚拟对象</text><text x="1045" y="262" class="small">容量指令 u</text><text x="1045" y="286" class="small">产生室内温度 T</text></g>
-  <g id="node-scheduler" class="node" fill="#11243a"><rect x="440" y="330" width="230" height="65" fill="#f5f8fb" stroke="#7446b8" stroke-width="2"/><text x="555" y="357">FNN / RL 低频调度</text><text x="555" y="381" class="small">只建议 Kp、Ki · 2 s</text></g>
-  <text x="820" y="412" class="feedback" fill="#607086">温度传感器反馈 T</text>
+  <g id="node-host" class="node"><rect x="350" y="15" width="410" height="120" fill="#e8f2ff" stroke="#1677ff" stroke-width="2"/><text x="555" y="43">离线调参 / 训练 / Agent 上位机</text><text x="555" y="70" class="small">经典：Z-N · IMC · BO · Safe BO</text><text x="555" y="94" class="small">智能：FNN · RL · LLM Agent</text><text x="555" y="117" class="tiny">仅下发已验收参数或冻结策略</text></g>
+  <g id="node-setpoint" class="node"><rect x="30" y="215" width="126" height="70" fill="#ffffff" stroke="#91a4b8" stroke-width="2"/><text x="93" y="246">目标温度 r</text><text x="93" y="270" class="small">例如 24°C</text></g>
+  <g id="node-error" class="node"><circle cx="315" cy="250" r="50" fill="#ffffff" stroke="#1677ff" stroke-width="2"/><text x="315" y="245">误差 Σ</text><text x="315" y="270" class="small">e = T-r</text></g>
+  <g id="node-pi" class="node"><rect x="470" y="205" width="130" height="90" fill="#e7f6ee" stroke="#17864b" stroke-width="2"/><text x="535" y="242">安全 PI</text><text x="535" y="270" class="small">100 ms</text></g>
+  <g id="node-limiter" class="node"><rect x="700" y="200" width="150" height="100" fill="#fff4df" stroke="#e37a12" stroke-width="2"/><text x="775" y="235">压缩机限制器</text><text x="775" y="263" class="small">斜率 · 量化</text><text x="775" y="285" class="small">最低频率 · 启停</text></g>
+  <g id="node-plant" class="node"><rect x="960" y="195" width="170" height="110" fill="#e8f2ff" stroke="#1677ff" stroke-width="2"/><text x="1045" y="232">空调 / 虚拟对象</text><text x="1045" y="262" class="small">容量指令 u</text><text x="1045" y="286" class="small">产生室内温度 T</text></g>
+  <g id="node-scheduler" class="node"><rect x="440" y="330" width="230" height="65" fill="#f5f8fb" stroke="#7446b8" stroke-width="2"/><text x="555" y="357">FNN / RL 低频调度</text><text x="555" y="381" class="small">只建议 Kp、Ki · 2 s</text></g>
+  <text x="820" y="412" class="feedback">温度传感器反馈 T</text>
 </svg>"""
 
 
@@ -515,14 +668,14 @@ h1{{margin:0 0 6px;font-size:30px}}h2{{margin:30px 0 12px;font-size:22px}}p{{lin
 .controls{{display:flex;gap:12px;align-items:end;flex-wrap:wrap;padding:12px 0}}label{{font-size:13px;color:var(--muted)}}select,button,input{{font:inherit;padding:8px 12px;border:1px solid var(--line);background:#fff;border-radius:6px}}button{{cursor:pointer}}button.primary{{background:var(--blue);color:#fff;border-color:var(--blue)}}
 .live{{display:grid;grid-template-columns:220px 1fr;gap:22px;align-items:stretch}}.thermo{{background:var(--panel);padding:18px;border-radius:10px}}.temperature{{font-size:42px;font-weight:600;margin:12px 0}}.status{{font-size:18px;color:var(--green)}}.fallback{{color:var(--orange)}}
 .chart-wrap{{position:relative}}svg.chart{{width:100%;height:auto;background:#fff;border:1px solid var(--line)}}.axis{{stroke:var(--muted);stroke-width:1}}.grid{{stroke:var(--line);stroke-width:1}}.tick{{font-size:12px;fill:var(--muted)}}
-#system-diagram{{display:block;width:100%;height:auto;background:var(--panel);border-radius:10px}}#system-diagram .node rect,#system-diagram .node circle{{fill:#fff;stroke:#91a4b8;stroke-width:2}}#system-diagram text{{font-size:17px;text-anchor:middle;fill:var(--ink)}}#system-diagram .small{{font-size:13px;fill:var(--muted)}}#system-diagram .tiny{{font-size:12px;fill:var(--muted)}}#system-diagram .feedback{{font-size:12px;fill:var(--muted)}}#system-diagram .active rect,#system-diagram .active circle{{stroke:var(--blue);stroke-width:5;fill:#e8f2ff}}
+#system-diagram{{display:block;width:100%;height:auto;background:var(--panel);border-radius:10px}}#system-diagram .node rect,#system-diagram .node circle{{fill:#fff;stroke:#91a4b8;stroke-width:2}}#system-diagram .active rect,#system-diagram .active circle{{stroke:var(--blue);stroke-width:5;fill:#e8f2ff}}.feedback-steps{{color:var(--muted);margin-top:10px}}
 .summary{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}.summary>div{{border-top:3px solid var(--blue);padding:12px;background:var(--panel)}}.summary strong{{display:block;font-size:22px;margin-top:6px}}.notice{{padding:12px 16px;background:#fff4df;border-left:4px solid var(--orange)}}
 .legend{{display:flex;gap:15px;flex-wrap:wrap;font-size:13px;color:var(--muted);margin:8px 0}}.swatch{{display:inline-block;width:18px;height:3px;margin-right:5px;vertical-align:middle}}
 table{{border-collapse:collapse;width:100%;font-size:14px}}th,td{{padding:8px;border-bottom:1px solid var(--line);text-align:left}}th{{background:var(--panel)}}
 @media(max-width:760px){{.live{{grid-template-columns:1fr}}.summary{{grid-template-columns:1fr 1fr}}main{{padding:14px}}}}
 </style></head><body><main>
 <h1>{html.escape(title)}</h1><p class="lead">直接观察被控温度从 30°C 接近目标、进入 ±0.5°C 稳定带，并在开门扰动后恢复。90 秒墙钟时间对应 5 小时模拟物理时间；这不是实际设备降温速度。</p>
-<h2>完整温度反馈闭环</h2>{_system_diagram_svg()}
+<h2>完整温度反馈闭环</h2>{_system_diagram_svg()}<p class="feedback-steps">闭环路径：测温 → 与目标相减得误差 → 安全 PI 计算容量请求 → 压缩机限制器处理斜率、量化、最低频率与启停 → 空调改变室内温度 → 再次测温。FNN / RL 每 2 秒只建议 Kp / Ki；LLM Agent 只在上位机调用仿真工具，不进入 100 ms 实时环。</p>
 <div class="controls"><label>算法<br><select id="algorithm">{options}<option value="all">七算法同场比较</option></select></label><button class="primary" id="play">开始</button><button id="pause">暂停</button><button id="reset">复位</button><button id="event">跳到开门扰动</button><label>播放速度<br><select id="speed"><option value="1">1×（约90秒）</option><option value="3" selected>3×</option><option value="10">10×</option></select></label><label style="flex:1;min-width:240px">时间位置<br><input id="scrub" type="range" min="0" max="300" value="0" style="width:100%"></label></div>
 <div class="live"><section class="thermo"><div>当前被控温度</div><div class="temperature" id="temp">-- °C</div><div>目标：<strong id="sp">-- °C</strong></div><div>温差：<strong id="err">-- °C</strong></div><div>容量：<strong id="cmd">-- %</strong></div><div>Kp / Ki：<strong id="gains">--</strong></div><p class="status" id="status">准备开始</p><p id="clock">墙钟 0 s · 模拟 0 min</p></section>
 <section class="chart-wrap"><svg class="chart" id="temperature-chart" viewBox="0 0 960 430" role="img" aria-label="温度、设定值与稳定带随时间变化"></svg><div class="legend" id="legend"></div></section></div>

@@ -56,11 +56,60 @@ def test_html_contains_live_temperature_diagram_and_llm_audit(tmp_path: Path) ->
     # file browser fails to apply the outer page stylesheet.
     assert 'fill="#e7f6ee" stroke="#17864b"' in document
     assert 'fill="#fff4df" stroke="#e37a12"' in document
-    assert 'fill="#11243a"' in document
     assert 'text-anchor: middle' in document
     assert '经典：Z-N · IMC · BO · Safe BO' in document
     assert '>温度传感器反馈 T</text>' in document
-    assert '温度传感器反馈：测温 → 算误差' not in document
+    # The standalone artifact must explain the closed loop on its own, not
+    # only inside the Streamlit wrapper or the invisible aria description.
+    assert '闭环路径：测温 → 与目标相减得误差' in document
+    # One source of truth for diagram text styling: the SVG's own <style>.
+    # A second rule set in the page <head> would silently win or lose on
+    # document order alone (16px vs 17px drift).
+    assert document.count("#system-diagram text") == 1
+    # Presentation attributes that CSS always overrides are dead markup; the
+    # marker arrow keeps its fill because nothing overrides it there.
+    assert 'class="node" fill=' not in document
+    assert 'class="feedback" fill=' not in document
+    assert 'fill="#11243a"/></marker>' in document
+
+
+def test_system_diagram_labels_fit_inside_their_nodes() -> None:
+    import re
+
+    from hvac_pid.embedded_demo import _system_diagram_svg
+
+    svg = _system_diagram_svg()
+    font_by_class = {"small": 13.0, "tiny": 11.0, "feedback": 12.0, "": 16.0}
+
+    def text_width(content: str, font_size: float) -> float:
+        return sum(font_size if ord(char) > 0x2E80 else 0.6 * font_size for char in content)
+
+    checked = 0
+    for match in re.finditer(r'<g id="(node-[^"]+)"[^>]*>(.*?)</g>', svg, re.DOTALL):
+        group_id, body = match.group(1), match.group(2)
+        bounds: list[tuple[float, float, float, float]] = []
+        for rect in re.finditer(
+            r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', body
+        ):
+            x, y, width, height = map(float, rect.groups())
+            bounds.append((x, y, x + width, y + height))
+        for circle in re.finditer(r'<circle cx="([\d.]+)" cy="([\d.]+)" r="([\d.]+)"', body):
+            cx, cy, radius = map(float, circle.groups())
+            bounds.append((cx - radius, cy - radius, cx + radius, cy + radius))
+        assert bounds, group_id
+        for text in re.finditer(r'<text x="([\d.]+)" y="([\d.]+)"(?: class="(\w*)")?>([^<]+)</text>', body):
+            x, y = float(text.group(1)), float(text.group(2))
+            css_class, content = text.group(3) or "", text.group(4)
+            font_size = font_by_class[css_class]
+            width = text_width(content, font_size)
+            left, top, right, bottom = bounds[0]
+            assert left + 2 <= x - width / 2, (group_id, content)
+            assert x + width / 2 <= right - 2, (group_id, content)
+            assert top + 2 <= y <= bottom - 2, (group_id, content)
+            checked += 1
+    # Every diagram label must be covered; zero matches means the regex
+    # drifted away from the emitted markup, not that the diagram is clean.
+    assert checked >= 15, checked
 
 
 def test_replay_proposer_is_deterministic_and_changes_no_more_than_ten_percent() -> None:

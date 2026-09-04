@@ -157,6 +157,7 @@ class LearningTests(unittest.TestCase):
                 "dynamic_metrics.csv",
                 "dynamic_timeseries.csv",
                 "case_metrics.csv",
+                "case_timeseries.csv",
                 "engineering_report.md",
                 "engineering_report.html",
                 "algorithm_reports",
