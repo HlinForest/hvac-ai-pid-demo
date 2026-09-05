@@ -4,7 +4,7 @@
 - 不写任何数据文件，只读 + 打印
 - 带 assert 自检，数值对不上立即失败
 - 运行：
-    python reports/dump_s4_numbers.py [--root <项目根>] [--batch outputs_review_v3]
+    python reports/dump_s4_numbers.py [--root <项目根>] [--batch archive/outputs_review_v3]
 """
 import csv
 import io
@@ -18,7 +18,7 @@ sys.path.insert(0, str(ROOT))
 
 import numpy as np
 
-V3 = Path(os.environ.get("HVAC_BATCH_DIR", str(ROOT / "outputs_review_v3")))
+V3 = Path(os.environ.get("HVAC_BATCH_DIR", str(ROOT / "archive/outputs_review_v3")))
 
 
 def read_csv(path):
@@ -89,7 +89,7 @@ def dump_03():
 # =====================================================================
 def dump_06():
     section("06 LLM Agent：6 步会话状态演化（llm_agent_trace.csv + summary.json）")
-    rows = read_csv(ROOT / "outputs_llm_matrix" / "qwen-max_std" / "llm_agent_trace.csv")
+    rows = read_csv(ROOT / "archive/outputs_llm_matrix" / "qwen-max_std" / "llm_agent_trace.csv")
     assert len(rows) == 6, len(rows)
     cur_kp, cur_ki = 0.45082372186615355, 0.003076518486521097
     base_risk = 32.0073
@@ -142,7 +142,7 @@ def dump_06():
           f"{float(r5['risk_objective']) <= base_risk * 1.02}")
 
     # summary 交叉核对
-    summ = json.load(io.open(ROOT / "outputs_llm_matrix" / "qwen-max_std" / "llm_agent_summary.json",
+    summ = json.load(io.open(ROOT / "archive/outputs_llm_matrix" / "qwen-max_std" / "llm_agent_summary.json",
                              encoding="utf-8"))
     print()
     print("summary 交叉核对：")

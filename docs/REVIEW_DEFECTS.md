@@ -56,14 +56,14 @@
 
 ## 第四轮复评（2026-09-01，覆盖为远端 `dbb6316` v3 后）——已全部修复
 
-> 本轮对象：第三轮整改提交 `0856bf1..dbb6316`。方法：代码评审（`hvac_pid/embedded_demo.py` 等 diff 范围）+ 产物一致性核查（重编译并重跑 PC-SIL、比对 `outputs_review_v3` 工件）。
+> 本轮对象：第三轮整改提交 `0856bf1..dbb6316`。方法：代码评审（`hvac_pid/embedded_demo.py` 等 diff 范围）+ 产物一致性核查（重编译并重跑 PC-SIL、比对 `archive/outputs_review_v3` 工件）。
 > **修复后基线**：`python -m pytest tests -q` **25 passed**（含新增几何约束测试与 SIL 门端到端测试）；PC-SIL 重跑回退 **0/190**；9 个 HTML 演示全部通过 Node 运行时检查。
 
 ### 高严重度：E4 闭环声明与代码实测矛盾
 
 | # | 缺陷 | 状态（2026-09-01 修复） |
 |---|---|---|
-| F1 | `review_remediation.md` 将 E4（嵌入式时基）标为"已闭环"，但从远端源码重新编译 `testbench.cpp` 重跑 PC-SIL，实测 **RL 未覆盖回退 167/190（88%）**——恰为第二轮认定时基 bug 的特征数字。根因：testbench 主循环混合时基（`plant.step` 每 tick 前进 1/3 模拟分钟即 200× 加速，而 PI 积分/限幅器/监督误差率用真实 0.1 s），与其镜像的 ESP32 固件（`kDemoPhysicalDtSeconds=20`）不一致 | **已修复**：`embedded/testbench.cpp` 主循环统一改用 20 s 模拟时间（PI、限幅器、误差率、plant.step 同源），实测回退 **0/190**；`embedded/wokwi/common/sketch.ino` 同类混合时基一并修复并重新生成两份 Wokwi 工程；`outputs_review_v3` 的 SIL 日志/摘要/矩阵已重生成，`hvac_pid/pipeline.py` E4 行改为如实描述 |
+| F1 | `review_remediation.md` 将 E4（嵌入式时基）标为"已闭环"，但从远端源码重新编译 `testbench.cpp` 重跑 PC-SIL，实测 **RL 未覆盖回退 167/190（88%）**——恰为第二轮认定时基 bug 的特征数字。根因：testbench 主循环混合时基（`plant.step` 每 tick 前进 1/3 模拟分钟即 200× 加速，而 PI 积分/限幅器/监督误差率用真实 0.1 s），与其镜像的 ESP32 固件（`kDemoPhysicalDtSeconds=20`）不一致 | **已修复**：`embedded/testbench.cpp` 主循环统一改用 20 s 模拟时间（PI、限幅器、误差率、plant.step 同源），实测回退 **0/190**；`embedded/wokwi/common/sketch.ino` 同类混合时基一并修复并重新生成两份 Wokwi 工程；`archive/outputs_review_v3` 的 SIL 日志/摘要/矩阵已重生成，`hvac_pid/pipeline.py` E4 行改为如实描述 |
 | F2 | 第二轮承诺的"未覆盖回退占比 ≤10%" SIL 门未落地：`testbench.cpp:80` 与 `run_mcu_validation.py:109` 通过判据均不含回退率 → SIL 在 88% 回退率下照样 PASS | **已修复**：`testbench.cpp` 通过判据加入 `rl_coverage_ok`（≤10%）；`run_mcu_validation.py` 独立重算占比并加入最终门与摘要列（`RL覆盖率门结果`）；新增 `test_pc_sil_enforces_rl_coverage_gate` 端到端回归测试（时基回归时 88% > 10% 即 FAIL） |
 | F3 | Python 部署验收报告回退率 0.19% vs C++ SIL 83.5%，相差两个数量级；75 组 parity 向量全取格点中心（天然 covered），测不到该分歧 | **已修复（根源消除）**：分歧根源即 F1 时基混合，修复后 C++ 0% 与 Python 0.19% 同量级；SIL 门端到端测试补上格点 parity 覆盖不到的闭环层一致性检查 |
 

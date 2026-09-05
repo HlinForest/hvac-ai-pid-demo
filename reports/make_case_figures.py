@@ -3,12 +3,12 @@
 + 七算法统一演示曲线。
 
 数据来源（v3 封存批次，不重新训练、不改写封存产物）：
-- outputs_review_v3/policy_manifest_v3.json    （IMC 部署增益）
-- outputs_review_v3/global_bayesian_tuning.csv （BO 全局固定增益）
-- outputs_review_v3/fnn_rule_table.npy / fnn_context_coefficients.npy / rl_q_table.npy
-- outputs_review_v3/rl_training_transitions.csv（RL 覆盖掩码重建，逻辑同 pipeline）
-- outputs_review_v3/case_metrics.csv           （复现自检基准）
-- outputs_embedded_demo/*_temperature_demo.csv （七算法统一演示）
+- archive/outputs_review_v3/policy_manifest_v3.json    （IMC 部署增益）
+- archive/outputs_review_v3/global_bayesian_tuning.csv （BO 全局固定增益）
+- archive/outputs_review_v3/fnn_rule_table.npy / fnn_context_coefficients.npy / rl_q_table.npy
+- archive/outputs_review_v3/rl_training_transitions.csv（RL 覆盖掩码重建，逻辑同 pipeline）
+- archive/outputs_review_v3/case_metrics.csv           （复现自检基准）
+- archive/outputs_embedded_demo/*_temperature_demo.csv （七算法统一演示）
 
 自检：按封存种子（7 + 400_003 + 工况序号）复现三工况仿真，逐算法与
 case_metrics.csv 的 RMSE/IAE/ITAE/最大过冷/综合目标对比，任一偏差超限即报错退出，
@@ -36,8 +36,8 @@ from make_figures import (                                               # noqa:
     C_AI_AUTO, C_AI_SELF, C_CLASSICAL, FIG_DIR, GRID, INK, INK2, MUTED,
 )
 
-V3 = PROJECT_ROOT / "outputs_review_v3"
-DEMO = PROJECT_ROOT / "outputs_embedded_demo"
+V3 = PROJECT_ROOT / "archive/outputs_review_v3"
+DEMO = PROJECT_ROOT / "archive/outputs_embedded_demo"
 PIPELINE_SEED = 7
 CASE_SEED_OFFSET = 400_003
 

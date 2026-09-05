@@ -475,10 +475,10 @@ def write_html_engineering_report(
     ]
     mcu_rows = [
         {"模块": "SafePI 状态", "数据依据": "PC C++ sizeof 实测；Wokwi 双目标编译通过", "Flash / ROM": "目标编译日志未提供尺寸", "RAM / 状态": "32 B（仅 PC ABI）", "说明": "含增益/回退、积分、输出斜率和诊断状态；目标 ABI 仍需复测"},
-        {"模块": "FNN 5×5×2 规则表", "数据依据": "outputs_review_v3/fnn_rule_table.npy → C float 表", "Flash / ROM": "200 B", "RAM / 状态": "推理临时量 <64 B", "说明": "已导出训练后件；每次只读取 4 条相邻规则"},
-        {"模块": "RL 贪心策略", "数据依据": "outputs_review_v3/rl_q_table.npy → 动作索引/覆盖掩码", "Flash / ROM": "25 B 策略 + 25 B 掩码 + 72 B 动作表", "RAM / 状态": "推理临时量 <32 B", "说明": f"本轮离线训练覆盖 {rl_covered_states}/{rl_total_states} 状态；未覆盖状态保持增益并回退"},
+        {"模块": "FNN 5×5×2 规则表", "数据依据": "archive/outputs_review_v3/fnn_rule_table.npy → C float 表", "Flash / ROM": "200 B", "RAM / 状态": "推理临时量 <64 B", "说明": "已导出训练后件；每次只读取 4 条相邻规则"},
+        {"模块": "RL 贪心策略", "数据依据": "archive/outputs_review_v3/rl_q_table.npy → 动作索引/覆盖掩码", "Flash / ROM": "25 B 策略 + 25 B 掩码 + 72 B 动作表", "RAM / 状态": "推理临时量 <32 B", "说明": f"本轮离线训练覆盖 {rl_covered_states}/{rl_total_states} 状态；未覆盖状态保持增益并回退"},
         {"模块": "PC Testbench 时序", "数据依据": "g++ -O2，本机实测", "Flash / ROM": "PC exe 大小不可代表 MCU ROM", "RAM / 状态": "SafePI 32 B；虚拟对象 68 B", "说明": "PID 100 ms / AI 2 s 分频、NaN/未覆盖状态回退通过；PC ns 不换算成 MCU 周期"},
-        {"模块": "Wokwi 双目标工程", "数据依据": "outputs_review_v3/mcu_wokwi_validation.csv（2026-08-23）", "Flash / ROM": "两目标编译通过；尺寸未取得", "RAM / 状态": "未取得", "说明": "ESP32 运行约 10.079 s；STM32F103 运行约 28.500 s并点击开门按钮；串口曲线和最坏周期未完成留证"},
+        {"模块": "Wokwi 双目标工程", "数据依据": "archive/outputs_review_v3/mcu_wokwi_validation.csv（2026-08-23）", "Flash / ROM": "两目标编译通过；尺寸未取得", "RAM / 状态": "未取得", "说明": "ESP32 运行约 10.079 s；STM32F103 运行约 28.500 s并点击开门按钮；串口曲线和最坏周期未完成留证"},
     ]
     target_rows = [
         {"目标": "STM32F103C8T6", "官方资源": "72 MHz Cortex-M3，64 KB Flash，20 KB SRAM", "本项目判断": "PI/FNN/RL 表格策略都能容纳；无 FPU，但 2 s 外环计算量很小", "量产前必测": "ARM GCC 的 .text/.data/.bss、DWT 最坏周期、中断抖动"},
@@ -684,6 +684,6 @@ img {{ width:100%; border:1px solid #d7e0e9; margin:12px 0 20px; }} .note {{ fon
 <h3>按算法查看三工况完整实验、增益轨迹与代码</h3>
 <ul>{''.join(f'<li><a href="{html.escape(link)}">{html.escape(display_names.get(name, name))}：三工况独立实验、Kp/Ki 轨迹、指标与代码</a></li>' for name, link in algorithm_reports.items())}</ul>
 {image_data('training_labels.png')}
-<p class="note">机器可读产物包括 <code>classical_tuning_history.csv</code>、<code>fopdt_fit_history.csv</code>、<code>classical_tuning_steps.csv</code>、<code>bayesian_search_history.csv</code>、<code>fnn_training_history.csv</code>、<code>rl_training_history.csv</code> 等完整整定/训练历史，以及三工况指标、留出工况指标和 <code>physical_cross_validation*.csv</code>、<code>fopdt_cross_validation*.csv</code>、<code>openmodelica_cross_validation*.csv</code>。OpenModelica 原始结果保存在 <code>outputs/modelica/PrecisionCabinetCooling_res.csv</code>；MCU 的 PC 软件在环日志和摘要保存在 <code>outputs/mcu_pc_sil_log.txt</code>、<code>outputs/mcu_validation_summary.csv</code>，Wokwi 双目标验证边界保存在 <code>outputs_review_v3/mcu_wokwi_validation.csv</code>。报告中所有“已验证”结论只指这些可复现的软件仿真、PC Testbench 与明确列出的 Wokwi 编译/启动证据，不指真实 MCU 板卡或实机 HVAC 性能。</p>
+<p class="note">机器可读产物包括 <code>classical_tuning_history.csv</code>、<code>fopdt_fit_history.csv</code>、<code>classical_tuning_steps.csv</code>、<code>bayesian_search_history.csv</code>、<code>fnn_training_history.csv</code>、<code>rl_training_history.csv</code> 等完整整定/训练历史，以及三工况指标、留出工况指标和 <code>physical_cross_validation*.csv</code>、<code>fopdt_cross_validation*.csv</code>、<code>openmodelica_cross_validation*.csv</code>。OpenModelica 原始结果保存在 <code>outputs/modelica/PrecisionCabinetCooling_res.csv</code>；MCU 的 PC 软件在环日志和摘要保存在 <code>outputs/mcu_pc_sil_log.txt</code>、<code>outputs/mcu_validation_summary.csv</code>，Wokwi 双目标验证边界保存在 <code>archive/outputs_review_v3/mcu_wokwi_validation.csv</code>。报告中所有“已验证”结论只指这些可复现的软件仿真、PC Testbench 与明确列出的 Wokwi 编译/启动证据，不指真实 MCU 板卡或实机 HVAC 性能。</p>
 </body></html>"""
     path.write_text(document, encoding="utf-8")

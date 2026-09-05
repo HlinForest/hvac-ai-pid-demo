@@ -3,7 +3,7 @@
 **项目**：变频精密/机柜空调 AI-PI 自动整定演示（`hvac-ai-pid-demo`）
 **日期**：2026-09-02（2026-09-03 更新：LLM Agent 章节改用真实 API 调用结果）
 **定位**：本报告为"逐算法详解版"，按《实验报告生成.md》大纲撰写；结论导向的综述见《实验报告_AI自动整定.md》，两者互补。
-**数据来源**：`outputs_review_v3/`（封存 v3 验收证据）、`outputs_tuning_benchmark/`（耗时基准）、`outputs_advanced_quick/`（安全 BO / LLM 高级整定）、`outputs_embedded_demo/`（七算法统一演示，2026-09-03 起含 LLM 真实调用）、`outputs_llm_agent_bailian/`（LLM Agent 独立真实调用会话）、`outputs_advanced_bailian/`（LLM 监督整定真实调用基准）、`docs/ALGORITHM_GUIDE.md`。图 1–2、10–11 由 `reports/make_figures.py` 生成，图 3–9 由 `reports/make_tuning_figures.py` 生成，图 12–27 由 `reports/make_case_figures.py` 生成。
+**数据来源**：`archive/outputs_review_v3/`（封存 v3 验收证据）、`archive/outputs_tuning_benchmark/`（耗时基准）、`archive/outputs_advanced_quick/`（安全 BO / LLM 高级整定）、`archive/outputs_embedded_demo/`（七算法统一演示，2026-09-03 起含 LLM 真实调用）、`archive/outputs_llm_agent_bailian/`（LLM Agent 独立真实调用会话）、`archive/outputs_advanced_bailian/`（LLM 监督整定真实调用基准）、`docs/ALGORITHM_GUIDE.md`。图 1–2、10–11 由 `reports/make_figures.py` 生成，图 3–9 由 `reports/make_tuning_figures.py` 生成，图 12–27 由 `reports/make_case_figures.py` 生成。
 **诚信声明**：全部结论限于仿真与 SIL 层，真机验收未开始；LLM Agent 结果为真实 API 调用（阿里云百炼 qwen-max，单批次、样本量小，见 4.6 与第 8 章）；等效对象时间为估算口径。凡属估算的数值均标注"（估算）"。
 
 ---
@@ -90,7 +90,7 @@ $$e = T_z - T_{sp}, \qquad I \leftarrow I + e\, \Delta t, \qquad u = \mathrm{cla
 | FNN 自整定 | 在线自整定 | **是**（每 2 s） | e, ė（模糊化） | Kp/Ki 增益 | 训练 7.65 s / 等效 4181 h | 39.26（PASSED） |
 | RL 自整定 | 在线自整定 | **是**（每 2 s） | 热状态 + 容量模式 | 相对 IMC 的增益目标 | 训练 16.22 s / 等效 4018 h | **37.61（最优）** |
 
-> 耗时列来自 `outputs_tuning_benchmark/tuning_runtime_report.md`（基准问题：31.5→24 °C、7600 W、延迟 6 min、8 个离线工况）；holdout 列来自 v3 封存验收。安全 BO 的 33.58 为高级整定基准（`outputs_advanced_quick/`）上的**风险目标**，与 80 场景基准非同一口径，不可直接混比。
+> 耗时列来自 `archive/outputs_tuning_benchmark/tuning_runtime_report.md`（基准问题：31.5→24 °C、7600 W、延迟 6 min、8 个离线工况）；holdout 列来自 v3 封存验收。安全 BO 的 33.58 为高级整定基准（`archive/outputs_advanced_quick/`）上的**风险目标**，与 80 场景基准非同一口径，不可直接混比。
 
 以下每小节按统一模板展开：a) 输入量 b) 输出量 c) 是否自整定/能否自动整定 d) 整定预估耗时 e) 各工况下的表现 f) 所需数据/训练方法/训练时间 g) 安全性与回退机制。
 
@@ -155,8 +155,8 @@ $$e = T_z - T_{sp}, \qquad I \leftarrow I + e\, \Delta t, \qquad u = \mathrm{cla
 - **a) 输入量**：Agent 自主选择工具——查看历史、运行候选仿真、读取指标；本真实会话（qwen-max）6 步、2 次候选试验。
 - **b) 输出量**：候选 Kp/Ki 建议（原始建议 → 安全限幅 → 接受/拒绝决策）。
 - **c) 整定方式**：**自动整定（离线）**——低频离线诊断与候选生成；**仿真器、安全约束和回退 PI 拥有最终决定权**。
-- **d) 整定耗时（实测）**：监督式基准（`outputs_advanced_bailian/tuning_wall_time.csv`）3 轮 / 4 次评估含 API 往返共 **30.4 s**（约 7.6 s/次调用），比经典方法（0.7–0.9 s）高 1–2 个数量级。
-- **e) 各工况表现（真实 qwen-max 调用）**：七算法演示会话 6 步——查看历史 ×2 → 候选①（增大 Kp/Ki，风险 33.31）被拒 → 查看历史 → 候选②（小幅减小 Kp/Ki 至 0.4057/0.00277，风险目标 32.01→30.68，改善 4.1%）**被确定性安全门接受并部署** → 主动 finish（模型自述"已有改善且仅剩一次试验，不值得再冒险"）。演示综合目标 45.04、开门恢复 38 min（次快）、过冷 0.81 °C（全算法最小）。另一独立会话（`outputs_llm_agent_bailian/`）中模型两个候选均被安全门拒绝、系统回退 IMC（46.07）——模型输出非确定，但两次会话均无越界、零失控，回退机制按设计生效。
+- **d) 整定耗时（实测）**：监督式基准（`archive/outputs_advanced_bailian/tuning_wall_time.csv`）3 轮 / 4 次评估含 API 往返共 **30.4 s**（约 7.6 s/次调用），比经典方法（0.7–0.9 s）高 1–2 个数量级。
+- **e) 各工况表现（真实 qwen-max 调用）**：七算法演示会话 6 步——查看历史 ×2 → 候选①（增大 Kp/Ki，风险 33.31）被拒 → 查看历史 → 候选②（小幅减小 Kp/Ki 至 0.4057/0.00277，风险目标 32.01→30.68，改善 4.1%）**被确定性安全门接受并部署** → 主动 finish（模型自述"已有改善且仅剩一次试验，不值得再冒险"）。演示综合目标 45.04、开门恢复 38 min（次快）、过冷 0.81 °C（全算法最小）。另一独立会话（`archive/outputs_llm_agent_bailian/`）中模型两个候选均被安全门拒绝、系统回退 IMC（46.07）——模型输出非确定，但两次会话均无越界、零失控，回退机制按设计生效。
 - **f) 所需数据/方法/时间**：工具调用框架（OpenAI Responses / OpenAI 兼容（百炼）/ Ollama / Replay / 启发式 provider）；本次实验为百炼 `qwen-max`，`/chat/completions` 端点，密钥经 `.env` 注入；启发式 dry-run 只验证安全流水线，**不能作为 LLM 效果证据**。
 - **g) 安全性**：每条建议经安全门限幅（硬边界 + ±10% 信赖域），风险调整改进不足即拒绝，全程可回退 IMC；轨迹完整记录于 `llm_agent_trace.csv` / `llm_tuning_history.csv`。
 
@@ -205,7 +205,7 @@ $$Q(s, a) \leftarrow Q(s, a) + \alpha \left[ r + \gamma \max_{a'} Q(s', a') - Q(
 ### 5.1 数据集划分与密封协议
 
 - **场景数据集**：48 训练 / 16 验证 / 16 测试；制冷量 4500–10500 W、延迟 2–12 min 随机化；工况族 7 类（热启动/冷启动/设定值升阶跃/降阶跃/开门热脉冲/持续负荷/低温降阶跃，`hvac_pid/config.py` 的 `sample_adaptive_scenarios`）。逐场景 SHA-256 写入 `dataset_manifest.csv`，并执行数据泄漏/重复拒绝检查（缺陷 E2 闭环）。
-- **封存验收**：5 个验收种子（101/211/307/401/503）× 16 场景 = **80 个封存验收场景**，结果封存于 `outputs_review_v3/deployment_acceptance.csv`。
+- **封存验收**：5 个验收种子（101/211/307/401/503）× 16 场景 = **80 个封存验收场景**，结果封存于 `archive/outputs_review_v3/deployment_acceptance.csv`。
 - **部署验收门**：密封测试均值比（算法/IMC）的 95% 上界 ≤ 阈值；FNN 比值 0.9979（上界 1.0067）、RL 0.9595（上界 0.9743）均 **PASSED**。
 - **实验平台**：Windows 10 / Python 3.11.7 / numpy+scipy+scikit-learn，全程纯 CPU，无 GPU、无深度学习框架。
 
@@ -243,7 +243,7 @@ $$J = 2\, IAE + 1.5\, ITAE + 10\, V_c + 3\, U_{max} + 0.35\, t_s + 0.08\, M_u + 
 | FNN | 7.65 | 4181 | 54 | 66.52 | 78.2 |
 | RL | 16.22 | 4018 | 54 | 63.59 | 88.0 |
 
-**等效虚拟对象时间的含义**（计算逻辑 `run_tuning_benchmark.py:126-136`）：不是 CPU 时间，而是"若在真实压缩机/机柜上串行完成同样整定试验，设备需实际运行的时长"。构成：① FOPDT 安全辨识采数 168 h/工况；② 每组候选 Kp/Ki 评估约 5 h；③ 试验次数随方法膨胀——FNN/RL 的训练标签要求"每工况最优增益"，须先对每工况做完整搜索，故达 4000+ h。这些试验在真机上受执行器安全约束根本不可行；PC 加速仿真（约 200×）把全部试错压缩到秒级，**真机只部署结果、不做试验**。这就是 FNN/RL 的核心工程价值：把 4000+ 对象小时的安全试验压缩为 PC 上 8–16 秒。
+**等效虚拟对象时间的含义**（计算逻辑 `tools/run_tuning_benchmark.py:126-136`）：不是 CPU 时间，而是"若在真实压缩机/机柜上串行完成同样整定试验，设备需实际运行的时长"。构成：① FOPDT 安全辨识采数 168 h/工况；② 每组候选 Kp/Ki 评估约 5 h；③ 试验次数随方法膨胀——FNN/RL 的训练标签要求"每工况最优增益"，须先对每工况做完整搜索，故达 4000+ h。这些试验在真机上受执行器安全约束根本不可行；PC 加速仿真（约 200×）把全部试错压缩到秒级，**真机只部署结果、不做试验**。这就是 FNN/RL 的核心工程价值：把 4000+ 对象小时的安全试验压缩为 PC 上 8–16 秒。
 
 ### 6.2 控制性能对比
 
@@ -251,7 +251,7 @@ $$J = 2\, IAE + 1.5\, ITAE + 10\, V_c + 3\, U_{max} + 0.35\, t_s + 0.08\, M_u + 
 
 **80 场景封存验收（v3）**：RL 37.61 < FNN 39.26 ≈ IMC 39.53 ≈ BO 39.72 < Z-N 58.19。
 
-留出工况汇总（五算法，`outputs_review_v3/engineering_report.md` §4）：
+留出工况汇总（五算法，`archive/outputs_review_v3/engineering_report.md` §4）：
 
 | 算法 | 平均 ITAE (°C·h²) | 平均调节时间 (h) | 平均最大过冷 (°C) | 平均容量指令方差 | 稳定率 |
 |---|---:|---:|---:|---:|---:|
@@ -365,11 +365,11 @@ $$J = 2\, IAE + 1.5\, ITAE + 10\, V_c + 3\, U_{max} + 0.35\, t_s + 0.08\, M_u + 
 |---|---|---|
 | 真机验收（10 min 串口曲线、实测 WCET、HIL） | **未开始** | 全部耗时为 PC/仿真口径；PC 推理 78/88 µs 不是 STM32/ESP32 WCET，须用 DWT/ GPIO 脉冲实测 |
 | LLM Agent | 已完成单批次真实 API 调用（百炼 qwen-max） | 仅 2 次会话，输出非确定性未做统计表征；耗时/费用为单次实测，规模扩大后需重新评估 |
-| 等效对象时间 | 估算口径（`run_tuning_benchmark.py:126-136`） | 衡量"搬到真机需多久"的工程换算，非实测 |
+| 等效对象时间 | 估算口径（`tools/run_tuning_benchmark.py:126-136`） | 衡量"搬到真机需多久"的工程换算，非实测 |
 | 批次差异 | 耗时基准中 RL 部署验收列为 False；ESP32 演示中 FNN 候选被拒（影子模式）；v3 封存验收中两者均 PASSED | 不同批次运行的验收判定不一致，正式发布前需重新生成封存产物并复跑 |
 | RL 马尔可夫性 | 残留缺陷 C4（部分闭环） | 容量已进 Q 状态；积分、限制器和负荷仍是安全上下文记录，真实负荷为估计量 |
 | FNN 标签冲突 | log-RMSE 1.059–1.85 | 多场景同状态异标签限制规则面拟合精度 |
-| 评审缺陷闭环 | A1–E5 中除 C4 外全部闭环 | 证据矩阵见 `outputs_review_v3/engineering_report.md` 附表与 `docs/REVIEW_DEFECTS.md` |
+| 评审缺陷闭环 | A1–E5 中除 C4 外全部闭环 | 证据矩阵见 `archive/outputs_review_v3/engineering_report.md` 附表与 `docs/REVIEW_DEFECTS.md` |
 | 能耗与指令方差 | 代理量 | ∫Qc dt 未含 COP 与风机/泵功耗；指令方差不能直接换算压缩机寿命 |
 | 湿度与结霜 | 未建模 | 仅显热平衡；潜热负荷、除湿与蒸发器结霜对送风温度回路的影响未覆盖 |
 
@@ -393,22 +393,22 @@ $$J = 2\, IAE + 1.5\, ITAE + 10\, V_c + 3\, U_{max} + 0.35\, t_s + 0.08\, M_u + 
 
 | 目录 | 内容 |
 |---|---|
-| `outputs_review_v3/` | v3 封存验收（最权威）：`engineering_report.md`、`deployment_acceptance.csv`、`dataset_manifest.csv`、`holdout_summary.csv`、各算法训练历史 CSV、`policy_parity_vectors.csv`、`algorithm_reports/` |
-| `outputs_tuning_benchmark/` | 整定耗时基准：`tuning_runtime_report.md`、`tuning_stage_times.csv`、`imc_lambda_candidates.csv` |
-| `outputs_advanced_quick/` | 安全 BO / LLM 高级整定（启发式 dry-run 批次）：`advanced_tuning_report.md`、`advanced_holdout_summary.csv`、`safe_bo_history.csv`、`llm_tuning_history.csv`、`tuning_wall_time.csv` |
-| `outputs_advanced_bailian/` | LLM 监督整定**真实调用**基准（qwen-max）：`llm_tuning_history.csv`（3 轮，第 3 轮被接受）、`tuning_wall_time.csv`（LLM 30.4 s） |
-| `outputs_llm_agent_bailian/` | LLM Agent **独立真实调用会话**（qwen-max，候选均被拒、回退 IMC）：`llm_agent_trace.csv`、`llm_agent_temperature_demo.html` |
-| `outputs_embedded_demo/` | 七算法统一演示（2026-09-03 起 LLM 为真实调用）：`seven_algorithm_summary.csv`、每算法 `*_temperature_demo.csv/html`、`llm_agent_trace.csv` |
-| `outputs_review_v3/` | 主实验与自整定完整产物：`case_metrics.csv`、`case_timeseries.csv`（三工况 × 五算法逐分钟时序，本轮新增）、`dynamic_metrics.csv`、`training_labels.csv`、`fnn_rule_table.npy`、`rl_q_table.npy` |
+| `archive/outputs_review_v3/` | v3 封存验收（最权威）：`engineering_report.md`、`deployment_acceptance.csv`、`dataset_manifest.csv`、`holdout_summary.csv`、各算法训练历史 CSV、`policy_parity_vectors.csv`、`algorithm_reports/` |
+| `archive/outputs_tuning_benchmark/` | 整定耗时基准：`tuning_runtime_report.md`、`tuning_stage_times.csv`、`imc_lambda_candidates.csv` |
+| `archive/outputs_advanced_quick/` | 安全 BO / LLM 高级整定（启发式 dry-run 批次）：`advanced_tuning_report.md`、`advanced_holdout_summary.csv`、`safe_bo_history.csv`、`llm_tuning_history.csv`、`tuning_wall_time.csv` |
+| `archive/outputs_advanced_bailian/` | LLM 监督整定**真实调用**基准（qwen-max）：`llm_tuning_history.csv`（3 轮，第 3 轮被接受）、`tuning_wall_time.csv`（LLM 30.4 s） |
+| `archive/outputs_llm_agent_bailian/` | LLM Agent **独立真实调用会话**（qwen-max，候选均被拒、回退 IMC）：`llm_agent_trace.csv`、`llm_agent_temperature_demo.html` |
+| `archive/outputs_embedded_demo/` | 七算法统一演示（2026-09-03 起 LLM 为真实调用）：`seven_algorithm_summary.csv`、每算法 `*_temperature_demo.csv/html`、`llm_agent_trace.csv` |
+| `archive/outputs_review_v3/` | 主实验与自整定完整产物：`case_metrics.csv`、`case_timeseries.csv`（三工况 × 五算法逐分钟时序，本轮新增）、`dynamic_metrics.csv`、`training_labels.csv`、`fnn_rule_table.npy`、`rl_q_table.npy` |
 
 ### B 复现命令
 
 ```bash
 python main.py --quick          # 冒烟实验
 python main.py                  # 完整 48/16/16 实验
-python run_tuning_benchmark.py      # 整定耗时基准
-python run_advanced_tuning_benchmark.py  # 安全 BO / LLM 高级整定（加 --llm-provider openai-compatible --llm-model qwen-max 为真实调用）
-python run_embedded_demo.py     # ESP32 七算法温度闭环演示（加 --provider openai-compatible --model qwen-max 为真实调用）
+python run.py benchmark      # 整定耗时基准
+python run.py advanced  # 安全 BO / LLM 高级整定（加 --llm-provider openai-compatible --llm-model qwen-max 为真实调用）
+python run.py embedded     # ESP32 七算法温度闭环演示（加 --provider openai-compatible --model qwen-max 为真实调用）
 python reports/make_figures.py  # 重生成图 1–2、10–11
 python reports/make_tuning_figures.py  # 重生成图 3–9（整定过程图，数据源为封存 CSV）
 python reports/make_case_figures.py  # 重生成图 12–27（含 v3 封存指标复现自检）
@@ -486,9 +486,9 @@ FOPDT 代理模型只用于 Z-N / IMC 整定，其生成流程（`hvac_pid/contr
 2. 用**有界最小二乘**同时拟合温降幅度 A、时间常数 τ 和延迟 L；
 3. 计算增益 $K = A/\Delta u$，得到每工况的 FOPDT 传递函数 $\Delta T(s)/\Delta u(s) = -K e^{-Ls}/(\tau s + 1)$。
 
-> 该流程修正了旧版 12 h 试验尚未到达 63.2% 响应就把末点当 t63 的截尾问题；t28/t63 仍被记录，但只用于校验曲线确实走过关键响应区间。全部候选存于 `outputs_review_v3/fopdt_fit_history.csv`，逐项计算存于 `outputs_review_v3/classical_tuning_steps.csv`。
+> 该流程修正了旧版 12 h 试验尚未到达 63.2% 响应就把末点当 t63 的截尾问题；t28/t63 仍被记录，但只用于校验曲线确实走过关键响应区间。全部候选存于 `archive/outputs_review_v3/fopdt_fit_history.csv`，逐项计算存于 `archive/outputs_review_v3/classical_tuning_steps.csv`。
 
-三个标准工况的辨识结果（`outputs_review_v3/engineering_report.md` §1.1）：
+三个标准工况的辨识结果（`archive/outputs_review_v3/engineering_report.md` §1.1）：
 
 | 场景 | K（°C/指令） | τ（min） | L（min） | 归一化 RMSE（%） | 判定 |
 |---|---:|---:|---:|---:|---|
@@ -512,7 +512,7 @@ $$\lambda = \max(\tau/3,\ 3L,\ 12\ \mathrm{min})$$
 
 $$K_p = \frac{\tau}{K(\lambda + L)}, \qquad T_i = \min[\tau,\ 4(\lambda + L)], \qquad K_i = \frac{K_p}{T_i}$$
 
-用于性能比较的 IMC 通过 `tune_global_imc_lambda()` **只在训练工况搜索 λ**（候选集见 `outputs_review_v3/imc_lambda_tuning.csv`），Kp/Ti 仍受 IMC 公式约束；进入验证与密封测试后参数冻结。这样能公平回答"IMC 是结构不合适，还是 λ 没选对"。IMC 同时是全部智能方法的安全回退基准。
+用于性能比较的 IMC 通过 `tune_global_imc_lambda()` **只在训练工况搜索 λ**（候选集见 `archive/outputs_review_v3/imc_lambda_tuning.csv`），Kp/Ti 仍受 IMC 公式约束；进入验证与密封测试后参数冻结。这样能公平回答"IMC 是结构不合适，还是 λ 没选对"。IMC 同时是全部智能方法的安全回退基准。
 
 #### D.5 模型可信度：三层交叉验证
 
@@ -522,7 +522,7 @@ $$K_p = \frac{\tau}{K(\lambda + L)}, \qquad T_i = \min[\tau,\ 4(\lambda + L)], \
 | 降阶层 | FOPDT 代理 vs 3R2C 全模型阶跃响应 | 归一化 RMSE ≈ 12%（见 D.3 表） |
 | 物理层 | OpenModelica DASSL vs Python DOP853 | RMSE 7.16×10⁻⁶ °C（7211 点，12 h 工况） |
 
-策略导出后另有 Py/C++ 一致性校验：冻结为 C++ 头文件（`generated_policy.hpp`，CRC v3 校验），75 条奇偶校验向量最大误差 2.98×10⁻⁸（`outputs_review_v3/policy_parity_vectors.csv`）。
+策略导出后另有 Py/C++ 一致性校验：冻结为 C++ 头文件（`generated_policy.hpp`，CRC v3 校验），75 条奇偶校验向量最大误差 2.98×10⁻⁸（`archive/outputs_review_v3/policy_parity_vectors.csv`）。
 
 ---
 

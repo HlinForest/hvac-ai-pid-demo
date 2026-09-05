@@ -7,7 +7,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from aggregate_llm_matrix import _load_run  # noqa: E402
+from tools.aggregate_llm_matrix import _load_run  # noqa: E402
 
 
 def _write_run(run_dir: Path, *, accepted: int, live: bool) -> None:

@@ -16,7 +16,7 @@ from hvac_pid.embedded_demo import (
 from hvac_pid.env import load_project_env
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def parse_args() -> argparse.Namespace:

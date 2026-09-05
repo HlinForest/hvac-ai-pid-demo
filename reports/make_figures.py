@@ -2,8 +2,8 @@
 """生成《HVAC AI-PI 自动整定实验报告》所需的框图与对比图。
 
 数据来源（均为项目已有实验结果，直接内嵌并在报告中注明出处）：
-- outputs_tuning_benchmark/tuning_runtime_report.md   （调参耗时基准，Windows 10 / Python 3.11.7）
-- outputs_review_v3/holdout_summary.csv               （80 场景封存验收 holdout 汇总）
+- archive/outputs_tuning_benchmark/tuning_runtime_report.md   （调参耗时基准，Windows 10 / Python 3.11.7）
+- archive/outputs_review_v3/holdout_summary.csv               （80 场景封存验收 holdout 汇总）
 - hvac_pid/plant.py、hvac_pid/ai_controllers.py       （对象模型与算法结构）
 
 输出：reports/figures/fig1_系统结构框图.png

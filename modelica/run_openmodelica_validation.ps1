@@ -49,8 +49,8 @@ try {
 
     Push-Location $projectPath
     try {
-        python run_cross_validation.py outputs
-        python render_report.py outputs
+        python run.py crossval outputs
+        python run.py render outputs
     } finally {
         Pop-Location
     }

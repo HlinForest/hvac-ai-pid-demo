@@ -94,13 +94,13 @@ FNN 的"学习"全部发生在离线：48 个训练场景各跑一轮完整 BO�
 
 | 数据产物（仓库内路径） | 内容 | 支撑本篇何处 |
 |---|---|---|
-| `outputs_review_v3/fnn_rule_table.npy` | 25 条零阶 TSK 规则后件（5×5） | 第 1 节产物 |
-| `outputs_review_v3/fnn_rule_table_candidate.npy` | 未过上线检查时的候选规则表（供审计） | 第 3 节上线检查 |
-| `outputs_review_v3/fnn_training_samples.csv` | 4464 个“(e, ė) → BO 最优增益”标签 | 第 1 节 |
-| `outputs_review_v3/fnn_training_history.csv` | 训练收敛与规则覆盖率历史 | 第 5 节 、第 4 节图 7-2 |
-| `outputs_review_v3/case_metrics.csv` | v3 三标准工况 × 五算法指标 | 第 6 节 |
-| `outputs_review_v3/case_timeseries.csv` | 三工况逐分钟时序 | 图 7-3～7-5 |
-| `outputs_tuning_benchmark/tuning_stage_times.csv` | 整定耗时基准 | 第 5 节 |
+| `archive/outputs_review_v3/fnn_rule_table.npy` | 25 条零阶 TSK 规则后件（5×5） | 第 1 节产物 |
+| `archive/outputs_review_v3/fnn_rule_table_candidate.npy` | 未过上线检查时的候选规则表（供审计） | 第 3 节上线检查 |
+| `archive/outputs_review_v3/fnn_training_samples.csv` | 4464 个“(e, ė) → BO 最优增益”标签 | 第 1 节 |
+| `archive/outputs_review_v3/fnn_training_history.csv` | 训练收敛与规则覆盖率历史 | 第 5 节 、第 4 节图 7-2 |
+| `archive/outputs_review_v3/case_metrics.csv` | v3 三标准工况 × 五算法指标 | 第 6 节 |
+| `archive/outputs_review_v3/case_timeseries.csv` | 三工况逐分钟时序 | 图 7-3～7-5 |
+| `archive/outputs_tuning_benchmark/tuning_stage_times.csv` | 整定耗时基准 | 第 5 节 |
 
 本篇结论涉及的实现位置：
 

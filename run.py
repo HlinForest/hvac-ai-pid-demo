@@ -9,7 +9,8 @@ Prefer this over calling the individual ``run_*.py`` scripts directly::
     python run.py embedded --algorithm all --provider replay
     python run.py llm-agent --provider replay
     python run.py advanced --quick --llm-provider heuristic
-    python run.py matrix outputs_llm_matrix_v3
+    python run.py matrix archive/outputs_llm_matrix_v3
+    python run.py render outputs
 
 Each subcommand forwards its remaining arguments verbatim to the
 corresponding module's ``main()``.
@@ -20,21 +21,33 @@ from __future__ import annotations
 import argparse
 import importlib
 import sys
+from pathlib import Path
 
 _SUBCOMMANDS: dict[str, str] = {
     "pipeline": "main",
-    "benchmark": "run_tuning_benchmark",
-    "crossval": "run_cross_validation",
-    "embedded": "run_embedded_demo",
-    "llm-agent": "run_llm_agent_demo",
-    "advanced": "run_advanced_tuning_benchmark",
-    "matrix": "aggregate_llm_matrix",
+    "benchmark": "tools.run_tuning_benchmark",
+    "crossval": "tools.run_cross_validation",
+    "embedded": "tools.run_embedded_demo",
+    "llm-agent": "tools.run_llm_agent_demo",
+    "advanced": "tools.run_advanced_tuning_benchmark",
+    "matrix": "tools.aggregate_llm_matrix",
+    "render": "tools.render_report",
 }
 
 
 def _delegate(module_name: str, argv: list[str]) -> None:
     sys.argv = [f"{module_name}.py", *argv]
-    module = importlib.import_module(module_name)
+    if "." not in module_name:
+        # Top-level entry (main.py): import by bare name.
+        module = importlib.import_module(module_name)
+    else:
+        # tools/ entries: ensure the project root (parent of tools/) is
+        # importable, then load as a submodule (namespace package, no
+        # tools/__init__.py required).
+        root = str(Path(__file__).resolve().parent)
+        if root not in sys.path:
+            sys.path.insert(0, root)
+        module = importlib.import_module(module_name)
     module.main()
 
 
@@ -51,6 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
         "llm-agent": "tool-using LLM agent demo",
         "advanced": "risk-aware safe BO + LLM supervisory benchmark",
         "matrix": "aggregate an LLM matrix directory",
+        "render": "render an outputs dir into the HTML engineering report",
     }
     for command in _SUBCOMMANDS:
         sub.add_parser(command, help=helps[command]).add_argument(
@@ -66,7 +80,7 @@ def main() -> None:
     if len(sys.argv) >= 2 and sys.argv[1] in _SUBCOMMANDS:
         rest = sys.argv[2:]
         if sys.argv[1] == "matrix" and (not rest or rest == ["--help"] or rest == ["-h"]):
-            print("usage: run.py matrix <matrix_dir>  (default: outputs_llm_matrix_v3)")
+            print("usage: run.py matrix <matrix_dir>  (default: archive/outputs_llm_matrix_v3)")
             return
         _delegate(_SUBCOMMANDS[sys.argv[1]], rest)
         return

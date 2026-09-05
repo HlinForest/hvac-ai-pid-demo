@@ -1,6 +1,6 @@
 # 06 算法报告：LLM Agent 工具调用整定
 
-> **30 秒看懂**：你有一个调好的 IMC 参数，大模型帮你试着微调——它只负责"看历史、提候选"，是否采用由仿真器验证后决定：验证更好就采用，否则保留原参数。想自己跑：一条命令 `run_llm_agent_demo.py --provider openai-compatible --model qwen-plus --setpoint 24 --seed 71`，几十秒出结果（会产生少量 API 费用，key 放 `.env`）。
+> **30 秒看懂**：你有一个调好的 IMC 参数，大模型帮你试着微调——它只负责"看历史、提候选"，是否采用由仿真器验证后决定：验证更好就采用，否则保留原参数。想自己跑：一条命令 `run.py llm-agent --provider openai-compatible --model qwen-plus --setpoint 24 --seed 71`，几十秒出结果（会产生少量 API 费用，key 放 `.env`）。
 
 **版本**：2026-09-06（v4：走读换为新矩阵会话，v3 走读降级为第 4 节对照）
 **数据口径**：真实大模型调用矩阵 v4（qwen-max / qwen-plus / qwen-turbo × std / hard × 种子 71–73 = 18 次，百炼 openai-compatible），走读为 v4 `qwen-max_std_r72`（6 步 / 2 次候选试验 / 1 次接受）；三工况与混合工况曲线为**冻结增益补跑**（v4 部署增益）。溯源见附录 A。
@@ -108,11 +108,11 @@ LLM 路线里，大模型不产出可直接下发的增益，而是每一步输�
 
 | 数据产物（仓库内路径） | 内容 | 支撑本篇何处 |
 |---|---|---|
-| `outputs_llm_matrix/qwen-max_std/llm_agent_trace.csv` | v3 走读会话轨迹（6 步 / 2 次候选试验 / 1 次留下），现作对照 | 第 3 节、第 4 节图 6-2 |
-| `outputs_advanced_bailian/llm_tuning_history.csv` | qwen-max 监督式基准：3 轮 / 4 次评估记录 | 第 3 节、第 5 节 |
-| `outputs_advanced_bailian/tuning_wall_time.csv` | 该批次墙钟耗时原始记录 | 第 5 节 |
-| `outputs_llm_agent_bailian/llm_agent_trace.csv` | 独立真实调用会话轨迹（候选未通过，保留 IMC） | 第 3 节 、第 4 节图 6-2 |
-| `outputs_llm_agent_bailian/llm_agent_summary.json` | 会话摘要与部署增益 | 第 1 节、第 3 节 |
+| `archive/outputs_llm_matrix/qwen-max_std/llm_agent_trace.csv` | v3 走读会话轨迹（6 步 / 2 次候选试验 / 1 次留下），现作对照 | 第 3 节、第 4 节图 6-2 |
+| `archive/outputs_advanced_bailian/llm_tuning_history.csv` | qwen-max 监督式基准：3 轮 / 4 次评估记录 | 第 3 节、第 5 节 |
+| `archive/outputs_advanced_bailian/tuning_wall_time.csv` | 该批次墙钟耗时原始记录 | 第 5 节 |
+| `archive/outputs_llm_agent_bailian/llm_agent_trace.csv` | 独立真实调用会话轨迹（候选未通过，保留 IMC） | 第 3 节 、第 4 节图 6-2 |
+| `archive/outputs_llm_agent_bailian/llm_agent_summary.json` | 会话摘要与部署增益 | 第 1 节、第 3 节 |
 | `分报告/data/supplement_metrics.json` | 冻结增益补跑的三工况 / 混合工况指标（v4 部署增益 0.4657/0.003648；v3 旧值见 git 历史） | 第 6、7 节 |
 | `artifacts/runs/v4-20260906-8ac9bf4/llm_matrix_v4/` | v4 真实调用矩阵：18 次运行目录 + `matrix_summary.csv` + `AGGREGATE_REPORT.md` + `_progress.csv`（逐次墙钟） | 第 3、4、5 节 |
 | `artifacts/runs/v4-20260906-8ac9bf4/llm_matrix_v4/qwen-max_std_r72/` | v4 走读会话 4 文件（6 步 / 2 次候选试验 / 1 次接受） | 第 4 节图 6-2 |
@@ -124,4 +124,4 @@ LLM 路线里，大模型不产出可直接下发的增益，而是每一步输�
 | `hvac_pid/advanced_tuning.py` :: LLMSupervisoryTuner | 监督式 LLM 整定流程与安全检查 |
 | `hvac_pid/advanced_tuning.py` :: OpenAICompatibleChatProposer | 百炼端点调用（本次模型 qwen-max） |
 
-**复现说明**：v4 走读命令为 `run_llm_agent_demo.py --provider openai-compatible --model qwen-max --setpoint 24 --seed 72`（输出目录记为 `qwen-max_std_r72`），**模型每次输出可能不同**，重复运行不保证得到同一组参数；矩阵 18 次中 17 次的候选未通过，保留原参数。18 次均未越界、零失控。未配置 API 密钥时，脚本会自动切换为启发式模式——可用于验证链路，但**不能**作为 LLM 效果证据。
+**复现说明**：v4 走读命令为 `run.py llm-agent --provider openai-compatible --model qwen-max --setpoint 24 --seed 72`（输出目录记为 `qwen-max_std_r72`），**模型每次输出可能不同**，重复运行不保证得到同一组参数；矩阵 18 次中 17 次的候选未通过，保留原参数。18 次均未越界、零失控。未配置 API 密钥时，脚本会自动切换为启发式模式——可用于验证链路，但**不能**作为 LLM 效果证据。

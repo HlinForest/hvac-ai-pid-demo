@@ -35,4 +35,4 @@ Modelica Standard Library 不依赖联网下载。
 
 建议先单独勾选 `zone.T`、`outdoorK.y`，再新建图窗查看 `commandInput.y`、`actuator.y` 和 `totalLoad.y`，避免不同单位共用纵轴。
 
-已经由命令行生成的中文摄氏度对比图位于 `outputs_review_v3/openmodelica_cross_validation.png`，原始 OpenModelica 结果位于 `outputs_review_v3/modelica/PrecisionCabinetCooling_res.csv`。
+已经由命令行生成的中文摄氏度对比图位于 `archive/outputs_review_v3/openmodelica_cross_validation.png`，原始 OpenModelica 结果位于 `archive/outputs_review_v3/modelica/PrecisionCabinetCooling_res.csv`。

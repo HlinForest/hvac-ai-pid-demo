@@ -26,7 +26,7 @@ def extract(pattern: str, text: str, default: str = "") -> str:
 
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--artifact-dir", type=Path, default=ROOT / "outputs_review_v3")
+    parser.add_argument("--artifact-dir", type=Path, default=ROOT / "archive/outputs_review_v3")
     args = parser.parse_args()
     compiler = shutil.which("g++")
     if compiler is None:

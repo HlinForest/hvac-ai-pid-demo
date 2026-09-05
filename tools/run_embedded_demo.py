@@ -17,7 +17,7 @@ from hvac_pid.embedded_demo import (
 from hvac_pid.env import load_project_env
 
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def parse_args() -> argparse.Namespace:
@@ -44,12 +44,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--setpoint", type=float, default=24.0)
     parser.add_argument("--door-load", type=float, default=3200.0)
     parser.add_argument("--seed", type=int, default=71)
-    parser.add_argument("--output", type=Path, default=Path("outputs_embedded_demo"))
+    parser.add_argument("--output", type=Path, default=Path("archive/outputs_embedded_demo"))
     parser.add_argument(
         "--artifact-dir",
         type=Path,
         default=None,
-        help="训练产物目录(默认 <project_root>/outputs_review_v3，仅过渡兼容；v4 请显式指向 artifacts/runs/<run_id>)",
+        help="训练产物目录(默认 <project_root>/archive/outputs_review_v3，仅过渡兼容；v4 请显式指向 artifacts/runs/<run_id>)",
     )
     return parser.parse_args()
 

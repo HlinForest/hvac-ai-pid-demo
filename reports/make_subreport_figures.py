@@ -59,7 +59,7 @@ CASE_INFO = [
     ("设定温度突变", "工况二", "1 h 时 25→23 °C，外温 34 °C，延迟 7 min"),
     ("持续外界热扰动", "工况三", "外温 37±4.5 °C，3 h 开门 12 min +2600 W，延迟 8 min"),
 ]
-SEALED_FOPDT = {  # outputs_review_v3/engineering_report.md §1.1 / 报告附录 D.3
+SEALED_FOPDT = {  # archive/outputs_review_v3/engineering_report.md §1.1 / 报告附录 D.3
     "初次快速降温": (59.89, 911.1, 6.0),
     "设定温度突变": (59.89, 912.1, 7.0),
     "持续外界热扰动": (64.63, 913.2, 8.0),
@@ -244,7 +244,7 @@ def fig_fopdt_fit():
 
 
 def fig_fopdt_crossval():
-    df = pd.read_csv(PROJECT_ROOT / "outputs_review_v3" / "fopdt_cross_validation_timeseries.csv")
+    df = pd.read_csv(PROJECT_ROOT / "archive/outputs_review_v3" / "fopdt_cross_validation_timeseries.csv")
     cases = list(dict.fromkeys(df["case"]))
     fig, axes = plt.subplots(3, 1, figsize=(10.5, 8.6), sharex=True)
     for ax, case in zip(axes, cases):
@@ -267,7 +267,7 @@ def fig_fopdt_crossval():
 
 
 def fig_fopdt_convergence():
-    df = pd.read_csv(PROJECT_ROOT / "outputs_review_v3" / "fopdt_fit_history.csv")
+    df = pd.read_csv(PROJECT_ROOT / "archive/outputs_review_v3" / "fopdt_fit_history.csv")
     fig, ax = plt.subplots(figsize=(8.6, 4.4))
     ax.plot(df["evaluation"], df["rmse_c"], "o", color=MUTED, ms=4, alpha=0.6,
             label="候选 (A, τ, L) 的 RMSE")
@@ -562,8 +562,8 @@ def supplement_runs():
 
 
 def mixed_figures_main5():
-    ts = pd.read_csv(PROJECT_ROOT / "outputs_review_v3" / "dynamic_timeseries.csv")
-    met = pd.read_csv(PROJECT_ROOT / "outputs_review_v3" / "dynamic_metrics.csv").set_index("controller")
+    ts = pd.read_csv(PROJECT_ROOT / "archive/outputs_review_v3" / "dynamic_timeseries.csv")
+    met = pd.read_csv(PROJECT_ROOT / "archive/outputs_review_v3" / "dynamic_metrics.csv").set_index("controller")
     file_key = {"Ziegler-Nichols": "zn", "IMC PI": "imc", "Bayesian Auto-tune": "bo",
                 "FNN Self-tuning PI": "fnn", "RL Self-tuning PI": "rl"}
     scenario = dynamic_demo_scenario()

@@ -27,7 +27,7 @@ v3 同表第 2 行为 `max=0.150350, passed=0`；v4 物理推进改为 10 s×6 �
 - v3 80 场景密封排名仅适用于 Z-N/IMC/BO/FNN/RL；Safe BO 与 LLM 不可加入同一排名。
 - v4 `embedded_smoke/seven_algorithm_summary.csv`（同一 demo 场景 + 同一 commissioning 门，7 行）仅验证 `--artifact-dir` 管道与统一评价 plumbing，不作为 80 密封排名。
 - v4 完整 `80×7` 统一密封（v4 物理 48/16/16 重训 FNN/RL + SafeBO/LLM 同清单）状态为 PENDING；完成前任何七算法统一排名均须标注不可比较。
-- LLM 矩阵：18 运行 / 18 真实 / 5 部署（`outputs_llm_matrix_v3/matrix_summary.csv:2–19`，`AGGREGATE_REPORT.md:3–6`）。
+- LLM 矩阵：18 运行 / 18 真实 / 5 部署（`archive/outputs_llm_matrix_v3/matrix_summary.csv:2–19`，`AGGREGATE_REPORT.md:3–6`）。
 
 ## 工程与依赖
 

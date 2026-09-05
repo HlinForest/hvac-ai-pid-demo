@@ -242,10 +242,10 @@ $$\theta^* = \arg\min_{\theta=(A,\,\tau,\,L)} \ \sum_{i} \left[\hat{y}(t_i;\,\th
 
 | 数据产物（仓库内路径） | 内容 | 支撑本篇何处 |
 |---|---|---|
-| `outputs_review_v3/fopdt_fit_history.csv` | 有界最小二乘逐次评估记录 | 5.2 节全程留痕、图 1-3 |
-| `outputs_review_v3/classical_tuning_steps.csv` | 整定计算的分步审计表 | 第 7 节参数由来 |
-| `outputs_review_v3/fopdt_cross_validation.csv` | 三工况 FOPDT 复核汇总指标 | 1.2 节、6.1 节 |
-| `outputs_review_v3/fopdt_cross_validation_timeseries.csv` | 24 h 降阶交叉验证时序 | 6.2 节、图 1-4 |
+| `archive/outputs_review_v3/fopdt_fit_history.csv` | 有界最小二乘逐次评估记录 | 5.2 节全程留痕、图 1-3 |
+| `archive/outputs_review_v3/classical_tuning_steps.csv` | 整定计算的分步审计表 | 第 7 节参数由来 |
+| `archive/outputs_review_v3/fopdt_cross_validation.csv` | 三工况 FOPDT 复核汇总指标 | 1.2 节、6.1 节 |
+| `archive/outputs_review_v3/fopdt_cross_validation_timeseries.csv` | 24 h 降阶交叉验证时序 | 6.2 节、图 1-4 |
 
 本篇结论涉及的实现位置：
 

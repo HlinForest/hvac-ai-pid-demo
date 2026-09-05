@@ -114,20 +114,20 @@ OpenAI 接口使用 Responses API 的严格自定义函数工具，强制单步�
 免费验证整条安全流水线（启发式明确不是 LLM）：
 
 ```powershell
-python run_advanced_tuning_benchmark.py --quick --llm-provider heuristic --output outputs_advanced_quick
+python run.py advanced --quick --llm-provider heuristic --output archive/outputs_advanced_quick
 ```
 
 无需网络的 Agent 工具调用回放（可直接看到温度和逐步审计）：
 
 ```powershell
-python run_llm_agent_demo.py --provider replay --output outputs_llm_agent
+python run.py llm-agent --provider replay --output outputs_llm_agent
 ```
 
 OpenAI Responses API：
 
 ```powershell
 $env:OPENAI_API_KEY="你的密钥"
-python run_llm_agent_demo.py --provider openai --model "明确指定的模型名" --output outputs_llm_agent_openai
+python run.py llm-agent --provider openai --model "明确指定的模型名" --output outputs_llm_agent_openai
 ```
 
 阿里云百炼（DashScope OpenAI 兼容模式，`/chat/completions` 端点）。密钥推荐写入项目根目录 `.env`（模板见 `.env.example`，已被 gitignore，不会提交；也可用环境变量，真实环境变量优先于 `.env`）：
@@ -135,28 +135,28 @@ python run_llm_agent_demo.py --provider openai --model "明确指定的模型名
 ```powershell
 # 二选一：写入 .env（DASHSCOPE_API_KEY=sk-...），或设置环境变量后直接运行
 $env:DASHSCOPE_API_KEY="你的百炼API-KEY"
-python run_llm_agent_demo.py --provider openai-compatible --model qwen-plus --output outputs_llm_agent_bailian
+python run.py llm-agent --provider openai-compatible --model qwen-plus --output archive/outputs_llm_agent_bailian
 # 监督整定基准同样支持：
-python run_advanced_tuning_benchmark.py --llm-provider openai-compatible --llm-model qwen-plus
+python run.py advanced --llm-provider openai-compatible --llm-model qwen-plus
 ```
 
 其他 OpenAI 兼容服务商（DeepSeek、Kimi 等）通过 `--base-url` 和 `--api-key-env` 覆盖，例如：
 
 ```powershell
 $env:DEEPSEEK_API_KEY="你的密钥"
-python run_llm_agent_demo.py --provider openai-compatible --model deepseek-chat --base-url https://api.deepseek.com/v1 --api-key-env DEEPSEEK_API_KEY
+python run.py llm-agent --provider openai-compatible --model deepseek-chat --base-url https://api.deepseek.com/v1 --api-key-env DEEPSEEK_API_KEY
 ```
 
 程序不会默认猜模型名。调用会产生费用。使用本地 Ollama：
 
 ```powershell
-python run_llm_agent_demo.py --provider ollama --model "已安装且支持工具调用的模型名" --output outputs_llm_agent_ollama
+python run.py llm-agent --provider ollama --model "已安装且支持工具调用的模型名" --output outputs_llm_agent_ollama
 ```
 
 仅比较数值优化：
 
 ```powershell
-python run_advanced_tuning_benchmark.py --llm-provider none
+python run.py advanced --llm-provider none
 ```
 
 ## 7. 输出文件

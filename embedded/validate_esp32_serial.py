@@ -21,7 +21,7 @@ def main() -> int:
     parser.add_argument("--port", required=True)
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--seconds", type=float, default=600.0)
-    parser.add_argument("--output", type=Path, default=Path("outputs_embedded_demo/esp32_target_acceptance.csv"))
+    parser.add_argument("--output", type=Path, default=Path("archive/outputs_embedded_demo/esp32_target_acceptance.csv"))
     args = parser.parse_args()
     try:
         import serial  # type: ignore

@@ -212,7 +212,7 @@ def run_benchmark(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Time five PI tuning approaches on one constrained cabinet-HVAC problem")
-    parser.add_argument("--output", type=Path, default=Path("outputs_tuning_benchmark"))
+    parser.add_argument("--output", type=Path, default=Path("archive/outputs_tuning_benchmark"))
     parser.add_argument("--train-samples", type=int, default=8)
     parser.add_argument("--bo-iterations", type=int, default=2)
     parser.add_argument("--rl-episodes", type=int, default=750)

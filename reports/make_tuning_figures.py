@@ -2,13 +2,13 @@
 """生成《AI-PI 整定实验报告》图 3-9：七算法的「整定过程图」。
 
 只读封存 CSV 画图，不做任何仿真、不改写封存产物：
-- 图 3  Z-N   FOPDT 阶跃辨识拟合     outputs_review_v3/classical_tuning_history.csv
-- 图 4  IMC   lambda 扫描            outputs_review_v3/imc_lambda_tuning.csv（v3 封存口径）
-- 图 5  BO    贝叶斯搜索轨迹          outputs_review_v3/bayesian_search_history.csv
-- 图 6  安全BO 风险目标搜索           outputs_advanced_quick/safe_bo_history.csv
-- 图 7  LLM   工具调用轨迹            outputs_llm_matrix/qwen-max_std/llm_agent_trace.csv
-- 图 8  FNN   训练收敛               outputs_review_v3/fnn_training_history.csv
-- 图 9  RL    训练收敛               outputs_review_v3/rl_training_history.csv
+- 图 3  Z-N   FOPDT 阶跃辨识拟合     archive/outputs_review_v3/classical_tuning_history.csv
+- 图 4  IMC   lambda 扫描            archive/outputs_review_v3/imc_lambda_tuning.csv（v3 封存口径）
+- 图 5  BO    贝叶斯搜索轨迹          archive/outputs_review_v3/bayesian_search_history.csv
+- 图 6  安全BO 风险目标搜索           archive/outputs_advanced_quick/safe_bo_history.csv
+- 图 7  LLM   工具调用轨迹            archive/outputs_llm_matrix/qwen-max_std/llm_agent_trace.csv
+- 图 8  FNN   训练收敛               archive/outputs_review_v3/fnn_training_history.csv
+- 图 9  RL    训练收敛               archive/outputs_review_v3/rl_training_history.csv
 """
 from __future__ import annotations
 
@@ -26,11 +26,11 @@ from make_figures import (                                               # noqa:
     C_AI_AUTO, C_AI_SELF, C_CLASSICAL, FIG_DIR, GRID, INK, INK2, MUTED,
 )
 
-V3 = PROJECT_ROOT / "outputs_review_v3"
-ADV = PROJECT_ROOT / "outputs_advanced_quick"
-BENCH = PROJECT_ROOT / "outputs_tuning_benchmark"
-DEMO = PROJECT_ROOT / "outputs_embedded_demo"
-MATRIX_STD = PROJECT_ROOT / "outputs_llm_matrix" / "qwen-max_std"
+V3 = PROJECT_ROOT / "archive/outputs_review_v3"
+ADV = PROJECT_ROOT / "archive/outputs_advanced_quick"
+BENCH = PROJECT_ROOT / "archive/outputs_tuning_benchmark"
+DEMO = PROJECT_ROOT / "archive/outputs_embedded_demo"
+MATRIX_STD = PROJECT_ROOT / "archive/outputs_llm_matrix" / "qwen-max_std"
 
 
 def _style(ax):

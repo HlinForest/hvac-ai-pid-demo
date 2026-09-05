@@ -16,7 +16,7 @@ pio device monitor --baud 115200
 - `MODE demo`：100 ms 墙钟运行一次控制任务，并用 200 倍时间加速的虚拟热对象让 5 小时温度过程在 90 秒内可见；FNN/RL 每 2 秒才运行一次候选增益调度；
 - `MODE modbus`：从真实空调控制器/BMS 读取温度、实际频率和告警，并在取得真实寄存器表且显式许可后写容量请求。默认只读，ESP32 不直接驱动压缩机功率器件。
 
-七算法演示配置由 `run_embedded_demo.py --algorithm all` 生成到 `generated_demo_profiles.hpp`，带版本、清单字符串和 CRC32。正式评审策略则由 `outputs_review_v3` 唯一自动导出，FNN/RL 均通过密封部署门；RL 是冻结策略查表，未覆盖状态回退工厂 IMC；LLM 只部署已通过上位机仿真门的固定增益。串口命令与接线说明见 `esp32_seven_algorithm_demo/README.md`。
+七算法演示配置由 `run.py embedded --algorithm all` 生成到 `generated_demo_profiles.hpp`，带版本、清单字符串和 CRC32。正式评审策略则由 `archive/outputs_review_v3` 唯一自动导出，FNN/RL 均通过密封部署门；RL 是冻结策略查表，未覆盖状态回退工厂 IMC；LLM 只部署已通过上位机仿真门的固定增益。串口命令与接线说明见 `esp32_seven_algorithm_demo/README.md`。
 
 真实目标板验收：
 
@@ -40,12 +40,12 @@ python embedded/validate_esp32_serial.py --port COM3 --seconds 600
 ## 一键执行 PC 软件在环
 
 ```powershell
-python embedded\export_policy.py outputs_review_v3
+python embedded\export_policy.py archive/outputs_review_v3
 python embedded\wokwi\prepare_projects.py
-python embedded\run_mcu_validation.py --artifact-dir outputs_review_v3
+python embedded\run_mcu_validation.py --artifact-dir archive/outputs_review_v3
 ```
 
-第一条命令只导出通过验收的部署表，并在 `generated_policy.hpp` 写入版本号、CRC32、FNN/RL 验收状态、IMC 回退参数、状态边界、FNN 上下文参数、RL 策略和覆盖掩码。CRC v3 覆盖全部执行字段，固件启动时实际重算；任一字段损坏都使用独立编译的工厂 IMC。FNN/RL 候选训练表不能手工复制进 C++。结果写入 `outputs_review_v3/mcu_pc_sil_log.txt` 和 `mcu_validation_summary.csv`。表内明确标注 PC ABI，不能把 PC 的纳秒耗时或 exe 大小写成 ESP32 实测值。
+第一条命令只导出通过验收的部署表，并在 `generated_policy.hpp` 写入版本号、CRC32、FNN/RL 验收状态、IMC 回退参数、状态边界、FNN 上下文参数、RL 策略和覆盖掩码。CRC v3 覆盖全部执行字段，固件启动时实际重算；任一字段损坏都使用独立编译的工厂 IMC。FNN/RL 候选训练表不能手工复制进 C++。结果写入 `archive/outputs_review_v3/mcu_pc_sil_log.txt` 和 `mcu_validation_summary.csv`。表内明确标注 PC ABI，不能把 PC 的纳秒耗时或 exe 大小写成 ESP32 实测值。
 
 ## Wokwi 双目标工程
 
@@ -58,11 +58,11 @@ python embedded\wokwi\prepare_projects.py
 - `embedded/wokwi/common/sketch.ino`：两种 MCU 共用的 100 ms PI / 2 s AI 调度入口。
 - `embedded/hvac_pid_controller.hpp`：纯 C++ 控制核心，不访问底层寄存器。
 - `embedded/generated_policy.hpp`：由最终训练目录自动生成的只读部署产物；禁止手工修改。
-- `outputs_review_v3/policy_manifest_v3.json`：与头文件同源生成的可审计策略清单；固件执行内容以自动生成头文件及其 CRC 校验为准。
+- `archive/outputs_review_v3/policy_manifest_v3.json`：与头文件同源生成的可审计策略清单；固件执行内容以自动生成头文件及其 CRC 校验为准。
 
 Wokwi 右侧电路包含设定值旋钮、开门按钮、PWM 指示灯和安全回退指示灯。串口 Plotter 输出：室温、设定值、PWM 百分比、`Kp`、`Ki`、PI/AI 最坏微秒数和回退状态。
 
-2026-08-23 在线验证记录保存在 `outputs_review_v3/mcu_wokwi_validation.csv`：ESP32 完整代码编译并运行约 10.079 s；STM32F103 完整代码编译并运行约 28.500 s，并点击一次开门扰动。匿名会话中的 ESP32 串口面板未显示数据（最小串口程序也相同），STM32 串口 Plotter 面板可见但数据未能可靠读取，因此二者都只能判为“目标编译/启动通过，遥测待补”，不能判成完整验收。
+2026-08-23 在线验证记录保存在 `archive/outputs_review_v3/mcu_wokwi_validation.csv`：ESP32 完整代码编译并运行约 10.079 s；STM32F103 完整代码编译并运行约 28.500 s，并点击一次开门扰动。匿名会话中的 ESP32 串口面板未显示数据（最小串口程序也相同），STM32 串口 Plotter 面板可见但数据未能可靠读取，因此二者都只能判为“目标编译/启动通过，遥测待补”，不能判成完整验收。
 
 ## 控制核心的资源结构
 

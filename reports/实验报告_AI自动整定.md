@@ -2,8 +2,8 @@
 
 **项目**：变速精密/机柜空调 AI-PI 自动整定演示（`hvac-ai-pid-demo`）
 **日期**：2026-09-01
-**数据来源**：`outputs_tuning_benchmark/`、`outputs_review_v3/`（封存 v3 验收证据）、`outputs_advanced_quick/`、`outputs_embedded_demo/`；图表由 `reports/make_figures.py` 生成
-**说明**：本文所有数据均来自项目已有实验产物；凡属估算的数值均以"（估算）"标注并给出估算依据。CSV 原始数据文件受企业透明加密保护，本报告数字以明文报告 `outputs_tuning_benchmark/tuning_runtime_report.md` 与封存验收文档为准。
+**数据来源**：`archive/outputs_tuning_benchmark/`、`archive/outputs_review_v3/`（封存 v3 验收证据）、`archive/outputs_advanced_quick/`、`archive/outputs_embedded_demo/`；图表由 `reports/make_figures.py` 生成
+**说明**：本文所有数据均来自项目已有实验产物；凡属估算的数值均以"（估算）"标注并给出估算依据。CSV 原始数据文件受企业透明加密保护，本报告数字以明文报告 `archive/outputs_tuning_benchmark/tuning_runtime_report.md` 与封存验收文档为准。
 
 ---
 
@@ -43,7 +43,7 @@
 ### 1.4 数据集与验收协议
 
 - **场景数据集**：48 训练 / 16 验证 / 16 测试；制冷量 4500–10500 W、延迟 2–12 min 随机化；扰动族含热启动、设定值上/下阶跃、持续热脉冲。逐场景 SHA-256 写入 `dataset_manifest.csv`，并执行数据泄漏拒绝检查。
-- **封存验收**：5 个验收种子（101/211/307/401/503）× 16 场景 = **80 个验收场景**，结果封存于 `outputs_review_v3/`。
+- **封存验收**：5 个验收种子（101/211/307/401/503）× 16 场景 = **80 个验收场景**，结果封存于 `archive/outputs_review_v3/`。
 - **实验流程**如图 2。
 
 ![图 2 实验流程框图](figures/fig2_实验流程框图.png)
@@ -58,7 +58,7 @@
 
 ### 1.6 实验平台
 
-Windows 10 / Python 3.11.7 / numpy + scipy + scikit-learn，**全程纯 CPU**，无深度学习框架、无 GPU 参与。耗时基准的调参问题：机柜空调 31.5→24 °C、制冷量 7600 W、延迟 6 min、8 个离线工况、BO 2 次迭代、RL 750 回合（`outputs_tuning_benchmark/tuning_runtime_report.md`）。
+Windows 10 / Python 3.11.7 / numpy + scipy + scikit-learn，**全程纯 CPU**，无深度学习框架、无 GPU 参与。耗时基准的调参问题：机柜空调 31.5→24 °C、制冷量 7600 W、延迟 6 min、8 个离线工况、BO 2 次迭代、RL 750 回合（`archive/outputs_tuning_benchmark/tuning_runtime_report.md`）。
 
 ---
 
@@ -106,9 +106,9 @@ Windows 10 / Python 3.11.7 / numpy + scipy + scikit-learn，**全程纯 CPU**，
 |---|---:|---:|---:|---|
 | 贝叶斯 BO | 1.42 s | 528 h | 64.50 | GP+EI，log 域搜索，迭代次数可按现场时间预算缩放 |
 | 风险感知安全 BO | 0.88–1.41 s | — | 见下 | 风险目标 = 均值 + 0.75×std；β=2 安全 GP 抑制危险试验点 |
-| LLM Agent | 30.4 s（监督式基准，实测） | — | 风险目标 36.10 | **真实调用**（百炼 qwen-max，`outputs_advanced_bailian/`）；3 轮中第 3 轮被安全门接受，风险 39.30→36.10 |
+| LLM Agent | 30.4 s（监督式基准，实测） | — | 风险目标 36.10 | **真实调用**（百炼 qwen-max，`archive/outputs_advanced_bailian/`）；3 轮中第 3 轮被安全门接受，风险 39.30→36.10 |
 
-安全 BO 在其基准 holdout 上取得 **33.58**，优于同基准的 IMC（36.29）、普通 BO（37.96）与启发式（34.18）（`outputs_advanced_quick/`；与第 2 节 80 场景封存验收的 holdout 非同一基准，不可直接混比）。
+安全 BO 在其基准 holdout 上取得 **33.58**，优于同基准的 IMC（36.29）、普通 BO（37.96）与启发式（34.18）（`archive/outputs_advanced_quick/`；与第 2 节 80 场景封存验收的 holdout 非同一基准，不可直接混比）。
 
 ### 3.2 自整定（在线训练 + 在线推理）
 
@@ -130,7 +130,7 @@ Windows 10 / Python 3.11.7 / numpy + scipy + scikit-learn，**全程纯 CPU**，
 
 关键工程结论：**FNN/RL 把 4000+ 对象小时的安全试验压缩到 PC 上 8–16 秒完成**。等效对象时间（图 10b）衡量"若把候选试验串行搬到真实压缩机上需要多久"——不但昂贵而且不安全；AI 路线用离线仿真承担了全部试错。
 
-> **等效虚拟对象时间的定义与构成**（计算逻辑见 `run_tuning_benchmark.py:126-136`）：它不是 CPU 时间，而是"若在真实压缩机/机柜上完成同样的整定试验，设备需实际运行的时长"。由三项成本叠加：① FOPDT 安全辨识采数 = 168 h/工况（Z-N/IMC/BO 的前提）；② 每组候选 Kp/Ki 的评估 = 5 h（仅首次进入 ±0.5 °C 带即需 54 min，再加扰动恢复与复位）；③ 试验次数随方法膨胀——FNN/RL 的训练标签来自"每个工况下最优 Kp/Ki"，须先对每个工况做一轮完整搜索（每工况 2×168 h 辨识 + 每标签 5 h 评估），故达 4000+ 小时。真机上这些试验受执行器安全约束（最小容量、启停驻留）根本不可行；PC 加速仿真（200×）把全部试错压缩到秒级，真机只部署结果、不做试验。
+> **等效虚拟对象时间的定义与构成**（计算逻辑见 `tools/run_tuning_benchmark.py:126-136`）：它不是 CPU 时间，而是"若在真实压缩机/机柜上完成同样的整定试验，设备需实际运行的时长"。由三项成本叠加：① FOPDT 安全辨识采数 = 168 h/工况（Z-N/IMC/BO 的前提）；② 每组候选 Kp/Ki 的评估 = 5 h（仅首次进入 ±0.5 °C 带即需 54 min，再加扰动恢复与复位）；③ 试验次数随方法膨胀——FNN/RL 的训练标签来自"每个工况下最优 Kp/Ki"，须先对每个工况做一轮完整搜索（每工况 2×168 h 辨识 + 每标签 5 h 评估），故达 4000+ 小时。真机上这些试验受执行器安全约束（最小容量、启停驻留）根本不可行；PC 加速仿真（200×）把全部试错压缩到秒级，真机只部署结果、不做试验。
 
 ### 3.4 控制性能对比
 
@@ -170,7 +170,7 @@ Windows 10 / Python 3.11.7 / numpy + scipy + scikit-learn，**全程纯 CPU**，
 | RL 马尔可夫性与奖励-目标对齐 | 残留缺陷 C4 | 可能仍有小幅优化空间 |
 | FNN 标签冲突 | log-RMSE 1.059–1.85 | 多场景同状态异标签导致规则面拟合受限 |
 | Modelica Buildings 高保真模型 | 已延后 | 物理可信度依赖现有三层交叉验证 |
-| 工作区未提交修改 | 2026-09-01 第四轮评审修复 | `outputs_review_v3` 封存产物时间戳早于部分代码修改，正式发布前需重新生成并复跑验收 |
+| 工作区未提交修改 | 2026-09-01 第四轮评审修复 | `archive/outputs_review_v3` 封存产物时间戳早于部分代码修改，正式发布前需重新生成并复跑验收 |
 
 **结论**：项目在仿真与部署就绪证据链层面已经完成——7 种算法全部跑通并完成 80 场景封存验收，FNN/RL 自整定通过全部部署门禁，LLM Agent 已完成单批次真实 API 调用（qwen-max）。非AI基线（Z-N/IMC）的调参成本主要在安全辨识采数（168/1008 对象小时），人工试凑预估 20–80 对象小时每模式（估算）；引入 AI 后，自动整定在 PC 上 1–3 s、自整定训练 8–16 s 即可完成（等效节省 4000+ 对象小时），且全程纯 CPU、无需 GPU。剩余工作集中于真机验收与 LLM 多批次调用统计。
 

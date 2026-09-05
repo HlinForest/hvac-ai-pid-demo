@@ -25,7 +25,7 @@ apply_style(plt)
 import csv  # noqa: E402
 import io  # noqa: E402
 
-V3 = ROOT / "outputs_review_v3"
+V3 = ROOT / "archive/outputs_review_v3"
 FIG = ROOT / "reports" / "分报告" / "figures"
 
 

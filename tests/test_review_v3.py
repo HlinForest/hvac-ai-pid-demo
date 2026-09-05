@@ -109,7 +109,7 @@ def test_pc_sil_enforces_rl_coverage_gate(tmp_path: Path) -> None:
     # pushes the fallback fraction to ~83% and must fail this test.
     if shutil.which("g++") is None:
         pytest.skip("g++ unavailable on this runner")
-    parity_source = ROOT / "outputs_review_v3" / "policy_parity_vectors.csv"
+    parity_source = ROOT / "archive/outputs_review_v3" / "policy_parity_vectors.csv"
     if not parity_source.exists():
         pytest.skip("policy parity vectors not generated")
     shutil.copy2(parity_source, tmp_path / "policy_parity_vectors.csv")

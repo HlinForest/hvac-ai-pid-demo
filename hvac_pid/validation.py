@@ -468,7 +468,7 @@ def run_cross_validation(output_dir: str | Path) -> dict[str, object]:
     modelica_run_status = (
         "成功：实际使用 DASSL 运行 12 h / 62 方程模型，结果已与 Python 连续方程交叉比较"
         if openmodelica_rows
-        else f"未运行：{output / 'modelica' / 'PrecisionCabinetCooling_res.csv'} 不存在（历史证据见 outputs_review_v3/modelica/PrecisionCabinetCooling_res.csv，当前未复现）"
+        else f"未运行：{output / 'modelica' / 'PrecisionCabinetCooling_res.csv'} 不存在（历史证据见 archive/outputs_review_v3/modelica/PrecisionCabinetCooling_res.csv，当前未复现）"
     )
     environment = {
         "run_at": datetime.now().astimezone().isoformat(timespec="seconds"),

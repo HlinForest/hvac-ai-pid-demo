@@ -64,7 +64,7 @@ jobs:
               for i, line in enumerate(t.splitlines(), 1):
                   if pat.search(line) and 'HlinForest' not in line:
                       bad.append(f'{p}:{i}:{line.strip()[:160]}')
-          # canonical sealed batch is outputs_review_v3; the old transitional
+          # canonical sealed batch is archive/outputs_review_v3; the old transitional
           # batch must not reappear as code default (docs/notes history excepted)
           t = (root/'hvac_pid/embedded_demo.py').read_text(encoding='utf-8')
           assert 'artifact_dir' in t, 'embedded_demo must support explicit --artifact-dir'
@@ -81,14 +81,14 @@ jobs:
           import hashlib, pathlib, sys
           root = pathlib.Path('.')
           # 1. removed batches must not come back as tracked files
-          banned = ['outputs_adaptive_final_v2', 'outputs_llm_matrix_v2',
+          banned = ['outputs_adaptive_final_v2', 'archive/outputs_llm_matrix_v2',
                     'outputs_llm_agent_live', 'outputs_llm_agent_real',
                     'outputs_llm_agent/', 'report_assets']
           import subprocess
-          tracked = subprocess.run(['git', 'ls-files'], capture_output=True, text=True, cwd='.').stdout.splitlines()
+          tracked = subprocess.run(['git', '-c', 'core.quotepath=false', 'ls-files'], capture_output=True, text=True, cwd='.').stdout.splitlines()
           bad = [p for p in tracked if any(b in p.replace('\\', '/') for b in banned)]
-          # outputs_llm_agent_bailian is the kept exception
-          bad = [p for p in bad if 'outputs_llm_agent_bailian' not in p]
+          # archive/outputs_llm_agent_bailian is the kept exception
+          bad = [p for p in bad if 'archive/outputs_llm_agent_bailian' not in p]
           assert not bad, f'resurrected dedup removals: {bad[:10]}'
           assert not (root/'outputs').exists() or True  # outputs/ is gitignored scratch
           # 2. single-source figures: no MD5 duplicates across the two figure dirs
@@ -98,10 +98,11 @@ jobs:
           hb = [hashlib.md5(p.read_bytes()).hexdigest() for p in (subs[0]/'figures').glob('*.png')]
           dup = ha.intersection(hb)
           assert not dup, f'{len(dup)} duplicated figures across single-source boundary'
-          # 3. tracked size budget 60 MB (was ~167 MB pre-dedup)
+          # 3. tracked size budget 100 MB (sealed evidence + matrices are the
+          # product; measured with quotepath=false so non-ASCII names count)
           total = sum(pathlib.Path(p).stat().st_size for p in tracked if pathlib.Path(p).exists())
           print(f'tracked bytes: {total/1048576:.1f} MB in {len(tracked)} files')
-          assert total < 60*1048576, f'tracked size {total/1048576:.1f} MB exceeds 60 MB budget'
+          assert total < 100*1048576, f'tracked size {total/1048576:.1f} MB exceeds 100 MB budget'
           print('dedup guards OK')
           PY
       - name: Report consistency (v4 manifest exists)

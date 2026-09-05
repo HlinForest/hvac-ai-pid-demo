@@ -29,7 +29,7 @@ flowchart TD
 
 | 层级 | 核心文件 |
 |---|---|
-| 入口 | `main.py`、`run_*benchmark.py`、`run_embedded_demo.py`（新增 `--artifact-dir`）、`streamlit_app.py` |
+| 入口 | `main.py`、`run.py`（统一入口）、`tools/`（各实验命令行入口）、`streamlit_app.py` |
 | 对象与场景 | `hvac_pid/config.py`（新增 `integration_substeps=6`）、`plant.py`（子步进积分）、`simulator.py`、`modelica/HVACAI/` |
 | 控制算法 | `controllers.py`、`tuning.py`、`advanced_tuning.py`、`ai_controllers.py` |
 | 安全执行 | `hvac_pid/safety.py`（`MAX_FRACTIONAL_GAIN_CHANGE=0.10`）、`actuator.py`、候选安全门、IMC 回退 |
@@ -43,5 +43,5 @@ flowchart TD
 - FNN = 5×5 零阶 TSK 基础面 + 4 项上下文残差修正；每次只激活 4 条相邻规则。
 - RL 状态 = 5×5×3，动作数 = 9（相对 IMC 的绝对增益目标，非递归累乘）。
 - `ScheduledPIController(max_fractional_change=0.35)` 为遗留实验路径，正式报告不使用；部署安全界为 `safety.py` 的 ±10%。
-- `run_advanced_tuning_benchmark.py` 文本曾误写“25% 信赖域”，已修正为 10%（实现一直是 10%）。
+- `tools/run_advanced_tuning_benchmark.py` 文本曾误写“25% 信赖域”，已修正为 10%（实现一直是 10%）。
 - `hvac_pid/report.py` 安全表曾误写 ±25%，已修正为 ±10%。

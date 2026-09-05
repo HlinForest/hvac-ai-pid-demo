@@ -1,6 +1,6 @@
 """Render an existing outputs directory into the visual HTML engineering report.
 
-Usage: python render_report.py outputs
+Usage: python run.py render outputs  (or: python tools/render_report.py outputs)
 """
 from __future__ import annotations
 

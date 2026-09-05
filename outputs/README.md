@@ -3,7 +3,7 @@
 This directory is **not tracked** (see `.gitignore`). It is the default
 `python main.py --output outputs` target — rerun the pipeline to recreate it.
 
-- Sealed history: `outputs_review_v3/` (canonical; includes the Modelica
+- Sealed history: `archive/outputs_review_v3/` (canonical; includes the Modelica
   reference CSV, OpenModelica cross-check, `submission_package/` and
   `documents/` cherry-picked here in dedup P1).
 - New runs: `artifacts/runs/<run_id>/` (see `experiments/manifests/v4.yaml`).

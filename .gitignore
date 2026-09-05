@@ -11,24 +11,24 @@ tmp_submission/
 
 # Generated inspection payloads: the actual Excel/PPT deliverables are retained.
 outputs/**/*.inspect.ndjson
-outputs_embedded_demo/*.inspect.ndjson
+archive/outputs_embedded_demo/*.inspect.ndjson
 
 # Render-time KaTeX derivatives (copied from vendor/katex by hvac_pid/report.py).
 **/report_assets/
 
 # Regenerable pipeline scratch (default `python main.py --output outputs`).
-# Sealed history lives in outputs_review_v3/; new runs go to artifacts/runs/.
+# Sealed history lives in archive/outputs_review_v3/; new runs go to artifacts/runs/.
 # OpenModelica C build intermediates; retain the response CSV used by validation.
-outputs_review_v3/modelica/*
-!outputs_review_v3/modelica/PrecisionCabinetCooling_res.csv
+archive/outputs_review_v3/modelica/*
+!archive/outputs_review_v3/modelica/PrecisionCabinetCooling_res.csv
 
 # Rendered slide previews duplicate the actual PowerPoint deliverable.
-outputs_review_v3/submission_package/slides_preview_v2/
-outputs_review_v3/submission_package/slides_rendered/
+archive/outputs_review_v3/submission_package/slides_preview_v2/
+archive/outputs_review_v3/submission_package/slides_rendered/
 
 # Local document QA renders and audit JSON; final DOCX files remain tracked.
-outputs_review_v3/docx_qa/
-outputs_review_v3/documents/*_a11y.json
+archive/outputs_review_v3/docx_qa/
+archive/outputs_review_v3/documents/*_a11y.json
 
 # Native testbench binaries are rebuilt from the supplied C++ source.
 embedded/*.exe
@@ -61,10 +61,10 @@ outputs/*
 !outputs/README.md
 
 # Learning-manual QA derivatives. The final DOCX remains tracked.
-outputs_review_v3/learning_document/*.pdf
-outputs_review_v3/learning_document/a11y_audit.json
-outputs_review_v3/learning_document/rendered_*/
-outputs_review_v3/learning_document/figures/
+archive/outputs_review_v3/learning_document/*.pdf
+archive/outputs_review_v3/learning_document/a11y_audit.json
+archive/outputs_review_v3/learning_document/rendered_*/
+archive/outputs_review_v3/learning_document/figures/
 
 # Editor and operating-system files
 .vscode/

@@ -101,11 +101,11 @@ IMC（SIMC）公式把 FOPDT 的 (K, τ, L) 直接映射成 Kp/Ti，映射之后
 
 | 数据产物（仓库内路径） | 内容 | 支撑本篇何处 |
 |---|---|---|
-| `outputs_review_v3/imc_lambda_tuning.csv` | 21 个 λ 候选的训练工况扫描结果 | 第 1 节 λ*=26.9 min、第 4 节图 3-2 |
-| `outputs_review_v3/policy_manifest_v3.json` | v3 封存部署清单（含"已验证备用参数"字段） | 第 1 节增益核对 |
-| `outputs_review_v3/case_metrics.csv` | v3 三标准工况 × 五算法指标 | 第 6 节 |
-| `outputs_review_v3/case_timeseries.csv` | 三工况逐分钟时序 | 图 3-3～3-5 |
-| `outputs_tuning_benchmark/tuning_stage_times.csv` | 整定耗时基准 | 第 5 节 |
+| `archive/outputs_review_v3/imc_lambda_tuning.csv` | 21 个 λ 候选的训练工况扫描结果 | 第 1 节 λ*=26.9 min、第 4 节图 3-2 |
+| `archive/outputs_review_v3/policy_manifest_v3.json` | v3 封存部署清单（含"已验证备用参数"字段） | 第 1 节增益核对 |
+| `archive/outputs_review_v3/case_metrics.csv` | v3 三标准工况 × 五算法指标 | 第 6 节 |
+| `archive/outputs_review_v3/case_timeseries.csv` | 三工况逐分钟时序 | 图 3-3～3-5 |
+| `archive/outputs_tuning_benchmark/tuning_stage_times.csv` | 整定耗时基准 | 第 5 节 |
 
 本篇结论涉及的实现位置：
 

@@ -62,7 +62,7 @@ artifacts:
 
 modelica:
   policy: "v4结果纳入同一run目录并记录原始CSV哈希；无法复跑时标为历史证据，当前未复现"
-  history: "outputs/modelica/PrecisionCabinetCooling_res.csv (DASSL 12h) 为历史证据"
+  history: "archive/outputs_review_v3/modelica/PrecisionCabinetCooling_res.csv (DASSL 12h) 为历史证据"
 
 llm:
   matrix_v3: {runs: 18, live: 18, deployed: 5, note: "报告不得再写仅2次真实会话"}

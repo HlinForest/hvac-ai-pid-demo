@@ -6,8 +6,8 @@
 ## v4 运行
 
 - `artifacts/runs/v4-20260906-2870262/`：数值/FOPDT 交叉验证 + 步长收敛 + 七算法冒烟 + 溯源。
-- 复现：`python run_cross_validation.py artifacts/runs/<run_id>`；
-  `python run_embedded_demo.py --algorithm all --provider replay --artifact-dir <artifact_dir> --output <run>/embedded_smoke`。
+- 复现：`python run.py crossval artifacts/runs/<run_id>`；
+  `python run.py embedded --algorithm all --provider replay --artifact-dir <artifact_dir> --output <run>/embedded_smoke`。
 
 ## 场景与划分
 
@@ -25,13 +25,13 @@
 
 ## Modelica
 
-- `outputs_review_v3/modelica/PrecisionCabinetCooling_res.csv`（DASSL 12 h）为历史证据，SHA-256 记录于 `provenance.csv`（`ad68bd1e…`）。
+- `archive/outputs_review_v3/modelica/PrecisionCabinetCooling_res.csv`（DASSL 12 h）为历史证据，SHA-256 记录于 `provenance.csv`（`ad68bd1e…`）。
 - v3 部分报告曾同时写“未运行”与“已实际运行”，属快照矛盾；v4 统一标记为“历史证据，当前未复现”，新 run 目录未发现 `modelica/*.csv` 即判未运行（路径为 run 相对路径，不再写死 `outputs/modelica`）。
-- 本机无 `omc` 时 `run_cross_validation.py` 只刷新数值验证并明确打印未复跑。
+- 本机无 `omc` 时 `run.py crossval` 只刷新数值验证并明确打印未复跑。
 
 ## LLM
 
-- `outputs_llm_matrix_v3`：18 次运行、18 真实调用、18 stable、5/18 部署。以 18 次为准，禁止再写“仅 2 次真实会话”。
+- `archive/outputs_llm_matrix_v3`：18 次运行、18 真实调用、18 stable、5/18 部署。以 18 次为准，禁止再写“仅 2 次真实会话”。
 - LLM 同时报告多次运行分布与回退率；不同协议数据不参与统一排名；`replay` 为离线工具调用轨迹，非实时模型调用。
 
 ## 硬件门（待外部验证，不得仿真冒充）

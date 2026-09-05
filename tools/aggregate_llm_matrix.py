@@ -2,11 +2,11 @@ from __future__ import annotations
 
 """Aggregate the LLM-agent model matrix runs into one CSV + Markdown report.
 
-Scans ``outputs_llm_matrix_v3/<model>_<difficulty>_r<seed>/`` directories,
+Scans ``archive/outputs_llm_matrix_v3/<model>_<difficulty>_r<seed>/`` directories,
 reads each ``llm_agent_summary.json`` and ``llm_agent_trace.csv``, and writes:
 
-- ``outputs_llm_matrix_v3/matrix_summary.csv`` — one row per run;
-- ``outputs_llm_matrix_v3/AGGREGATE_REPORT.md`` — per-model verdicts.
+- ``archive/outputs_llm_matrix_v3/matrix_summary.csv`` — one row per run;
+- ``archive/outputs_llm_matrix_v3/AGGREGATE_REPORT.md`` — per-model verdicts.
 
 The report never upgrades replay/heuristic runs to "live LLM" evidence:
 a ``live_llm`` column is derived from the summary's own disclosure fields.
@@ -17,7 +17,7 @@ import json
 import sys
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[1]
 
 
 def _load_run(run_dir: Path) -> dict[str, object] | None:
@@ -74,7 +74,7 @@ def _fmt(value: object, digits: int = 2) -> str:
 
 
 def main() -> None:
-    matrix_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "outputs_llm_matrix_v3"
+    matrix_dir = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "archive/outputs_llm_matrix_v3"
     rows = [row for d in sorted(matrix_dir.iterdir()) if d.is_dir() for row in [_load_run(d)] if row]
     if not rows:
         raise SystemExit(f"no runs found under {matrix_dir}")

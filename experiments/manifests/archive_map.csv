@@ -19,3 +19,6 @@ reports/分报告/my_report/,—,empty dir after zero-byte docx removal,pre-dedu
 run.py (new),—,unified CLI delegating to run_* modules (verbatim args); 5 run_*.py kept as thin wrappers with DeprecationWarning,pre-dedup-a3d8fba
 build_docs.py (new),—,unified dispatcher (detailed --formal/--beginner, manual); build_*.py unchanged,pre-dedup-a3d8fba
 reports/figstyle.py (new),—,single source for report palette + rcParams; make_figures re-exports; s4/subreport style blocks replaced by apply_style(plt),pre-dedup-a3d8fba
+outputs_review_v3/,archive/outputs_review_v3/,root-tidy reorg: canonical batch relocated, contents untouched; live refs rewritten to archive/,reorg-tools-archive
+outputs_llm_matrix_v3/ outputs_llm_matrix/ outputs_advanced_quick/ outputs_advanced_bailian/ outputs_embedded_demo/ outputs_tuning_benchmark/ outputs_llm_agent_bailian/,archive/同名,root-tidy reorg: history batches relocated, contents untouched; live refs rewritten to archive/,reorg-tools-archive
+run_advanced_tuning_benchmark.py run_cross_validation.py run_embedded_demo.py run_llm_agent_demo.py run_tuning_benchmark.py render_report.py aggregate_llm_matrix.py,tools/同名,root-tidy reorg: entry scripts grouped; ROOT=parents[1]; run.py delegates to tools.* (namespace package); tests import updated,reorg-tools-archive

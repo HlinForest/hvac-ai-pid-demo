@@ -307,7 +307,7 @@ def build():
     add_text(s, IN(0.45), IN(6.10), IN(12.4), IN(1.2), [
         L("* 安全 BO 的 33.58 是高级整定基准（独立留出集）上的风险目标，与 80 场景口径不同，不可直接混比；该基准内排序：安全 BO 33.58 < 启发式 34.18 < IMC 36.29 < 普通 BO 37.96。", size=10.5, color=C_MUTED, space_after=3),
         L("† LLM Agent 为真实 API 调用（阿里云百炼 qwen-max）：七算法统一演示综合目标 45.04（第三）、开门恢复 38 min（次快）、过冷 0.81 °C 最小；候选经安全门接受后部署。30.4 s 为监督式基准口径。", size=10.5, color=C_MUTED, space_after=3),
-        L("耗时来自 outputs_tuning_benchmark（基准问题：31.5→24 °C、7600 W、延迟 6 min、8 个离线工况）；holdout 来自 v3 封存验收。", size=10.5, color=C_MUTED, space_after=0),
+        L("耗时来自 archive/outputs_tuning_benchmark（基准问题：31.5→24 °C、7600 W、延迟 6 min、8 个离线工况）；holdout 来自 v3 封存验收。", size=10.5, color=C_MUTED, space_after=0),
     ])
 
     # ---- 7 Z-N ----

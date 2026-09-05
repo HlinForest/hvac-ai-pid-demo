@@ -152,7 +152,7 @@ def _selected_imc(artifact_dir: Path, fallback: tuple[float, float]) -> tuple[fl
 
 
 def _advanced_gain(project_root: Path, method: str) -> tuple[float, float] | None:
-    path = project_root / "outputs_advanced_quick" / "advanced_holdout_summary.csv"
+    path = project_root / "archive/outputs_advanced_quick" / "advanced_holdout_summary.csv"
     if not path.exists():
         return None
     with path.open("r", encoding="utf-8-sig", newline="") as handle:
@@ -459,14 +459,14 @@ def run_algorithm_demo(
         else:
             # Transitional fallback only; v4 callers must pass --artifact-dir
             # or HVAC_ARTIFACT_DIR pointing at artifacts/runs/<run_id>.
-            # Canonical sealed batch is outputs_review_v3 (dedup P1).
+            # Canonical sealed batch is archive/outputs_review_v3 (dedup P1).
             warnings.warn(
                 "artifact_dir not given; falling back to legacy "
-                "outputs_review_v3. Pass --artifact-dir explicitly.",
+                "archive/outputs_review_v3. Pass --artifact-dir explicitly.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-            resolved_artifact_dir = root / "outputs_review_v3"
+            resolved_artifact_dir = root / "archive/outputs_review_v3"
     artifact_dir = resolved_artifact_dir
     model_fopdt = identify_fopdt(scenario)
     context = _DemoContext(

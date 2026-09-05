@@ -6,9 +6,39 @@
 
 > 新增风险感知安全 BO，以及真正的工具调用式 LLM Agent 自动整定：Agent 自主选择查看历史、运行候选仿真或停止，宿主安全门负责限幅、试验、验收和回退。详见 [docs/SOTA_LLM_PI_TUNING.md](docs/SOTA_LLM_PI_TUNING.md)。Q-learning 保留为教学/对照方法，不称为 SOTA。
 
+## 第一次打开？看这里
+
+三条路，对号入座：
+
+| 你想干嘛 | 看哪里 / 跑什么 |
+|---|---|
+| 跑实验 | `python run.py --help`（7 个子命令；冒烟先跑 `python main.py --quick`） |
+| 看报告 | `reports/分报告/`（00 总览 → 01 对象 → 02–08 各算法，每篇 md + docx 成对） |
+| 玩演示 | 双击 `run_quick_demo.bat`，或 `streamlit run streamlit_app.py` |
+| 怎么复现历史数据 | `experiments/manifests/v4.yaml` + `experiments/manifests/archive_map.csv` |
+
+顶层目录地图（其余都是历史或生成物，不用挨个点开）：
+
+| 目录 | 是什么 | 什么时候进 |
+|---|---|---|
+| `hvac_pid/` | 核心代码（对象、算法、仿真、评估） | 改算法、查实现 |
+| `tools/` | 各实验命令行入口（`run_*`、`render_report`、`aggregate`） | 直接跑某个实验（一般用 `run.py` 代替） |
+| `main.py` + `run.py` | 主流水线 + 统一入口 | 跑完整实验只认它俩 |
+| `reports/分报告/` | 正式报告 00–08（md 为源，docx 为生成物） | 读结论、查数据溯源 |
+| `reports/` 根 | 旧版总报告 + 配图脚本（`make_*`） | 重画图、看历史总报告 |
+| `archive/` | 封存历史实验批次（v3 等 8 批，只读） | 核对报告里的旧数字 |
+| `artifacts/runs/` | v4 新实验产物（按 run_id 分目录） | 看最新结果、写新报告 |
+| `experiments/manifests/` | 实验清单与搬迁台账（v4.yaml、archive_map.csv） | 复现、查"东西搬哪去了" |
+| `embedded/` | MCU 固件、SIL、Wokwi 工程 | 玩板子、看 PC-SIL |
+| `modelica/` | OpenModelica 物理参考模型 | 做物理交叉验证 |
+| `docs/` | 指南与设计文档（DEMO_GUIDE、SOTA、评审记录） | 上手、先看 [docs/DEMO_GUIDE.md](docs/DEMO_GUIDE.md) |
+| `tests/` | pytest 测试（39 个） | `python -m pytest tests -q` |
+| `outputs/` | 可重跑的空 scratch（默认输出目录，gitignore） | 跑完实验看新鲜结果 |
+| `vendor/` | KaTeX 前端资源（报告渲染用） | 不用管 |
+
 ## 评审整改 v3（正式密封测试）
 
-`outputs_review_v3/` 是本轮不覆盖历史结果的正式产物。训练、验证、测试按 48/16/16 个工况三向隔离；每个工况有稳定 `scenario_id` 和 SHA-256，IMC 的 `lambda` 只在训练集搜索，验证后冻结。候选发布使用 5 个新测试种子、每种子 16 个独立工况，共 80 个密封测试场景。
+`archive/outputs_review_v3/` 是本轮不覆盖历史结果的正式产物。训练、验证、测试按 48/16/16 个工况三向隔离；每个工况有稳定 `scenario_id` 和 SHA-256，IMC 的 `lambda` 只在训练集搜索，验证后冻结。候选发布使用 5 个新测试种子、每种子 16 个独立工况，共 80 个密封测试场景。
 
 | 策略 | 相对调优 IMC 的平均目标比 | 单侧 95% 上界 | 实际采用非 IMC 比例 | 测试回退率 | 结论 |
 |---|---:|---:|---:|---:|---|
@@ -17,7 +47,7 @@
 
 两者稳定率均为 100%，新增运行斜率、最低频率和启停违规均为 0。FNN 的原始状态局部标签仍有较高冲突（训练 log-RMSE 1.059），因此部署门没有采用高冲突拟合表，而选择验证集通过的保守 IMC 残差 TSK 曲面；这是真正产生非 IMC 增益的候选，不是把回退曲线冒充 FNN。RL 部署的是验证集选择的基线约束冻结策略，未覆盖状态强制回退 IMC。
 
-嵌入式策略清单升级为 CRC v3，覆盖全部执行字段。PC-SIL 已验证 100 ms PI、2 s AI 调度、CRC 启动重算、故障回退及 75 组 Python/C++ 一致性向量（最大绝对误差约 `2.98e-8`）。ESP32 官方工具链编译成功，静态 RAM 22,036 B（6.7%）、Flash 296,169 B（22.6%）；这些不是实体板 10 分钟可靠性或 WCET 证据。逐项状态见 [review_remediation.md](outputs_review_v3/review_remediation.md)。
+嵌入式策略清单升级为 CRC v3，覆盖全部执行字段。PC-SIL 已验证 100 ms PI、2 s AI 调度、CRC 启动重算、故障回退及 75 组 Python/C++ 一致性向量（最大绝对误差约 `2.98e-8`）。ESP32 官方工具链编译成功，静态 RAM 22,036 B（6.7%）、Flash 296,169 B（22.6%）；这些不是实体板 10 分钟可靠性或 WCET 证据。逐项状态见 [review_remediation.md](archive/outputs_review_v3/review_remediation.md)。
 
 ## ESP32 七算法温度闭环 Demo（新增）
 
@@ -26,30 +56,30 @@
 七个独立入口：
 
 ```powershell
-python run_embedded_demo.py --algorithm zn
-python run_embedded_demo.py --algorithm imc
-python run_embedded_demo.py --algorithm bo
-python run_embedded_demo.py --algorithm safe-bo
-python run_embedded_demo.py --algorithm fnn
-python run_embedded_demo.py --algorithm rl
-python run_embedded_demo.py --algorithm llm --provider replay
+python run.py embedded --algorithm zn
+python run.py embedded --algorithm imc
+python run.py embedded --algorithm bo
+python run.py embedded --algorithm safe-bo
+python run.py embedded --algorithm fnn
+python run.py embedded --algorithm rl
+python run.py embedded --algorithm llm --provider replay
 ```
 
 统一生成与交互展示：
 
 ```powershell
-python run_embedded_demo.py --algorithm all --provider replay --output outputs_embedded_demo
+python run.py embedded --algorithm all --provider replay --output archive/outputs_embedded_demo
 streamlit run streamlit_app.py
 ```
 
-- `outputs_embedded_demo/temperature_control_demo.html`：可离线打开的交互式温度回放、完整系统框图、七算法同场比较和 LLM Agent 工具审计；
-- `outputs_embedded_demo/llm_agent_trace.csv`：Agent 每一步工具、原始/限幅增益、仿真风险、安全门决定和剩余预算；
-- `outputs_embedded_demo/ESP32_七算法温度闭环_零基础教学.pptx`：20 页、原生可编辑框图和图表的零基础教学材料；
+- `archive/outputs_embedded_demo/temperature_control_demo.html`：可离线打开的交互式温度回放、完整系统框图、七算法同场比较和 LLM Agent 工具审计；
+- `archive/outputs_embedded_demo/llm_agent_trace.csv`：Agent 每一步工具、原始/限幅增益、仿真风险、安全门决定和剩余预算；
+- `archive/outputs_embedded_demo/ESP32_七算法温度闭环_零基础教学.pptx`：20 页、原生可编辑框图和图表的零基础教学材料；
 - `embedded/esp32_seven_algorithm_demo/`：ESP32 PlatformIO 双模式固件；
 - `embedded/modbus_config.hpp`：真实设备寄存器配置，默认 `kWritesEnabled=false`；
 - `embedded/validate_esp32_serial.py`：真实 ESP32 连续 10 分钟、丢周期与 WCET 验收脚本。
 
-七算法演示目录保留生成当时的候选/回退状态；正式 v3 密封测试则以 `outputs_review_v3/deployment_acceptance.csv` 为准，FNN 与 RL 均已通过。页面必须继续分别显示候选与实际执行曲线，任何新候选未通过时仍明确回退 IMC。LLM Agent 的 `replay` 是无网络录制的工具调用轨迹，不是实时模型调用。`ollama` 和 `openai` 模式会让模型在上位机从 `inspect_history`、`evaluate_candidate`、`finish` 中自主选择下一步；宿主程序仍独立执行硬边界、单轮 ±10%、重复仿真、试验预算和安全门。Agent 不进入 ESP32 的 100 ms 控制循环，也没有写压缩机容量的工具。
+七算法演示目录保留生成当时的候选/回退状态；正式 v3 密封测试则以 `archive/outputs_review_v3/deployment_acceptance.csv` 为准，FNN 与 RL 均已通过。页面必须继续分别显示候选与实际执行曲线，任何新候选未通过时仍明确回退 IMC。LLM Agent 的 `replay` 是无网络录制的工具调用轨迹，不是实时模型调用。`ollama` 和 `openai` 模式会让模型在上位机从 `inspect_history`、`evaluate_candidate`、`finish` 中自主选择下一步；宿主程序仍独立执行硬边界、单轮 ±10%、重复仿真、试验预算和安全门。Agent 不进入 ESP32 的 100 ms 控制循环，也没有写压缩机容量的工具。
 
 LLM Agent 自动整定数据流：
 
@@ -83,15 +113,15 @@ LLM Agent 自动整定数据流：
 ```powershell
 python -m pip install -r requirements.txt
 python main.py --quick
-python run_tuning_benchmark.py
+python run.py benchmark
 streamlit run streamlit_app.py
 # 只重渲染已有实验结果为可打印 HTML 报告
-python render_report.py outputs
+python run.py render outputs
 ```
 
 `streamlit run` 启动的是持续运行的本地 Web 服务：终端显示 URL 后，请在浏览器打开 `http://localhost:8501`；需要停止时按 `Ctrl+C`。
 
-`run_tuning_benchmark.py` 使用同一个受约束机柜空调问题实际计时 Z-N、IMC λ 搜索、贝叶斯固定 PI、FNN 标签/规则训练和 RL 训练，输出 PC 墙钟时间、等效虚拟对象时间、最终增益、控制指标与部署验收结果。PC 时间不是 MCU WCET；真实设备辨识时间和目标板周期需单独实测。
+`run.py benchmark` 使用同一个受约束机柜空调问题实际计时 Z-N、IMC λ 搜索、贝叶斯固定 PI、FNN 标签/规则训练和 RL 训练，输出 PC 墙钟时间、等效虚拟对象时间、最终增益、控制指标与部署验收结果。PC 时间不是 MCU WCET；真实设备辨识时间和目标板周期需单独实测。
 
 第二阶段 MCU 软件在环与 Wokwi 工程：
 
@@ -120,7 +150,7 @@ python main.py --quick
 完整实验（默认 48/16/16 训练/验证/测试，并在 5×16 个密封场景验收）：
 
 ```powershell
-python main.py --output outputs_review_v3 --validation-samples 16 --acceptance-seeds 101,211,307,401,503
+python main.py --output archive/outputs_review_v3 --validation-samples 16 --acceptance-seeds 101,211,307,401,503
 ```
 
 运行测试：
@@ -179,7 +209,7 @@ AI 输出：
 
 ## 生成文件
 
-默认写入 `outputs/`；本轮正式评审证据写入 `outputs_review_v3/`：
+默认写入 `outputs/`；本轮正式评审证据写入 `archive/outputs_review_v3/`：
 
 - `training_labels.csv`：训练数据、`Kp/Ki` 标签、ZN/IMC 对照分数；
 - `global_bayesian_tuning.csv`：跨训练工况搜索得到的一套固定全局 `Kp/Ki`；
@@ -225,8 +255,9 @@ AI 输出：
 ## 项目结构
 
 ```text
-main.py                    命令行入口
-run_tuning_benchmark.py    五种 PI 调参/训练方法的分阶段耗时基准
+main.py                    主流水线（48/16/16 训练/验证/测试 + 80 密封验收）
+run.py                     统一入口（pipeline/benchmark/crossval/embedded/llm-agent/advanced/matrix/render）
+tools/                     各实验的命令行入口（run_*.py、render_report.py、aggregate_llm_matrix.py）
 hvac_pid/config.py         工况、动态天气/负荷与训练分布
 hvac_pid/plant.py          3R2C 热模型和执行器延迟/惯性
 hvac_pid/controllers.py    PI、抗饱和、ZN、IMC、FOPDT 辨识

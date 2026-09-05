@@ -25,7 +25,7 @@ def test_seven_algorithms_expose_temperature_and_safe_deployment() -> None:
         assert any(row["door_open"] for row in trace.rows)
         assert all(row["comfort_low_c"] < row["setpoint_c"] < row["comfort_high_c"] for row in trace.rows)
     # Acceptance outcomes are batch-dependent by design (read from the default
-    # artifact dir, canonical dedup-P1 batch outputs_review_v3 where both FNN
+    # artifact dir, canonical dedup-P1 batch archive/outputs_review_v3 where both FNN
     # and RL passed the sealed deployment gate; see RESULTS.md). Z-N still
     # trips the visible commissioning gate on this demo scenario.
     assert traces["fnn"].deployment_accepted and not traces["fnn"].forced_fallback
