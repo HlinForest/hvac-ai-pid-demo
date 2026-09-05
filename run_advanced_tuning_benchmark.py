@@ -146,7 +146,7 @@ def main() -> None:
     provider_note = (
         "未运行大模型。heuristic 只验证完整安全流水线，不能作为 LLM 效果证据。"
         if args.llm_provider == "heuristic"
-        else ("未配置 LLM。" if provider is None else f"已调用 {provider.name}；每个建议均经过边界、25% 信赖域和重复仿真安全门。")
+        else ("未配置 LLM。" if provider is None else f"已调用 {provider.name}；每个建议均经过边界、10% 信赖域和重复仿真安全门。")
     )
     report = f"""# 高级 AI-PI 调参可复现实验
 

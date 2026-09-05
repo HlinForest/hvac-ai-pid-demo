@@ -4,22 +4,21 @@
 - 不写任何数据文件，只读 + 打印
 - 带 assert 自检，数值对不上立即失败
 - 运行：
-    cd E:/HAVC/hvac-ai-pid-demo
-    export PYTHONPATH="C:/Users/M00094113/AppData/Roaming/Python/Python314/site-packages"
-    C:/Python314/python.exe reports/dump_s4_numbers.py
+    python reports/dump_s4_numbers.py [--root <项目根>] [--batch outputs_review_v3]
 """
 import csv
 import io
 import json
+import os
 import sys
 from pathlib import Path
 
-ROOT = Path(r"E:\HAVC\hvac-ai-pid-demo")
+ROOT = Path(os.environ.get("HVAC_PROJECT_ROOT", Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(ROOT))
 
 import numpy as np
 
-V3 = ROOT / "outputs_review_v3"
+V3 = Path(os.environ.get("HVAC_BATCH_DIR", str(ROOT / "outputs_review_v3")))
 
 
 def read_csv(path):

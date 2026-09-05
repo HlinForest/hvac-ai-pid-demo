@@ -4,14 +4,12 @@
 - 只读封存 CSV/npy，不回写任何数据文件
 - 复用 make_figures.py 的配色常量
 运行：
-    cd E:/HAVC/hvac-ai-pid-demo
-    export PYTHONPATH="C:/Users/M00094113/AppData/Roaming/Python/Python314/site-packages"
-    C:/Python314/python.exe reports/make_s4_figures.py
+    python reports/make_s4_figures.py
 """
 import sys
 from pathlib import Path
 
-ROOT = Path(r"E:\HAVC\hvac-ai-pid-demo")
+ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "reports"))
 

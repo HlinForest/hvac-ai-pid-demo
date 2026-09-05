@@ -40,7 +40,6 @@ python embedded/validate_esp32_serial.py --port COM3 --seconds 600
 ## 一键执行 PC 软件在环
 
 ```powershell
-cd "C:\Users\厉飞雨\Documents\New project\hvac_ai_pid_demo"
 python embedded\export_policy.py outputs_review_v3
 python embedded\wokwi\prepare_projects.py
 python embedded\run_mcu_validation.py --artifact-dir outputs_review_v3

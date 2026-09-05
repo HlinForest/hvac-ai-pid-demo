@@ -12,7 +12,7 @@ pio device monitor --baud 115200
 如果 Windows 用户目录或项目目录含中文，而 Xtensa 工具链报告 `Invalid argument`，请先映射纯 ASCII 盘符再编译：
 
 ```powershell
-subst P: "C:\Users\你的用户名\Documents\New project\hvac_ai_pid_demo"
+subst P: "<项目根目录>"
 P:
 cd \embedded\esp32_seven_algorithm_demo
 pio run

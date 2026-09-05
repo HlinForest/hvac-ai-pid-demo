@@ -1,0 +1,26 @@
+[project]
+name = "hvac-ai-pid-demo"
+version = "4.0.0"
+description = "HVAC AI-PI tuning demo (v4 reconciled experiments)"
+requires-python = ">=3.10"
+dependencies = [
+  "numpy>=1.24",
+  "scipy>=1.10",
+  "scikit-learn>=1.2",
+  "matplotlib>=3.7",
+  "joblib>=1.2",
+  "streamlit>=1.36",
+  "pandas>=2.0",
+  "altair>=5",
+  "pyserial>=3.5",
+]
+
+[project.optional-dependencies]
+docs = ["python-docx", "pillow"]
+test = ["pytest"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 120

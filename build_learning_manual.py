@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import os
 from datetime import date
 from pathlib import Path
 
@@ -15,11 +16,11 @@ from docx.shared import Inches, Pt, RGBColor
 
 
 ROOT = Path(__file__).resolve().parent
-OUT = ROOT / "outputs_adaptive_final_v2"
+OUT = Path(os.environ.get("HVAC_BATCH_DIR", str(ROOT / "outputs_adaptive_final_v2")))
 DOC_DIR = OUT / "learning_document"
 FIG_DIR = DOC_DIR / "figures"
 DOCX_PATH = DOC_DIR / "HVAC_AI_PID_零基础学习手册.docx"
-FONT_PATH = Path(r"C:\Windows\Fonts\msyh.ttc")
+FONT_PATH = Path(os.environ.get("HVAC_FONT_PATH", r"C:\Windows\Fonts\msyh.ttc"))
 
 BLUE = "2E74B5"
 DARK_BLUE = "1F4D78"

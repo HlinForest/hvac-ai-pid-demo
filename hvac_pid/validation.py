@@ -195,13 +195,13 @@ def _find_openmodelica() -> Path | None:
     """Locate omc without requiring the installer to modify PATH."""
 
     path_candidate = shutil.which("omc")
+    env_home = os.environ.get("OPENMODELICAHOME", "")
+    env_bin = os.environ.get("OPENMODELICA_BIN", "")
     candidates = [
         Path(path_candidate) if path_candidate else None,
-        Path(os.environ.get("OPENMODELICAHOME", "")) / "bin" / "omc.exe"
-        if os.environ.get("OPENMODELICAHOME")
-        else None,
-        Path(r"D:\modelica\bin\omc.exe"),
-        Path(r"C:\OpenModelica1.27.0-64bit\bin\omc.exe"),
+        Path(env_bin) if env_bin else None,
+        Path(env_home) / "bin" / ("omc.exe" if os.name == "nt" else "omc") if env_home else None,
+        Path(os.environ.get("MODELICA_OMC", "")) if os.environ.get("MODELICA_OMC") else None,
     ]
     return next((candidate for candidate in candidates if candidate is not None and candidate.exists()), None)
 
@@ -468,7 +468,7 @@ def run_cross_validation(output_dir: str | Path) -> dict[str, object]:
     modelica_run_status = (
         "成功：实际使用 DASSL 运行 12 h / 62 方程模型，结果已与 Python 连续方程交叉比较"
         if openmodelica_rows
-        else "未运行：outputs/modelica/PrecisionCabinetCooling_res.csv 不存在"
+        else f"未运行：{output / 'modelica' / 'PrecisionCabinetCooling_res.csv'} 不存在（历史证据见 outputs/modelica/PrecisionCabinetCooling_res.csv，当前未复现）"
     )
     environment = {
         "run_at": datetime.now().astimezone().isoformat(timespec="seconds"),

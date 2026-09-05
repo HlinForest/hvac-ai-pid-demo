@@ -15,6 +15,8 @@ import numpy as np
 from .config import Scenario
 from .controllers import PIController
 from .plant import ThermalPlant3R2C
+from .safety import KI_BOUNDS, KP_BOUNDS, MAX_FRACTIONAL_GAIN_CHANGE
+from .timebase import SIM_SUPERVISORY_PERIOD_S
 from .simulator import simulate
 from .actuator import CompressorCommandLimiter
 from .metrics import calculate_metrics
@@ -25,9 +27,9 @@ class _SafeAdaptivePI(PIController):
         self,
         fallback_gains: tuple[float, float],
         *,
-        update_interval_seconds: float = 300.0,
-        gain_bounds: tuple[tuple[float, float], tuple[float, float]] = ((0.002, 1.5), (1e-5, 0.08)),
-        max_fractional_change: float = 0.10,
+        update_interval_seconds: float = SIM_SUPERVISORY_PERIOD_S,
+        gain_bounds: tuple[tuple[float, float], tuple[float, float]] = (KP_BOUNDS, KI_BOUNDS),
+        max_fractional_change: float = MAX_FRACTIONAL_GAIN_CHANGE,
     ):
         super().__init__(*fallback_gains)
         self.fallback_gains = tuple(map(float, fallback_gains))

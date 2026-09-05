@@ -1,0 +1,10 @@
+{
+  "run_id": "v4-20260906-2870262",
+  "python": "3.11.7",
+  "numpy": "1.26.4",
+  "scipy": "1.11.4",
+  "physics": "3R2C explicit-Euler 10s substeps x6, outer dt 60s",
+  "continuous_solver": "SciPy DOP853 rtol=1e-9 atol=1e-11 max_step=10s",
+  "openmodelica": "not detected in this env; history hash recorded",
+  "threshold_physical_max_abs_c": 0.15
+}

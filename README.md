@@ -1,5 +1,8 @@
 # HVAC AI–PI 自动整定演示
 
+> v4 对账批次（进行中）：唯一事实源见 \experiments/manifests/v4.yaml\，新产物只写 \rtifacts/runs/<run_id>/\；架构/实验/结果分别见 [ARCHITECTURE.md](ARCHITECTURE.md)、[EXPERIMENTS.md](EXPERIMENTS.md)、[RESULTS.md](RESULTS.md)。v4 首个 run 为 \rtifacts/runs/v4-20260906-2870262/\（数值3/3+FOPDT3/3全绿，步长收敛+七算法冒烟+溯源）。
+
+
 > 新增风险感知安全 BO，以及真正的工具调用式 LLM Agent 自动整定：Agent 自主选择查看历史、运行候选仿真或停止，宿主安全门负责限幅、试验、验收和回退。详见 [SOTA_LLM_PI_TUNING.md](SOTA_LLM_PI_TUNING.md)。Q-learning 保留为教学/对照方法，不称为 SOTA。
 
 ## 评审整改 v3（正式密封测试）
@@ -77,7 +80,6 @@ LLM Agent 自动整定数据流：
 快速运行：
 
 ```powershell
-cd "C:\Users\厉飞雨\Documents\New project\hvac_ai_pid_demo"
 python -m pip install -r requirements.txt
 python main.py --quick
 python run_tuning_benchmark.py
@@ -110,7 +112,6 @@ STM32F103C8T6 与 ESP32 的验证入口、接线图、验收证据和当前完�
 环境要求：Python 3.10+。
 
 ```powershell
-cd "C:\Users\厉飞雨\Documents\New project\hvac_ai_pid_demo"
 python -m pip install -r requirements.txt
 python main.py --quick
 ```

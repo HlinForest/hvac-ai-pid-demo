@@ -43,7 +43,14 @@ class PIController:
 
 
 class ScheduledPIController(PIController):
-    """Slow gain scheduling with output bounds, slew limits, and fallback."""
+    """Slow gain scheduling with output bounds, slew limits, and fallback.
+
+    Legacy/experimental path only (see ALGORITHM_GUIDE.md): formal v3/v4
+    reports and Streamlit comparisons do NOT use this class.  Its
+    ``max_fractional_change=0.35`` is intentionally distinct from the
+    deployed v4 default ``MAX_FRACTIONAL_GAIN_CHANGE=0.10`` in
+    :mod:`hvac_pid.safety` and must not be quoted as the safety bound.
+    """
 
     def __init__(
         self,

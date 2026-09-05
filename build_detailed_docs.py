@@ -434,7 +434,7 @@ def appendix(doc):
         ["hvac_pid/ai_controllers.py","FNN/RL训练和推理","FNN/RL"],
     ],[3150,3700,2510],8.3)
     heading(doc,"复现命令",2)
-    code(doc,"cd C:\\Users\\厉飞雨\\Documents\\New project\\hvac_ai_pid_demo\npython main.py --quick\npython -m unittest discover -s tests -v\nstreamlit run streamlit_app.py","quick复现入口")
+    code(doc,"python main.py --quick\npython -m pytest tests -q\nstreamlit run streamlit_app.py","quick复现入口")
     callout(doc,"边界声明","这是软件仿真与PC软件在环验证，不代表真实压缩机或目标MCU最终性能。OpenModelica运行时需本机安装；量产前必须完成目标板编译、测量和保护验证。","FFF4E5")
 
 def build(formal):

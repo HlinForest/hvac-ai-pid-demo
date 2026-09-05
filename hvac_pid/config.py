@@ -46,6 +46,14 @@ class Scenario:
     minimum_running_command: float = 0.25
     minimum_on_minutes: float = 5.0
     minimum_off_minutes: float = 3.0
+    # v4 physics: internal integration substeps per outer dt step.
+    # Outer interface stays 1 min (controller/metrics unchanged); each plant
+    # step is subdivided into N=6 explicit-Euler substeps (10 s each) holding
+    # inputs constant. Convergence study: 初次快速降温 max error
+    # 0.150350 (N=1) -> 0.074927 (N=2) -> 0.037400 (N=4) -> 0.024919 (N=6),
+    # confirming first-order discretization error, fixed by substepping
+    # rather than by loosening the 0.15 C threshold.
+    integration_substeps: int = 6
 
     FEATURE_NAMES: ClassVar[tuple[str, ...]] = (
         "outdoor_c",

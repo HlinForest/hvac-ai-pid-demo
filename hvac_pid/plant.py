@@ -42,23 +42,25 @@ class ThermalPlant3R2C:
         delayed_u = self._delay[0]
         target_cooling_w = delayed_u * s.cooling_capacity_w
 
-        dt_seconds = s.dt_minutes * 60.0
+        substeps = max(1, int(getattr(s, "integration_substeps", 1)))
+        dt_seconds = s.dt_minutes * 60.0 / substeps
         tau_seconds = max(s.actuator_tau_minutes * 60.0, dt_seconds)
-        self.cooling_w += (target_cooling_w - self.cooling_w) * dt_seconds / tau_seconds
+        for _ in range(substeps):
+            self.cooling_w += (target_cooling_w - self.cooling_w) * dt_seconds / tau_seconds
 
-        zone_heat_w = (
-            (outdoor_c - self.zone_c) / s.r_out_zone_k_per_w
-            + (self.wall_c - self.zone_c) / s.r_zone_wall_k_per_w
-            + internal_load_w
-            - self.cooling_w
-        )
-        wall_heat_w = (
-            (outdoor_c - self.wall_c) / s.r_out_wall_k_per_w
-            + (self.zone_c - self.wall_c) / s.r_zone_wall_k_per_w
-        )
+            zone_heat_w = (
+                (outdoor_c - self.zone_c) / s.r_out_zone_k_per_w
+                + (self.wall_c - self.zone_c) / s.r_zone_wall_k_per_w
+                + internal_load_w
+                - self.cooling_w
+            )
+            wall_heat_w = (
+                (outdoor_c - self.wall_c) / s.r_out_wall_k_per_w
+                + (self.zone_c - self.wall_c) / s.r_zone_wall_k_per_w
+            )
 
-        self.zone_c += zone_heat_w * dt_seconds / s.c_zone_j_per_k
-        self.wall_c += wall_heat_w * dt_seconds / s.c_wall_j_per_k
+            self.zone_c += zone_heat_w * dt_seconds / s.c_zone_j_per_k
+            self.wall_c += wall_heat_w * dt_seconds / s.c_wall_j_per_k
         return float(self.zone_c), float(self.wall_c)
 
 

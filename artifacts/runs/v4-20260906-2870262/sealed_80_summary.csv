@@ -1,0 +1,6 @@
+﻿protocol,algorithms,status,comparable,note
+v3 sealed 5x16=80,ZN/IMC/BO/FNN/RL,done in v3 (outputs_review_v3),1,SafeBO+LLM不在同一80场景集，不可七算法统一排名
+v3 SafeBO,safe-bo,outputs_advanced_quick独立留出集,0,不同场景清单/约束口径，仅作方法演示
+v3 LLM matrix,llm,outputs_llm_matrix_v3 18次真实运行、5/18部署,0,报告曾误写仅2次真实会话；以18次为准
+v4 smoke unified demo,zn/imc/bo/safe-bo/fnn/rl/llm(replay),artifacts/runs/v4-20260906-2870262/embedded_smoke/seven_algorithm_summary.csv,1,同一demo场景+同一commissioning门+显式--artifact-dir plumbing验证；非80密封排名
+v4 full 80x7 sealed,7 unified,PENDING (needs retrain FNN/RL + SafeBO/LLM on v4 physics 48/16/16 + 80 sealed),0,待算力；完成前禁止七算法统一排名

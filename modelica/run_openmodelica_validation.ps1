@@ -1,10 +1,15 @@
 param(
-    [string]$OmcPath = "D:\modelica\bin\omc.exe"
+    [string]$OmcPath = ""
 )
 
 $ErrorActionPreference = "Stop"
 $projectPath = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 $createdDrive = $false
+
+if ([string]::IsNullOrWhiteSpace($OmcPath)) {
+    if ($env:MODELICA_OMC -and (Test-Path -LiteralPath $env:MODELICA_OMC)) { $OmcPath = $env:MODELICA_OMC }
+    elseif ($env:OPENMODELICAHOME -and (Test-Path -LiteralPath (Join-Path $env:OPENMODELICAHOME "bin/omc.exe"))) { $OmcPath = Join-Path $env:OPENMODELICAHOME "bin/omc.exe" }
+}
 
 if (-not (Test-Path -LiteralPath $OmcPath)) {
     $command = Get-Command omc -ErrorAction SilentlyContinue

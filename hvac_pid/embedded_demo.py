@@ -6,6 +6,8 @@ from dataclasses import dataclass, replace
 import csv
 import html
 import json
+import os
+import warnings
 from pathlib import Path
 from typing import Callable
 import zlib
@@ -26,7 +28,9 @@ from .ai_controllers import FNNGainController, IncrementalRLController
 from .config import Scenario, sample_adaptive_scenarios
 from .controllers import PIController, identify_fopdt, imc_pi, ziegler_nichols_pi
 from .metrics import calculate_metrics
+from .safety import MAX_FRACTIONAL_GAIN_CHANGE
 from .simulator import SimulationResult, simulate
+from .timebase import DEMO_SUPERVISORY_PERIOD_S, MCU_AI_PERIOD_MS, MCU_FAST_PI_PERIOD_MS
 from .tuning import tune_global_fixed
 
 
@@ -45,8 +49,8 @@ DESCRIPTIONS = {
     "imc": "上位机依据 FOPDT 模型选择鲁棒闭环速度，作为所有智能方法的安全回退。",
     "bo": "上位机离线搜索固定 Kp/Ki，部署后不再在线探索。",
     "safe-bo": "在性能均值之外惩罚噪声方差，并用安全代理限制候选。",
-    "fnn": "ESP32 每 2 s 用误差和误差变化率插值四条规则；未通过验收时只做影子计算。",
-    "rl": "训练在虚拟对象上完成，ESP32 只查冻结策略，不进行随机探索。",
+    "fnn": "演示监督周期120 s用误差和误差变化率插值四条规则；MCU墙钟AI周期2 s/快环100 ms；未通过验收时只做影子计算。",
+    "rl": "训练在虚拟对象上完成，演示监督周期120 s查冻结策略，不进行随机探索；MCU墙钟AI周期2 s。",
     "llm": "大模型 Agent 自主选择查看历史、运行候选仿真或停止；安全门拥有最终决定权。",
 }
 
@@ -347,13 +351,13 @@ def _prepare_fnn(context: _DemoContext) -> _PreparedDemo:
     shadow: SimulationResult | None = None
     if accepted:
         controller: PIController = FNNGainController(
-            context.fallback, rule_table=np.load(deployed_path), update_interval_seconds=120.0
+            context.fallback, rule_table=np.load(deployed_path), update_interval_seconds=DEMO_SUPERVISORY_PERIOD_S
         )
     else:
         controller = PIController(*context.fallback)
         shadow = simulate(
             context.scenario,
-            FNNGainController(context.fallback, rule_table=candidate_table, update_interval_seconds=120.0),
+            FNNGainController(context.fallback, rule_table=candidate_table, update_interval_seconds=DEMO_SUPERVISORY_PERIOD_S),
             seed=context.seed,
         )
     return _PreparedDemo(
@@ -370,7 +374,7 @@ def _prepare_rl(context: _DemoContext) -> _PreparedDemo:
     table_path = context.artifact_dir / ("rl_q_table.npy" if accepted else "rl_q_table_candidate.npy")
     if accepted and table_path.exists():
         controller: PIController = IncrementalRLController(
-            context.fallback, q_table=np.load(table_path), update_interval_seconds=120.0
+            context.fallback, q_table=np.load(table_path), update_interval_seconds=DEMO_SUPERVISORY_PERIOD_S
         )
         forced = False
     else:
@@ -405,7 +409,7 @@ def _prepare_llm(context: _DemoContext) -> _PreparedDemo:
         policy,
         max_steps=6,
         max_trials=3,
-        max_change_fraction=0.10,
+        max_change_fraction=MAX_FRACTIONAL_GAIN_CHANGE,
         config=RiskSafetyConfig(repeats=2, max_undershoot_c=4.0),
     ).tune(training, context.fallback, seed=context.seed + 31)
     return _PreparedDemo(
@@ -440,12 +444,29 @@ def run_algorithm_demo(
     base_url: str = "",
     api_key_env: str = "",
     seed: int = 71,
+    artifact_dir: str | Path | None = None,
 ) -> DemoTrace:
     if algorithm not in ALGORITHM_ORDER:
         raise ValueError(f"unknown algorithm: {algorithm}")
     root = Path(project_root)
     scenario = scenario or demo_scenario()
-    artifact_dir = root / "outputs_adaptive_final_v2"
+    if artifact_dir is not None:
+        resolved_artifact_dir = Path(artifact_dir)
+    else:
+        env_dir = os.environ.get("HVAC_ARTIFACT_DIR", "")
+        if env_dir:
+            resolved_artifact_dir = Path(env_dir)
+        else:
+            # Transitional fallback only; v4 callers must pass --artifact-dir
+            # or HVAC_ARTIFACT_DIR pointing at artifacts/runs/<run_id>.
+            warnings.warn(
+                "artifact_dir not given; falling back to legacy "
+                "outputs_adaptive_final_v2. Pass --artifact-dir explicitly.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            resolved_artifact_dir = root / "outputs_adaptive_final_v2"
+    artifact_dir = resolved_artifact_dir
     model_fopdt = identify_fopdt(scenario)
     context = _DemoContext(
         root=root,
@@ -553,6 +574,7 @@ def run_all_demos(
     base_url: str = "",
     api_key_env: str = "",
     seed: int = 71,
+    artifact_dir: str | Path | None = None,
 ) -> dict[str, DemoTrace]:
     scenario = scenario or demo_scenario()
     return {
@@ -565,6 +587,7 @@ def run_all_demos(
             base_url=base_url,
             api_key_env=api_key_env,
             seed=seed,
+            artifact_dir=artifact_dir,
         )
         for algorithm in ALGORITHM_ORDER
     }

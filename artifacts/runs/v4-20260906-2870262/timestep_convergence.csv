@@ -1,0 +1,6 @@
+﻿case,substeps,dt_s,max_abs_error_c,rmse_c,passed_0_15C,note
+初次快速降温,1,60,0.15035,0.096605,0,"v3 physics (Euler 60s), FAIL by 0.00035C"
+初次快速降温,2,30,0.074927,0.048244,1,
+初次快速降温,4,15,0.0374,0.024108,1,
+初次快速降温,6,10,0.025154,0.016672,1,"v4 physics (Euler 10s substeps, outer 60s interface)"
+初次快速降温,10,6,0.014944,0.00964,1,

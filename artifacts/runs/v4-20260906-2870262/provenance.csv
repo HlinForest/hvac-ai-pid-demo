@@ -1,0 +1,5 @@
+﻿artifact,git_sha,sha256,source,status
+physical_cross_validation.csv,2870262,,hvac_pid/validation.py:run_cross_validation (SciPy DOP853 ref),"v4 reproduced, 3/3 passed"
+fopdt_cross_validation.csv,2870262,,hvac_pid/validation.py:_fopdt_step_response,"v4 reproduced, 3/3 passed"
+timestep_convergence.csv,2870262,,"explicit-Euler substep study N=1,2,4,6,10",first-order convergence confirmed
+openmodelica_history,,ad68bd1e32e11bc66384c57b497e8b8cda2c62ed82f63725bdf1096a49e93711,outputs/modelica/PrecisionCabinetCooling_res.csv,历史证据，当前未复现 (no omc in this env); v4 run dir records hash only

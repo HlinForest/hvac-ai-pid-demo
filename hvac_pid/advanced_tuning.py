@@ -23,6 +23,14 @@ from sklearn.gaussian_process.kernels import ConstantKernel, Matern, WhiteKernel
 from .config import Scenario
 from .controllers import PIController
 from .metrics import calculate_metrics
+from .safety import (
+    MAX_FRACTIONAL_GAIN_CHANGE,
+    MAX_RISK_RATIO_TO_BASELINE,
+    MAX_UNDERSHOOT_C,
+    RISK_WEIGHT,
+    SAFETY_REPEATS,
+    VALIDATION_TOLERANCE,
+)
 from .simulator import simulate
 from .tuning import GainBounds, TuneResult
 
@@ -31,14 +39,14 @@ from .tuning import GainBounds, TuneResult
 class RiskSafetyConfig:
     """Acceptance rules shared by safe BO and the LLM supervisor."""
 
-    repeats: int = 2
-    risk_weight: float = 0.75
-    max_undershoot_c: float = 2.0
+    repeats: int = SAFETY_REPEATS
+    risk_weight: float = RISK_WEIGHT
+    max_undershoot_c: float = MAX_UNDERSHOOT_C
     max_slew_violations: float = 0.0
     max_subminimum_fraction: float = 0.0
     safe_probability_beta: float = 2.0
-    validation_tolerance: float = 1.02
-    max_risk_ratio_to_baseline: float = 1.25
+    validation_tolerance: float = VALIDATION_TOLERANCE
+    max_risk_ratio_to_baseline: float = MAX_RISK_RATIO_TO_BASELINE
 
 
 @dataclass(frozen=True)
@@ -255,7 +263,7 @@ class RiskAwareSafeBOTuner:
             if not np.any(predicted_safe) and safe_indices:
                 best_safe = min(safe_indices, key=lambda i: risk_y[i])
                 distance = np.linalg.norm(pool - x[best_safe], axis=1)
-                predicted_safe = distance <= 0.10
+                predicted_safe = distance <= MAX_FRACTIONAL_GAIN_CHANGE
             if not np.any(predicted_safe):
                 break
             # Lower confidence bound: minimize performance while still learning.
@@ -487,7 +495,7 @@ class LLMSupervisoryTuner:
         *,
         bounds: GainBounds | None = None,
         rounds: int = 6,
-        max_change_fraction: float = 0.10,
+        max_change_fraction: float = MAX_FRACTIONAL_GAIN_CHANGE,
         min_improvement_fraction: float = 0.005,
         config: RiskSafetyConfig | None = None,
     ) -> None:
@@ -806,7 +814,7 @@ class LLMAgentAutoTuner:
         bounds: GainBounds | None = None,
         max_steps: int = 8,
         max_trials: int = 5,
-        max_change_fraction: float = 0.10,
+        max_change_fraction: float = MAX_FRACTIONAL_GAIN_CHANGE,
         min_improvement_fraction: float = 0.005,
         config: RiskSafetyConfig | None = None,
     ) -> None:

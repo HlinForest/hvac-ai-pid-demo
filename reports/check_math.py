@@ -3,16 +3,14 @@
 
 失败即非零退出 + 打印失败的 LaTeX。
 运行：
-    cd E:/HAVC/hvac-ai-pid-demo
-    export PYTHONPATH="C:/Users/M00094113/AppData/Roaming/Python/Python314/site-packages"
-    C:/Python314/python.exe reports/check_math.py <md 文件路径>
+    python reports/check_math.py <md 文件路径>
 """
 import re
 import sys
 import tempfile
 from pathlib import Path
 
-REPORTS = Path(r"E:\HAVC\hvac-ai-pid-demo\reports")
+REPORTS = Path(__file__).resolve().parent
 sys.path.insert(0, str(REPORTS))
 from md2docx import render_math_png  # noqa: E402
 

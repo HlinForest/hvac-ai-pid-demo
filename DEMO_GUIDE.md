@@ -1,6 +1,6 @@
 # 项目运行与演示指南
 
-本文档面向第一次接触本项目的使用者，按顺序执行即可完成"跑通 → 生成演示 → 向他人展示"的完整流程。所有命令均在项目根目录 `E:\HAVC\hvac-ai-pid-demo` 下的 PowerShell / 终端中执行。
+本文档面向第一次接触本项目的使用者，按顺序执行即可完成"跑通 → 生成演示 → 向他人展示"的完整流程。所有命令均在项目根目录（本文件所在目录）下的 PowerShell / 终端中执行。
 
 ## 第 0 步：环境准备（一次性）
 
@@ -84,7 +84,7 @@ PPT 和 Excel 是预构建产物，直接打开即可，没有脚本重新生成
 | 演示内容 | 命令 | 前提条件 |
 |---|---|---|
 | OpenModelica 物理交叉验证 | 双击 `run_openmodelica_validation.bat` | 已安装 OpenModelica |
-| 在 OMEdit 中查看模型 | 双击 `open_modelica_gui.bat` | 已安装 OpenModelica（默认路径 `D:\modelica`，否则改 bat 内 `OMEDIT_EXE`） |
+| 在 OMEdit 中查看模型 | 双击 `open_modelica_gui.bat` | 已安装 OpenModelica（通过 `OPENMODELICAHOME` 或 PATH 定位，否则改 bat 内 `OMEDIT_EXE` / `MODELICA_OMEDIT`） |
 | 各算法整定耗时对比 | `python run_tuning_benchmark.py` | 无 |
 | Safe BO + LLM 监督整定对比 | `python run_advanced_tuning_benchmark.py --quick --llm-provider heuristic` | 无（启发式模式，离线） |
 | LLM 自动整定（离线回放） | `python run_llm_agent_demo.py` | 无 |

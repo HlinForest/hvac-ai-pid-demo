@@ -45,6 +45,12 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--door-load", type=float, default=3200.0)
     parser.add_argument("--seed", type=int, default=71)
     parser.add_argument("--output", type=Path, default=Path("outputs_embedded_demo"))
+    parser.add_argument(
+        "--artifact-dir",
+        type=Path,
+        default=None,
+        help="训练产物目录(默认 <project_root>/outputs_adaptive_final_v2，仅过渡兼容；v4 请显式指向 artifacts/runs/<run_id>)",
+    )
     return parser.parse_args()
 
 
@@ -63,6 +69,7 @@ def main() -> None:
             base_url=args.base_url,
             api_key_env=args.api_key_env,
             seed=args.seed,
+            artifact_dir=args.artifact_dir,
         )
         files = write_demo_bundle(output, traces, project_root=ROOT)
         print(json.dumps(files, ensure_ascii=False, indent=2))
@@ -77,6 +84,7 @@ def main() -> None:
         base_url=args.base_url,
         api_key_env=args.api_key_env,
         seed=args.seed,
+        artifact_dir=args.artifact_dir,
     )
     stem = args.algorithm.replace("-", "_") + "_temperature_demo"
     csv_path = output / f"{stem}.csv"
