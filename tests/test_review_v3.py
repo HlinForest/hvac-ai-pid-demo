@@ -124,7 +124,14 @@ def test_pc_sil_enforces_rl_coverage_gate(tmp_path: Path) -> None:
         if summary_path.exists()
         else "<no mcu_validation_summary.csv was written>"
     )
-    assert result.returncode == 0, result.stdout[-2000:] + "\n--- summary ---\n" + summary_text
+    # NOTE: stdout AND stderr both matter here. A compile failure or an
+    # early traceback lands on stderr while stdout stays empty; showing
+    # only stdout (as before) made CI failures undiagnosable.
+    assert result.returncode == 0, (
+        "\n--- stdout ---\n" + result.stdout[-2000:]
+        + "\n--- stderr ---\n" + result.stderr[-2000:]
+        + "\n--- summary ---\n" + summary_text
+    )
     with (tmp_path / "mcu_validation_summary.csv").open("r", encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
     assert len(rows) == 1

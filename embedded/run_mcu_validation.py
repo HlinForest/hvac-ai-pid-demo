@@ -48,7 +48,12 @@ def main() -> int:
         check=False,
     )
     if compile_result.returncode != 0:
-        raise SystemExit(compile_result.stderr or "C++ 编译失败。")
+        # Print the compiler diagnostics to STDOUT (not just stderr): callers
+        # like pytest capture both, but failure messages historically only
+        # surfaced stdout, which made toolchain failures undiagnosable.
+        print(f"compiler: [{compiler_version}]")
+        print(compile_result.stderr or "C++ 编译失败（无输出）。")
+        raise SystemExit("C++ 编译失败，详见上方编译器输出。")
 
     run_result = subprocess.run(
         [str(EXE)],
