@@ -6,8 +6,8 @@
       "label": "风险感知安全 BO"
     },
     "llm": {
-      "kp": 0.4057,
-      "ki": 0.002769,
+      "kp": 0.4657376424916451,
+      "ki": 0.00364826335084437,
       "label": "LLM Agent"
     }
   },
@@ -47,34 +47,34 @@
     },
     "llm": {
       "初次快速降温": {
-        "itae_c_hour2": 4.597336726676281,
-        "settling_time_hour": 2.566666666666667,
-        "disturbance_recovery_time_hour": 2.566666666666667,
-        "max_undershoot_c": 0.2869629725434315,
-        "compressor_output_variance": 0.0652987138651194,
-        "objective": 63.03422715655386,
-        "max_overheat_c": 7.7257615981060255,
-        "rmse_c": 2.6206210459418497
+        "itae_c_hour2": 4.149527070993418,
+        "settling_time_hour": 2.7,
+        "disturbance_recovery_time_hour": 2.7,
+        "max_undershoot_c": 0.6403111625062152,
+        "compressor_output_variance": 0.0778997572355848,
+        "objective": 64.56589055024459,
+        "max_overheat_c": 7.740701023105938,
+        "rmse_c": 2.6626399277796033
       },
       "设定温度突变": {
-        "itae_c_hour2": 4.610557049655567,
-        "settling_time_hour": 2.466666666666667,
-        "disturbance_recovery_time_hour": 1.4666666666666666,
-        "max_undershoot_c": 0.7158301320215088,
-        "compressor_output_variance": 0.03856113287932804,
-        "objective": 27.01089767249678,
-        "max_overheat_c": 2.6116330842881688,
-        "rmse_c": 0.8060100261189181
+        "itae_c_hour2": 6.1669036705577,
+        "settling_time_hour": 5.0,
+        "disturbance_recovery_time_hour": 4.0,
+        "max_undershoot_c": 1.0726963128353084,
+        "compressor_output_variance": 0.07174662752066756,
+        "objective": 35.8699900715863,
+        "max_overheat_c": 2.8510495267579827,
+        "rmse_c": 0.918334405325447
       },
       "持续外界热扰动": {
-        "itae_c_hour2": 9.343405958890946,
-        "settling_time_hour": 4.533333333333333,
-        "disturbance_recovery_time_hour": 1.3333333333333333,
-        "max_undershoot_c": 0.6887384603469577,
-        "compressor_output_variance": 0.06647703900369088,
-        "objective": 43.65245390001613,
-        "max_overheat_c": 1.952988875867245,
-        "rmse_c": 0.8321878956618
+        "itae_c_hour2": 14.91153107434104,
+        "settling_time_hour": 6.0,
+        "disturbance_recovery_time_hour": 2.8,
+        "max_undershoot_c": 1.1298688646036936,
+        "compressor_output_variance": 0.13437254164716356,
+        "objective": 68.5208036189249,
+        "max_overheat_c": 2.1287231664149147,
+        "rmse_c": 1.0781573912983804
       }
     }
   },
@@ -91,14 +91,14 @@
       "fallback_events": 0.0
     },
     "llm": {
-      "itae_c_hour2": 16.552763290270644,
-      "settling_time_hour": 3.433333333333333,
-      "disturbance_recovery_time_hour": 0.25,
-      "max_undershoot_c": 0.6523771290660214,
-      "compressor_output_variance": 0.03468260218028204,
-      "objective": 65.89270029694107,
-      "max_overheat_c": 4.231078287638201,
-      "rmse_c": 0.9108301602561065,
+      "itae_c_hour2": 17.719431277961355,
+      "settling_time_hour": 3.4166666666666665,
+      "disturbance_recovery_time_hour": 0.26666666666666666,
+      "max_undershoot_c": 0.9245080585788124,
+      "compressor_output_variance": 0.0497193480314173,
+      "objective": 71.6132126715033,
+      "max_overheat_c": 4.242093059070463,
+      "rmse_c": 0.9400621259109777,
       "fallback_events": 0.0
     }
   }

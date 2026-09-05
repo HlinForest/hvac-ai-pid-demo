@@ -1,0 +1,82 @@
+# v4 唯一事实源：所有产物必须由此 manifest + 代码 SHA 复现。
+# Markdown 报告为源文件，DOCX/PPT/图片均为生成物。
+schema_version: 4
+code:
+  baseline_sha: 2870262d13873502b2ecea3758dec34d7a8e7446
+  branch: codex/reconcile-experiments-v4
+  baseline_tag: baseline-v3-pre-v4
+env:
+  python: "3.11"
+  numpy: "1.26.4"
+  scipy: "1.11.4"
+  note: "requirements.txt 已放宽 numpy>=1.24 允许 2.x；v4 基线在 1.26.4 下验证，2.x 兼容性由 CI 矩阵覆盖"
+
+timebase:
+  sim_supervisory_period_s: 300.0
+  demo_supervisory_period_s: 120.0
+  mcu_ai_period_ms: 2000
+  mcu_fast_pi_period_ms: 100
+  demo_virtual_acceleration: 200.0
+  rule: "仿真时间 / MCU墙钟 / 演示虚拟时间三口径分离，禁止统一写成2s"
+
+safety:
+  max_fractional_gain_change: 0.10
+  kp_bounds: [0.002, 1.5]
+  ki_bounds: [0.00001, 0.08]
+  risk_weight: 0.75
+  max_undershoot_c: 2.0
+  validation_tolerance: 1.02
+  max_risk_ratio_to_baseline: 1.25
+  repeats: 2
+  note: "部署默认±10%；run_advanced_tuning_benchmark 文本曾误写25%已修正为10%"
+
+scenarios:
+  train: {count: 48, seed: 41, duration_hours: 5.0, sampler: sample_adaptive_scenarios}
+  validation: {count: 16, seed: 5041, duration_hours: 5.0}
+  test: {count: 16, seed: 10041, duration_hours: 5.0}
+  sealed_5x16: {repeats: 5, per_repeat: 16, total: 80, note: "v3仅ZN/IMC/BO/FNN/RL有80场景密封数据；SafeBO与LLM需接入同一清单后才可七算法排名"}
+  typical_cases: ["初次快速降温", "设定温度突变", "持续外界热扰动"]
+  demo_5h_virtual_cabinet: {duration_hours: 5.0, virtual_to_wall: "5h->90s (200x presentation-only)"}
+
+algorithms:
+  - zn
+  - imc
+  - bo
+  - safe-bo
+  - fnn
+  - rl
+  - llm
+  fnn_spec: "5x5零阶TSK基础面 + 4项上下文残差修正"
+  rl_spec: "状态 5x5x3，动作数 9"
+
+thresholds:
+  physical_cross_validation_max_abs_c: 0.15
+  fopdt_normalized_rmse_pct: 15.0
+  openmodelica_rmse_c: 0.01
+  openmodelica_max_abs_c: 0.03
+
+artifacts:
+  root: artifacts/runs/<run_id>
+  layout: ["manifest.yaml", "environment.json", "physical_cross_validation.csv", "fopdt_cross_validation.csv", "openmodelica_cross_validation.csv", "timestep_convergence.csv", "sealed_80_summary.csv", "provenance.csv"]
+  rule: "不得再由脚本隐式读取某个 outputs_*；历史 outputs_* 只读归档"
+
+modelica:
+  policy: "v4结果纳入同一run目录并记录原始CSV哈希；无法复跑时标为历史证据，当前未复现"
+  history: "outputs/modelica/PrecisionCabinetCooling_res.csv (DASSL 12h) 为历史证据"
+
+llm:
+  matrix_v3: {runs: 18, live: 18, deployed: 5, note: "报告不得再写仅2次真实会话"}
+  reporting: "LLM同时报告多次运行分布与回退率；不同协议数据不参与统一排名"
+
+hardware_gates:
+  - "实体板10分钟遥测：待外部验证"
+  - "真实WCET：待外部验证"
+  - "HIL/Modbus写入：待外部验证"
+  rule: "硬件门不得用仿真补成已完成"
+
+acceptance:
+  - "全量pytest + Node校验 + GitHub Actions全绿"
+  - "数值/FOPDT每一行passed=1；Modelica状态无自相矛盾"
+  - "七算法同划分同约束同指标，或明确标记不可比较"
+  - "每个报告数字可定位 run_id + 文件 + 行/列 + git SHA"
+  - "无本机绝对路径、零字节交付物、旧输出隐式依赖"

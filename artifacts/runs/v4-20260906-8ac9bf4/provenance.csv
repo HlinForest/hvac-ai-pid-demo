@@ -1,0 +1,3 @@
+﻿artifact,source,git_sha,status
+llm_matrix_v4/ (18 runs: qwen-max/plus/turbo x std/hard x r71-73),"run_llm_agent_demo.py --provider openai-compatible (Bailian); keys via .env, values never recorded",8ac9bf4,"18 live, 1/18 deployed (qwen-max_std_r72); v3=18 live 5/18"
+llm_matrix_v4/matrix_summary.csv + AGGREGATE_REPORT.md,aggregate_llm_matrix.py artifacts/runs/v4-20260906-8ac9bf4/llm_matrix_v4,8ac9bf4,generated 18 rows
