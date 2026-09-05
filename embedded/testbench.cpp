@@ -32,7 +32,10 @@ int main() {
   VirtualHVACPlant plant;
   float previous_ai_error=0.0f;
   float command=0.0f;
-  long long worst_pi_ns=0,worst_ai_ns=0;
+  // NOTE: must be nanoseconds::rep, not long long. On Windows (LLP64)
+  // rep happens to be long long so std::max deduces fine, but on Linux
+  // (LP64) rep is long int and mixed-type std::max is a hard error.
+  std::chrono::nanoseconds::rep worst_pi_ns=0,worst_ai_ns=0;
   int ai_calls=0,fallback_events=0;
   bool bounded=true;
   for (int tick=0;tick<4000;++tick) {
