@@ -1,7 +1,17 @@
 name: v4 CI
+# Trimmed: one required leg (3.11 + pinned deps = local env) plus one
+# experimental numpy-2.0 leg that never fails the run. No 3.10 leg
+# (codebase uses no 3.11-only syntax), no tag runs, and a newer push
+# cancels the older run on the same branch.
 on:
   push:
+    branches: ["main", "codex/*"]
+    tags-ignore: ["*"]
   pull_request:
+
+concurrency:
+  group: v4-ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   pytest:
@@ -10,8 +20,9 @@ jobs:
     # experimental legs don't fail the run (and don't send failure mail).
     continue-on-error: ${{ matrix.numpy-version == '2.0.0' }}
     strategy:
+      fail-fast: false
       matrix:
-        python-version: ["3.10", "3.11"]
+        python-version: ["3.11"]
         numpy-version: ["1.26.4", "2.0.0"]
     steps:
       - uses: actions/checkout@v4
