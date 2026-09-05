@@ -118,7 +118,13 @@ def test_pc_sil_enforces_rl_coverage_gate(tmp_path: Path) -> None:
          "--artifact-dir", str(tmp_path)],
         capture_output=True, text=True, encoding="utf-8", errors="replace", check=False,
     )
-    assert result.returncode == 0, result.stdout[-2000:]
+    summary_path = tmp_path / "mcu_validation_summary.csv"
+    summary_text = (
+        summary_path.read_text(encoding="utf-8-sig", errors="replace")
+        if summary_path.exists()
+        else "<no mcu_validation_summary.csv was written>"
+    )
+    assert result.returncode == 0, result.stdout[-2000:] + "\n--- summary ---\n" + summary_text
     with (tmp_path / "mcu_validation_summary.csv").open("r", encoding="utf-8-sig", newline="") as handle:
         rows = list(csv.DictReader(handle))
     assert len(rows) == 1

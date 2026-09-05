@@ -31,6 +31,13 @@ def main() -> int:
     compiler = shutil.which("g++")
     if compiler is None:
         raise SystemExit("未找到 g++，无法执行 PC 软件在环测试。")
+    try:
+        compiler_version = subprocess.run(
+            [compiler, "--version"], capture_output=True, text=True,
+            encoding="utf-8", errors="replace", check=False,
+        ).stdout.splitlines()[0].strip()
+    except (OSError, IndexError, subprocess.SubprocessError):
+        compiler_version = "unknown"
 
     compile_result = subprocess.run(
         [compiler, "-std=c++17", "-O2", str(EMBEDDED / "testbench.cpp"), "-o", str(EXE)],
@@ -123,6 +130,31 @@ def main() -> int:
 
     print(log, end="")
     print(f"验证摘要: {evidence_dir / 'mcu_validation_summary.csv'}")
+    # Single-line gate breakdown for CI diagnostics: if a gate ever fails on
+    # a new toolchain/OS, this line (not 2000 lines of warnings) pinpoints it.
+    manifest_flag = extract(r"manifest v3=(\d+)", log)
+    ai_calls = extract(r"AI calls=(\d+)", log, "?")
+    nan_fallback = extract(r"NaN fallback=(\d+)", log, "?")
+    profiles_valid = extract(r"seven profiles valid=(\d+)", log, "?")
+    profiles_stable = extract(r"stable after 90s demo=(\d+)", log, "?")
+    rl_coverage = extract(r"RL uncovered-state fallbacks=(\d+/\d+)", log, "?")
+    expected_count = "?"
+    if expected_path.exists():
+        with expected_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            expected_count = str(sum(1 for _ in csv.DictReader(handle)))
+    print(
+        "GATES "
+        f"compiler=[{compiler_version}] "
+        f"manifest_ok={int(manifest_flag == '1')} "
+        f"ai_calls={ai_calls} "
+        f"fallback_active={nan_fallback} "
+        f"profiles_valid={profiles_valid} "
+        f"profiles_stable={profiles_stable} "
+        f"rl_coverage={rl_coverage} "
+        f"parity_rows={len(parity_rows)}/{expected_count} "
+        f"parity_max_err={parity_max_error} "
+        f"result={summary['结果']}"
+    )
     return 0 if (
         run_result.returncode == 0
         and summary["结果"] == "PASS"
