@@ -229,4 +229,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import warnings
+    warnings.warn(
+        "Direct entry run_tuning_benchmark.py is a thin wrapper; prefer 'python run.py benchmark ...'",
+        DeprecationWarning, stacklevel=2)
     main()

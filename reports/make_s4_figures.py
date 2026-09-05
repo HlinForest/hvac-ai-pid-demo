@@ -18,19 +18,9 @@ import numpy as np
 
 from make_figures import (BASE, C_AI_AUTO, C_AI_SELF, C_CLASSICAL, GRID, INK,
                           INK2, MUTED, SURFACE)
+from figstyle import apply_style
 
-plt.rcParams.update({
-    "font.sans-serif": ["Microsoft YaHei", "SimHei", "Segoe UI"],
-    "axes.unicode_minus": False,
-    "figure.facecolor": SURFACE,
-    "axes.facecolor": SURFACE,
-    "savefig.facecolor": SURFACE,
-    "text.color": INK,
-    "axes.edgecolor": BASE,
-    "axes.labelcolor": INK2,
-    "xtick.color": MUTED,
-    "ytick.color": INK2,
-})
+apply_style(plt)
 
 import csv  # noqa: E402
 import io  # noqa: E402

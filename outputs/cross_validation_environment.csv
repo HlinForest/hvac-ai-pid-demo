@@ -1,9 +1,0 @@
-﻿item,value
-run_at,2026-09-03T10:41:19+08:00
-python,3.14.6
-numpy,2.5.1
-scipy,1.18.0
-continuous_solver,"SciPy solve_ivp / DOP853, rtol=1e-9, atol=1e-11, max_step=10s"
-openmodelica,未检测到 omc 可执行文件
-openmodelica_run,成功：实际使用 DASSL 运行 12 h / 62 方程模型，结果已与 Python 连续方程交叉比较
-openmodelica_solver,"DASSL, tolerance=1e-8, output interval=6s, duration=12h"

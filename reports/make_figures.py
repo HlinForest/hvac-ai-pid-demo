@@ -16,32 +16,20 @@ from pathlib import Path
 import matplotlib.pyplot as plt
 from matplotlib.patches import FancyArrowPatch, FancyBboxPatch
 
-# ----------------------------------------------------------------------------
-# 设计参数（dataviz 参考调色板，已通过六项校验）
-# ----------------------------------------------------------------------------
-SURFACE = "#fcfcfb"     # 图表面
-INK = "#0b0b0b"         # 主文字
-INK2 = "#52514e"        # 次文字
-MUTED = "#898781"       # 弱文字 / 坐标轴
-GRID = "#e1e0d9"        # 网格线（发丝线）
-BASE = "#c3c2b7"        # 基线
+# Single source of truth for palette + rcParams (dedup P4); re-exported here
+# so existing `from make_figures import ...` statements keep working.
+try:
+    from reports.figstyle import (  # noqa: F401
+        BASE, C_AI_AUTO, C_AI_SELF, C_CLASSICAL, GRID, INK, INK2, MUTED,
+        RC_PARAMS, SURFACE, apply_style,
+    )
+except ImportError:
+    from figstyle import (  # noqa: F401
+        BASE, C_AI_AUTO, C_AI_SELF, C_CLASSICAL, GRID, INK, INK2, MUTED,
+        RC_PARAMS, SURFACE, apply_style,
+    )
 
-C_AI_SELF = "#2a78d6"   # 类别 1：AI 自整定（FNN / RL）
-C_AI_AUTO = "#eb6834"   # 类别 2：AI 自动整定（BO / 安全 BO / LLM Agent）
-C_CLASSICAL = "#898781" # 基线：经典整定（Z-N / IMC，中性灰）
-
-plt.rcParams.update({
-    "font.sans-serif": ["Microsoft YaHei", "SimHei", "Segoe UI"],
-    "axes.unicode_minus": False,
-    "figure.facecolor": SURFACE,
-    "axes.facecolor": SURFACE,
-    "savefig.facecolor": SURFACE,
-    "text.color": INK,
-    "axes.edgecolor": BASE,
-    "axes.labelcolor": INK2,
-    "xtick.color": MUTED,
-    "ytick.color": INK2,
-})
+apply_style(plt)
 
 FIG_DIR = Path(__file__).resolve().parent / "figures"
 FIG_DIR.mkdir(exist_ok=True)

@@ -49,7 +49,7 @@ def parse_args() -> argparse.Namespace:
         "--artifact-dir",
         type=Path,
         default=None,
-        help="训练产物目录(默认 <project_root>/outputs_adaptive_final_v2，仅过渡兼容；v4 请显式指向 artifacts/runs/<run_id>)",
+        help="训练产物目录(默认 <project_root>/outputs_review_v3，仅过渡兼容；v4 请显式指向 artifacts/runs/<run_id>)",
     )
     return parser.parse_args()
 
@@ -103,4 +103,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import warnings
+    warnings.warn(
+        "Direct entry run_embedded_demo.py is a thin wrapper; prefer 'python run.py embedded ...'",
+        DeprecationWarning, stacklevel=2)
     main()

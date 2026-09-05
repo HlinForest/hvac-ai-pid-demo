@@ -1,9 +1,10 @@
 # HVAC AI–PI 自动整定演示
 
 > v4 对账批次（进行中）：唯一事实源见 \experiments/manifests/v4.yaml\，新产物只写 \rtifacts/runs/<run_id>/\；架构/实验/结果分别见 [ARCHITECTURE.md](ARCHITECTURE.md)、[EXPERIMENTS.md](EXPERIMENTS.md)、[RESULTS.md](RESULTS.md)。v4 首个 run 为 \rtifacts/runs/v4-20260906-2870262/\（数值3/3+FOPDT3/3全绿，步长收敛+七算法冒烟+溯源）。
+> 统一入口：`python run.py <pipeline|benchmark|crossval|embedded|llm-agent|advanced|matrix> ...`（`run_*.py` 保留为薄封装）；文档构建：`python build_docs.py <detailed|manual>`；指南与设计文档见 [docs/](docs/)。
 
 
-> 新增风险感知安全 BO，以及真正的工具调用式 LLM Agent 自动整定：Agent 自主选择查看历史、运行候选仿真或停止，宿主安全门负责限幅、试验、验收和回退。详见 [SOTA_LLM_PI_TUNING.md](SOTA_LLM_PI_TUNING.md)。Q-learning 保留为教学/对照方法，不称为 SOTA。
+> 新增风险感知安全 BO，以及真正的工具调用式 LLM Agent 自动整定：Agent 自主选择查看历史、运行候选仿真或停止，宿主安全门负责限幅、试验、验收和回退。详见 [docs/SOTA_LLM_PI_TUNING.md](docs/SOTA_LLM_PI_TUNING.md)。Q-learning 保留为教学/对照方法，不称为 SOTA。
 
 ## 评审整改 v3（正式密封测试）
 
@@ -71,7 +72,7 @@ LLM Agent 自动整定数据流：
 
 本项目实现双层模型：`modelica/HVACAI` 是 OpenModelica + Modelica Standard Library 的可执行物理参考模型（Modelica Buildings 留作后续高保真扩展）；`hvac_pid` 是可批量运行的 3R2C/FOPDT 快速控制代理。3R2C 的直觉是“室内空气”和“墙体/机柜”两个蓄热体，通过室外到空气、室外到慢热质、慢热质到空气三条换热通道交换热量。前者用于可追溯的热物理校验，后者用于控制算法寻优与可视化。
 
-传统五种控制算法的逐段中文代码解析见 [ALGORITHM_GUIDE.md](ALGORITHM_GUIDE.md)；七算法嵌入式展示入口和落地边界以本节为准。
+传统五种控制算法的逐段中文代码解析见 [docs/ALGORITHM_GUIDE.md](docs/ALGORITHM_GUIDE.md)；七算法嵌入式展示入口和落地边界以本节为准。
 
 已实现五类控制器：Z-N、只在训练集整定 λ 的 IMC、全局贝叶斯优化固定 PI、25 规则（每次激活 4 条）的 FNN 自整定 PI、以及安全屏蔽的表格 RL 自整定 PI。RL 使用 5×5 热状态、3 档实际容量模式和 9 个相对 IMC 的绝对增益目标；不再递归累乘隐藏的当前增益。所有方法共用 0/最低稳定频率、量化、运行斜率、最小启停驻留、传感器噪声与滤波约束。
 

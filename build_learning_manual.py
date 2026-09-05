@@ -16,7 +16,7 @@ from docx.shared import Inches, Pt, RGBColor
 
 
 ROOT = Path(__file__).resolve().parent
-OUT = Path(os.environ.get("HVAC_BATCH_DIR", str(ROOT / "outputs_adaptive_final_v2")))
+OUT = Path(os.environ.get("HVAC_BATCH_DIR", str(ROOT / "outputs_review_v3")))
 DOC_DIR = OUT / "learning_document"
 FIG_DIR = DOC_DIR / "figures"
 DOCX_PATH = DOC_DIR / "HVAC_AI_PID_零基础学习手册.docx"
@@ -475,7 +475,7 @@ def build() -> Path:
     add_callout(doc, "本手册的诚实结论", "整改后FNN与RL均覆盖25/25个热状态；但FNN候选在内部验证上没有优于IMC，因此实际部署自动回退。RL通过内部验收，在16个独立工况的平均综合目标上仅比IMC改善约0.37%，属于‘流程有效、收益很小’，不能宣称AI显著优越。", PALE_GOLD)
     p = doc.add_paragraph()
     p.alignment = WD_ALIGN_PARAGRAPH.CENTER
-    set_run(p.add_run(f"实验版本：outputs_adaptive_final_v2  |  生成日期：{date.today().isoformat()}"), size=9.5, color=MUTED)
+    set_run(p.add_run(f"实验版本：outputs_review_v3  |  生成日期：{date.today().isoformat()}"), size=9.5, color=MUTED)
     doc.add_page_break()
 
     chapter(doc, "阅读地图：先看懂六个最重要的词")
@@ -839,8 +839,8 @@ def build() -> Path:
     ], [3300, 6060])
 
     chapter(doc, "21. 复现命令、产物和验收清单")
-    add_formula(doc, 'python main.py --train-samples 48 --test-samples 16 --bo-iterations 4 --seed 23 --output outputs_adaptive_final_v2')
-    add_formula(doc, 'python embedded/export_policy.py outputs_adaptive_final_v2')
+    add_formula(doc, 'python main.py --train-samples 48 --test-samples 16 --bo-iterations 4 --seed 23 --output outputs_review_v3')
+    add_formula(doc, 'python embedded/export_policy.py outputs_review_v3')
     add_formula(doc, 'python embedded/wokwi/prepare_projects.py')
     add_formula(doc, 'python embedded/run_mcu_validation.py')
     add_formula(doc, 'python -m unittest discover -s tests -v')

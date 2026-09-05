@@ -76,4 +76,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import warnings
+    warnings.warn(
+        "Direct entry run_llm_agent_demo.py is a thin wrapper; prefer 'python run.py llm-agent ...'",
+        DeprecationWarning, stacklevel=2)
     main()

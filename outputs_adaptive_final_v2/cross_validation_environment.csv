@@ -1,9 +1,0 @@
-﻿item,value
-run_at,2026-08-26T07:28:33+08:00
-python,3.11.7
-numpy,1.26.4
-scipy,1.11.4
-continuous_solver,"SciPy solve_ivp / DOP853, rtol=1e-9, atol=1e-11, max_step=10s"
-openmodelica,OpenModelica v1.27.0 (64-bit)；可执行文件 D:\modelica\bin\omc.exe
-openmodelica_run,未运行：outputs/modelica/PrecisionCabinetCooling_res.csv 不存在
-openmodelica_solver,"DASSL, tolerance=1e-8, output interval=6s, duration=12h"

@@ -3,7 +3,7 @@
 
 内容定位：被控对象简述；重点讲清 7 种整定算法各自"怎么落地"
 （拿什么数据 → 怎么整定/训练 → 产什么参数 → 怎么部署、怎么兜底）。
-数据口径：reports/实验报告_AI-PI整定.md / 实验报告_AI自动整定.md / ALGORITHM_GUIDE.md；
+数据口径：reports/实验报告_AI-PI整定.md / 实验报告_AI自动整定.md / docs/ALGORITHM_GUIDE.md；
 图片复用 reports/figures/ 已有 PNG，不重跑实验、不改封存产物。
 
 用法：python reports/make_slides.py

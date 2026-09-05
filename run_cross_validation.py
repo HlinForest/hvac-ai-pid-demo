@@ -50,4 +50,8 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    import warnings
+    warnings.warn(
+        "Direct entry run_cross_validation.py is a thin wrapper; prefer 'python run.py crossval ...'",
+        DeprecationWarning, stacklevel=2)
     main()

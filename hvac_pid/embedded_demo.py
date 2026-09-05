@@ -459,13 +459,14 @@ def run_algorithm_demo(
         else:
             # Transitional fallback only; v4 callers must pass --artifact-dir
             # or HVAC_ARTIFACT_DIR pointing at artifacts/runs/<run_id>.
+            # Canonical sealed batch is outputs_review_v3 (dedup P1).
             warnings.warn(
                 "artifact_dir not given; falling back to legacy "
-                "outputs_adaptive_final_v2. Pass --artifact-dir explicitly.",
+                "outputs_review_v3. Pass --artifact-dir explicitly.",
                 DeprecationWarning,
                 stacklevel=2,
             )
-            resolved_artifact_dir = root / "outputs_adaptive_final_v2"
+            resolved_artifact_dir = root / "outputs_review_v3"
     artifact_dir = resolved_artifact_dir
     model_fopdt = identify_fopdt(scenario)
     context = _DemoContext(

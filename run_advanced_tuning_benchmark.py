@@ -171,11 +171,15 @@ def main() -> None:
 - `llm_tuning_history.csv`：原始建议、限幅后建议、诊断、接受/拒绝原因。
 - `tuning_wall_time.csv`：在本机本次规模下的实际墙钟耗时。
 
-详细原理、论文边界、公式和运行方式见项目根目录 `SOTA_LLM_PI_TUNING.md`。
+详细原理、论文边界、公式和运行方式见`docs/SOTA_LLM_PI_TUNING.md`。
 """
     (output / "advanced_tuning_report.md").write_text(report, encoding="utf-8")
     print(f"Results: {output.resolve()}")
 
 
 if __name__ == "__main__":
+    import warnings
+    warnings.warn(
+        "Direct entry run_advanced_tuning_benchmark.py is a thin wrapper; prefer 'python run.py advanced ...'",
+        DeprecationWarning, stacklevel=2)
     main()

@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
 """拆分报告配图生成脚本。
 
-输出目录：reports/分报告/figures/（自包含：新图 + 从 reports/figures/ 复制复用图）
+输出目录：reports/分报告/figures/（仅新图；复用图以 reports/figures/ 为单源，
+分报告 *.md 经 ../figures/ 引用，不再复制）
 新增：
   - fig_fopdt_fit_3cases.png       三工况 168 h 阶跃响应 vs FOPDT 最小二乘拟合（重跑辨识并断言封存值）
   - fig_fopdt_crossval.png         FOPDT 代理 vs 3R2C 物理模型 24 h 交叉验证（封存 CSV）
@@ -16,7 +17,6 @@
 from __future__ import annotations
 
 import json
-import shutil
 import sys
 from pathlib import Path
 
@@ -36,6 +36,7 @@ from make_figures import (                                                 # noq
     BASE, C_AI_AUTO, C_AI_SELF, C_CLASSICAL, GRID, INK, INK2, MUTED,
     SURFACE, arrow, box, wash,
 )
+from figstyle import apply_style  # noqa: E402
 
 SUB = Path(__file__).resolve().parent / "分报告"
 FIG = SUB / "figures"
@@ -48,18 +49,7 @@ PIPELINE_SEED = 7
 CASE_SEED_OFFSET = 400_003
 DYNAMIC_SEED_OFFSET = 300_003
 
-plt.rcParams.update({
-    "font.sans-serif": ["Microsoft YaHei", "SimHei", "Segoe UI"],
-    "axes.unicode_minus": False,
-    "figure.facecolor": SURFACE,
-    "axes.facecolor": SURFACE,
-    "savefig.facecolor": SURFACE,
-    "text.color": INK,
-    "axes.edgecolor": BASE,
-    "axes.labelcolor": INK2,
-    "xtick.color": MUTED,
-    "ytick.color": INK2,
-})
+apply_style(plt)
 
 C_BAD = "#c0392b"   # 失效方法（教材两点法读数）
 C_OK = "#1d9e75"    # 有效方法（有界最小二乘）
@@ -254,7 +244,7 @@ def fig_fopdt_fit():
 
 
 def fig_fopdt_crossval():
-    df = pd.read_csv(PROJECT_ROOT / "outputs" / "fopdt_cross_validation_timeseries.csv")
+    df = pd.read_csv(PROJECT_ROOT / "outputs_review_v3" / "fopdt_cross_validation_timeseries.csv")
     cases = list(dict.fromkeys(df["case"]))
     fig, axes = plt.subplots(3, 1, figsize=(10.5, 8.6), sharex=True)
     for ax, case in zip(axes, cases):
@@ -593,6 +583,9 @@ def mixed_figures_main5():
 
 
 def copy_figures():
+    # Dedup P2: reports/figures is the single source of truth for these
+    # 22 reused figures; 分报告/*.md now references them via ../figures/.
+    # This step only verifies presence instead of duplicating bytes.
     names = ["fig1_系统结构框图.png"]
     names += [
         "fig04_imc_lambda扫描.png",
@@ -610,9 +603,10 @@ def copy_figures():
         "fig22_工况三_ZN.png", "fig23_工况三_IMC.png", "fig24_工况三_BO.png",
         "fig25_工况三_FNN.png", "fig26_工况三_RL.png",
     ]
-    for n in names:
-        shutil.copy2(SRC_FIG / n, FIG / n)
-    print(f"  copied {len(names)} figures")
+    missing = [n for n in names if not (SRC_FIG / n).exists()]
+    if missing:
+        raise FileNotFoundError(f"single-source figures missing in {SRC_FIG}: {missing}")
+    print(f"  verified {len(names)} single-source figures (no copy, see ../figures/)")
 
 
 def main():

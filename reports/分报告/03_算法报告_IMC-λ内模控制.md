@@ -39,7 +39,7 @@ $$K_p = \frac{\tau}{K(\lambda + L)}, \qquad T_i = \min\left[\tau,\ 4(\lambda + L
 
 IMC（SIMC）公式把 FOPDT 的 (K, τ, L) 直接映射成 Kp/Ti，映射之后只剩 λ 一个自由度。所谓"整定"，就是在这个一维空间上做一次穷举：取 21 个对数等间距的候选 λ（12.0 → 303.7 min），每个候选代入公式得到一组 (Kp, Ki)，在训练工况集上跑一轮全闭环仿真，用综合目标 J 打分，取平均目标最小者。整个过程没有迭代、没有自适应——图 3-2 就是这 21 次仿真摊开后的样子。
 
-![图 3-2 IMC-λ 扫描：21 个候选的训练工况目标值（v3 封存数据）](figures/fig04_imc_lambda扫描.png)
+![图 3-2 IMC-λ 扫描：21 个候选的训练工况目标值（v3 封存数据）](../figures/fig04_imc_lambda扫描.png)
 
 **这张图怎么看**：横轴是闭环时间常数 λ（min，对数刻度，21 个候选点）；纵轴是训练工况上的综合目标值（越低越好）。实线圆点是**训练集平均目标**（选 λ 的依据），虚线方点是**训练集最差目标**（衡量最坏工况）。空心圈标出最终选中的 λ*，× 标出保守公式的回退值。
 
@@ -67,11 +67,11 @@ IMC（SIMC）公式把 FOPDT 的 (K, τ, L) 直接映射成 Kp/Ti，映射之后
 | 二 设定温度突变 | 6.846 | 5.00 | 4.00 | 1.177 | 0.087 | 36.53 |
 | 三 持续外界热扰动 | 15.630 | 6.00 | 2.80 | 1.202 | 0.145 | 71.95 |
 
-![图 3-3 工况一：IMC](figures/fig13_工况一_IMC.png)
+![图 3-3 工况一：IMC](../figures/fig13_工况一_IMC.png)
 
-![图 3-4 工况二：IMC](figures/fig18_工况二_IMC.png)
+![图 3-4 工况二：IMC](../figures/fig18_工况二_IMC.png)
 
-![图 3-5 工况三：IMC](figures/fig23_工况三_IMC.png)
+![图 3-5 工况三：IMC](../figures/fig23_工况三_IMC.png)
 
 **读图**：三工况全程稳定、无振荡；与 Z-N 相比 ITAE 降低 45%–17%（工况一 3.89 vs 7.05），过冷减半；与 BO/FNN 几乎打平，仅工况一略逊于 RL。作为"单组固定增益"，它给出了经典方法在本对象上的合理上限。
 
@@ -102,7 +102,7 @@ IMC（SIMC）公式把 FOPDT 的 (K, τ, L) 直接映射成 Kp/Ti，映射之后
 | `outputs_review_v3/imc_lambda_tuning.csv` | 21 个 λ 候选的训练工况扫描结果 | 第 1 节 λ*=26.9 min、第 4 节图 3-2 |
 | `outputs_review_v3/policy_manifest_v3.json` | v3 封存部署清单（含“已验证回退增益”字段） | 第 1 节增益核对 |
 | `outputs_review_v3/case_metrics.csv` | v3 三标准工况 × 五算法指标 | 第 6 节 |
-| `outputs/case_timeseries.csv` | 三工况逐分钟时序 | 图 3-3～3-5 |
+| `outputs_review_v3/case_timeseries.csv` | 三工况逐分钟时序 | 图 3-3～3-5 |
 | `outputs_tuning_benchmark/tuning_stage_times.csv` | 整定耗时基准 | 第 5 节 |
 
 本篇结论涉及的实现位置：
