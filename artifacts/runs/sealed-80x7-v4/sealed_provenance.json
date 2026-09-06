@@ -1,5 +1,9 @@
 {
-  "code_sha": "096d1bbc4018b70d7e3f89e6035dd70c0c9717fe",
+  "experiment_id": "E2",
+  "experiment_name": "frozen-policy reevaluation on unified v4 sealed list (NOT unified training)",
+  "code_sha": "8f3fd5f21df6c1c14e6c1406b0377a3b7bd1d92c",
+  "code_dirty": true,
+  "worktree_status_sha16": "1bfae9901c5c677d",
   "manifest_sha256": "ee4caa461fcc11a685ca65def2130466ddfad157dee1d0fb2b638c2bac7dfd8c",
   "manifest_path": "D:\\havc\\hvac-ai-pid-demo\\experiments\\manifests\\v4.yaml",
   "artifact_dir": "D:\\havc\\hvac-ai-pid-demo\\archive\\outputs_review_v3",
@@ -39,7 +43,9 @@
     "llm_source": "LLMAgentAutoTuner(Replay, training-split freeze)"
   },
   "safe_bo_attribution": "legacy archive/outputs_advanced_quick/safe_bo_history.csv: selected evaluation=2/local qualification seed (0.3838/0.00444); current evidence supports THIS conservative parameter set, not the BO search mechanism itself",
-  "stat_note": "mean_ratio_to_imc is ratio-of-means; paired_ratio_* is mean-of-paired-ratios with bootstrap CI; report both, do not conflate",
+  "stat_primary": "paired_ratio_* = mean of per-scenario ratios mean(obj/imc) + bootstrap 95% CI (2000 resamples, seed+77); PRIMARY for E2 conclusions",
+  "stat_secondary": "ratio_of_means_to_imc = mean(obj)/mean(imc); reference only, dominated by large-objective scenarios; do not conflate with primary",
+  "stat_note": "mean_ratio_to_imc equals paired_ratio_mean point estimate (both are mean of ratios); ratio_of_means_to_imc is the distinct secondary statistic",
   "sealed": {
     "repeats": 5,
     "per_repeat": 16,
@@ -54,6 +60,6 @@
     "pipeline_seed": 7
   },
   "integrator": "六子步v4积分器(外层60s/内层10s×6, integration_substeps=6)",
-  "elapsed_seconds": 23.623780500000066,
-  "comparability": "all 7 on same 80 scenarios/seeds/metrics; LLM is replay-frozen, not live; do not rank across protocols"
+  "elapsed_seconds": 27.533426699999836,
+  "comparability": "E2: all 7 on same 80 scenarios/seeds/metrics/integrator; frozen policies from mixed origins (v3 frozen + legacy conservative + replay-frozen); LLM replay is NOT live; do not claim unified training or cross-protocol ranking"
 }

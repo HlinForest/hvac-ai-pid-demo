@@ -94,8 +94,13 @@ def calculate_metrics(result: SimulationResult, comfort_band_c: float = 0.5) -> 
     metrics["validation_passed"] = float(
         metrics["bounded"] > 0.5
         and metrics["comfort_held"] > 0.5
+        and metrics["recovery_ok"] > 0.5
         and metrics["actuator_compliant"] > 0.5
     )
+    # 验收定义（E2 主口径，与《报告改进》§二.2 对齐）：
+    # bounded=数值有界(5..45C 有限)；comfort_held=启动后持续在带；
+    # recovery_ok=扰动/切温后 60min 持续在带；actuator_compliant=执行器合规。
+    # validation_passed 要求四者同时通过；"回退成功"不得等同"验收通过"。
     metrics["objective"] = objective_from_metrics(metrics)
     return metrics
 

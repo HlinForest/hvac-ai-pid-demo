@@ -34,6 +34,8 @@ _SUBCOMMANDS: dict[str, str] = {
     "advanced": "tools.run_advanced_tuning_benchmark",
     "matrix": "tools.aggregate_llm_matrix",
     "render": "tools.render_report",
+    "attribution": "tools.run_gp_attribution",
+    "host-wcet": "tools.run_host_wcet",
 }
 
 
@@ -68,6 +70,8 @@ def build_parser() -> argparse.ArgumentParser:
         "advanced": "risk-aware safe BO + LLM supervisory benchmark",
         "matrix": "aggregate an LLM matrix directory",
         "render": "render an outputs dir into the HTML engineering report",
+        "attribution": "same-budget GP attribution on sealed list (E3+)",
+        "host-wcet": "host-only WCET reference (NOT target evidence)",
     }
     for command in _SUBCOMMANDS:
         sub.add_parser(command, help=helps[command]).add_argument(

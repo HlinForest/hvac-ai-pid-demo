@@ -223,11 +223,9 @@ def _status_rows(
     candidate_metrics = calculate_metrics(candidate_result) if candidate_result is not None else None
     first_band = next((float(row["simulated_minute"]) for row in rows if row["in_comfort_band"]), float("nan"))
     recovery = recovered_first - event_end if np.isfinite(recovered_first) else float("nan")
-    # P0: “回退成功”不等于“温控验收通过”.  Split numeric boundedness,
-    # comfort hold, recovery and actuator compliance; a fallback that still
-    # does not settle is flagged separately as fallback_failed.
+    # “回退成功”不等于“温控验收通过”：回退后仍未通过 validation 即记失败。
     fallback_failed = bool(
-        forced_fallback and not (np.isfinite(stable_first) and metrics["bounded"] > 0.5)
+        forced_fallback and not (metrics["validation_passed"] > 0.5 and np.isfinite(stable_first))
     )
     summary: dict[str, object] = {
         "algorithm": algorithm,

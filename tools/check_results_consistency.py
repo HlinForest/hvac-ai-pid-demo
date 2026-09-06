@@ -48,18 +48,43 @@ def check_sealed(sealed_dir: Path) -> None:
     assert len(details) == 560, f"want 560 detail rows, got {len(details)}"
     assert len(summary) == 7, f"want 7 summary rows, got {len(summary)}"
     assert {r["algorithm"] for r in summary} == {"zn", "imc", "bo", "safe-bo", "fnn", "rl", "llm"}, summary
+    # E2 provenance must carry experiment id, live code SHA and scenario list.
+    prov_path = sealed_dir / "sealed_provenance.json"
+    assert prov_path.exists(), f"missing {prov_path}"
+    prov = json.loads(prov_path.read_text(encoding="utf-8"))
+    assert prov.get("experiment_id") == "E2", prov.get("experiment_id")
+    assert prov.get("code_sha") and len(str(prov["code_sha"])) >= 7, prov.get("code_sha")
+    assert "worktree_status_sha16" in prov, "provenance must record worktree dirtiness"
+    assert "ratio_of_means_to_imc" in (summary[0] or {}), "summary must carry secondary ratio_of_means_to_imc"
+    assert (sealed_dir / "sealed_scenarios.csv").exists(), "missing sealed_scenarios.csv (E2 evidence)"
+    assert (sealed_dir / "manifest.yaml").exists(), "missing frozen manifest.yaml copy"
     imc = np.asarray([float(r["objective"]) for r in details if r["algorithm"] == "imc"])
     for row in summary:
         algo = row["algorithm"]
         objectives = np.asarray([float(r["objective"]) for r in details if r["algorithm"] == algo])
         assert abs(float(row["mean_objective"]) - float(np.mean(objectives))) < 1e-9, algo
         ratios = objectives / np.maximum(imc, 1e-12)
+        # Primary: mean of ratios; must equal paired point estimate.
         assert abs(float(row["mean_ratio_to_imc"]) - float(np.mean(ratios))) < 1e-9, algo
-        # split acceptance fields must exist (P0: no overloaded stable).
+        assert abs(float(row["paired_ratio_mean"]) - float(np.mean(ratios))) < 1e-9, f"{algo} paired mean must be mean-of-ratios"
+        # Secondary: ratio of means, distinct statistic.
+        assert abs(float(row["ratio_of_means_to_imc"]) - float(np.mean(objectives) / max(float(np.mean(imc)), 1e-12))) < 1e-9, algo
+        # Recompute paired bootstrap CI with the sealed seed convention (seed=7+77).
+        rng = np.random.default_rng(7 + 77)
+        idx = rng.integers(0, len(ratios), size=(2000, len(ratios)))
+        boot = np.mean(ratios[idx], axis=1)
+        assert abs(float(row["paired_ratio_lo95"]) - float(np.quantile(boot, 0.025))) < 1e-9, f"{algo} lo95 drift"
+        assert abs(float(row["paired_ratio_hi95"]) - float(np.quantile(boot, 0.975))) < 1e-9, f"{algo} hi95 drift"
+        # Split acceptance fields must exist and be recomputable.
         subset = [r for r in details if r["algorithm"] == algo]
-        for field in ("bounded", "comfort_held", "actuator_compliant", "validation_passed", "fallback_failed"):
+        for field in ("bounded", "comfort_held", "recovery_ok", "actuator_compliant", "validation_passed", "fallback_failed"):
             assert field in subset[0], f"{algo} missing {field}"
-    print(f"sealed OK ({sealed_dir}: 560 details, 7 summaries, split acceptance present)")
+        assert abs(float(row["validation_rate"]) - float(np.mean([float(r["validation_passed"]) for r in subset]))) < 1e-9, algo
+        # fallback_failed new definition: fallback occurred but validation failed.
+        for r in subset:
+            want = 1 if (float(r["fallback_fraction"]) > 1e-12 and float(r["validation_passed"]) < 0.5) else 0
+            assert int(float(r["fallback_failed"])) == want, f"{algo} ordinal={r.get('ordinal')} fallback_failed definition drift"
+    print(f"sealed OK ({sealed_dir}: 560 details, 7 summaries, E2 stats+acceptance+provenance verified)")
 
 
 def check_supplement() -> None:

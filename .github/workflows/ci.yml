@@ -34,11 +34,11 @@ jobs:
           python -m pip install --upgrade pip
           pip install "numpy==${{ matrix.numpy-version }}" pytest pyyaml
           if [ "${{ matrix.numpy-version }}" = "2.0.0" ]; then
-            pip install scipy scikit-learn matplotlib joblib pandas
+            pip install scipy scikit-learn matplotlib joblib pandas python-docx
           else
             # Pinned to locally verified versions; latest majors drifted
             # (sklearn 1.2.2 -> 1.7.x etc.) and broke the suite.
-            pip install "scipy==1.11.4" "scikit-learn==1.2.2" "matplotlib==3.8.0" "joblib==1.2.0" "pandas==2.1.4" "pyyaml==6.0.1"
+            pip install "scipy==1.11.4" "scikit-learn==1.2.2" "matplotlib==3.8.0" "joblib==1.2.0" "pandas==2.1.4" "pyyaml==6.0.1" "python-docx==1.1.2"
           fi
           # Editable install must succeed on a clean env; no silent fallback
           # to requirements.txt (P0: remove install-failure masking).
@@ -133,4 +133,31 @@ jobs:
       - name: Results consistency (tables recomputable, no hard-code swap)
         run: |
           python tools/check_results_consistency.py --sealed-dir artifacts/runs/sealed-80x7-v4 || python tools/check_results_consistency.py --sealed-dir archive/outputs_review_v3
+          python tools/check_results_consistency.py --sealed-dir artifacts/runs/sealed-80x7-v4-retrain
           python -c "from hvac_pid.policy_bundle import PolicyBundle; b=PolicyBundle.load('archive/outputs_review_v3', project_root='.'); print('bundle OK', b.provenance['bo'][:40])"
+          python -c "from hvac_pid.policy_bundle import PolicyBundle; b=PolicyBundle.load('artifacts/runs/v4-20260907-8f3fd5f', project_root='.'); assert b.provenance['bo_legacy_fallback']=='0' and b.provenance['safe_bo_legacy_fallback']=='0', b.provenance; print('retrain bundle legacy-free OK')"
+      - name: Main-report DOCX audit (sections/tables/numbers/stale scan)
+        run: |
+          python tools/check_docx.py
+      - name: Hardware gates audit (target gates must stay pending without silicon)
+        run: |
+          python tools/check_hardware_gates.py --run artifacts/runs/v4-20260907-8f3fd5f || test $? -eq 0
+      - name: Node checks (report formulas + interactive HTML smoke)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Run Node validations (syntax always, report-gated checks when built)
+        run: |
+          node --check tests/validate_report_formulas.mjs
+          node --check tests/check_interactive_html.mjs
+          node -e "import('./vendor/katex/katex.mjs').then(m=>{const k=m.default; k.renderToString('K_p=\\\\frac{\\\\tau}{K(\\\\lambda+L)}',{throwOnError:true}); console.log('katex smoke OK')})"
+          if [ -f outputs/engineering_report.html ]; then
+            node tests/validate_report_formulas.mjs
+          else
+            echo "skip formula validation (outputs/engineering_report.html not built in CI)"
+          fi
+          if ls outputs/*demo*.html >/dev/null 2>&1; then
+            for f in outputs/*demo*.html; do node tests/check_interactive_html.mjs "$f"; done
+          else
+            echo "skip interactive HTML check (no demo HTML built in CI)"
+          fi

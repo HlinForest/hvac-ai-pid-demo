@@ -1,0 +1,15 @@
+{
+  "experiment_id": "E3+",
+  "code_sha": "8f3fd5f21df6c1c14e6c1406b0377a3b7bd1d92c",
+  "manifest_sha256": "ee4caa461fcc11a685ca65def2130466ddfad157dee1d0fb2b638c2bac7dfd8c",
+  "artifact_dir": "D:\\havc\\hvac-ai-pid-demo\\artifacts\\runs\\v4-20260907-8f3fd5f",
+  "bo_gains": [
+    0.6265068944346303,
+    0.005895908382254749
+  ],
+  "imc_gains": [
+    0.5180268093342884,
+    0.004056691798618942
+  ],
+  "elapsed_seconds": 34.98313210000197
+}

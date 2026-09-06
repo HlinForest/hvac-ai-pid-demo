@@ -1,9 +1,15 @@
-"""Seven-algorithm sealed evaluation on one 80-scenario list (P1).
+"""Seven-algorithm sealed evaluation on one 80-scenario list (E2).
 
-All seven policies come from a single :class:`PolicyBundle` (``--artifact-dir``)
-and are evaluated on the *same* 5x16 sealed scenarios with the *same* noise
-seeds and the *same* six-substep v4 integrator.  No test-after-tune: the
-sealed list is never used for training or model selection.
+E2 = frozen-policy reevaluation: policies frozen elsewhere are re-evaluated
+on the *same* 5x16 sealed scenarios with the *same* noise seeds and the
+*same* six-substep v4 integrator.  It is NOT a unified-training comparison.
+Policy origins differ (v3 frozen / legacy conservative / replay-frozen);
+see ``sealed_provenance.json:policy_provenance`` + ``safe_bo_attribution``.
+
+Primary statistic: mean of paired per-scenario ratios
+``mean(objective/imc)`` with bootstrap 95% CI (``paired_ratio_*`` ==
+``mean_ratio_to_imc`` point estimate).  Secondary: ``ratio_of_means_to_imc``
+(``mean(obj)/mean(imc)``), reported for reference only.
 
 Outputs (inside ``--output``):
   * ``sealed_80_details.csv`` — 560 rows (80 scenarios x 7 algorithms) with
@@ -46,6 +52,7 @@ from hvac_pid.manifest import git_head_sha, load_manifest, manifest_sha256
 from hvac_pid.metrics import calculate_metrics
 from hvac_pid.policy_bundle import PolicyBundle
 from hvac_pid.simulator import simulate
+import subprocess
 
 ALGORITHMS = ("zn", "imc", "bo", "safe-bo", "fnn", "rl", "llm")
 DEFAULT_ACCEPTANCE_SEEDS = (101, 211, 307, 401, 503)
@@ -75,11 +82,35 @@ def _sealed_scenarios(seed: int, acceptance_seeds: tuple[int, ...], per_repeat: 
 
 
 def _paired_ratio_ci(candidate: np.ndarray, baseline: np.ndarray, seed: int = 0) -> tuple[float, float, float]:
-    """Mean paired ratio + 95% bootstrap CI (percentile, 2000 resamples)."""
+    """Primary statistic (E2): mean of paired per-scenario ratios + 95% bootstrap CI.
+
+    Each bootstrap resample draws scenarios with replacement and recomputes
+    ``mean(candidate[i] / baseline[i])``.  This treats every sealed scenario
+    equally.  It differs from the secondary ``ratio_of_means``
+    (``mean(candidate) / mean(baseline)``), which is dominated by
+    large-objective scenarios.  Do not conflate the two.
+    """
     rng = np.random.default_rng(seed)
+    ratios = candidate / np.maximum(baseline, 1e-12)
     indices = rng.integers(0, len(candidate), size=(2000, len(candidate)))
-    ratios = np.mean(candidate[indices], axis=1) / np.maximum(np.mean(baseline[indices], axis=1), 1e-12)
-    return float(np.mean(ratios)), float(np.quantile(ratios, 0.025)), float(np.quantile(ratios, 0.975))
+    boot = np.mean(ratios[indices], axis=1)
+    return float(np.mean(ratios)), float(np.quantile(boot, 0.025)), float(np.quantile(boot, 0.975))
+
+
+def _ratio_of_means(candidate: np.ndarray, baseline: np.ndarray) -> float:
+    """Secondary point estimate only: mean(candidate)/mean(baseline)."""
+    return float(np.mean(candidate) / max(float(np.mean(baseline)), 1e-12))
+
+
+def _git_is_dirty() -> tuple[bool, str]:
+    """Worktree dirtiness + short status hash for provenance (E2 evidence)."""
+    try:
+        out = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=str(ROOT), timeout=10)
+        porcelain = out.stdout.strip()
+        digest = hashlib.sha256(porcelain.encode("utf-8")).hexdigest()[:16] if porcelain else "clean"
+        return (bool(porcelain), digest)
+    except Exception:
+        return (False, "unknown-no-git")
 
 
 def _frozen_llm_gains(artifact_dir: Path, output_dir: Path, training: list[Scenario], fallback: tuple[float, float], seed: int) -> tuple[tuple[float, float], str]:
@@ -183,7 +214,9 @@ def main() -> None:
                 "validation_passed": float(metrics.get("validation_passed", metrics["stable"])),
                 "stable": float(metrics["stable"]),
                 "fallback_fraction": float(metrics.get("fallback_fraction", 0.0)),
-                "fallback_failed": int(float(metrics.get("fallback_fraction", 0.0)) > 0.10 and metrics["stable"] < 0.5),
+                # 回退失败 = 发生过回退但温控验收仍不通过（《报告改进》§二.2）。
+                # 旧口径 (fallback>10% 且数值不稳定) 过窄，无法表示"回退后仍不达标"。
+                "fallback_failed": int(float(metrics.get("fallback_fraction", 0.0)) > 1e-12 and float(metrics.get("validation_passed", metrics["stable"])) < 0.5),
                 "integrator": INTEGRATOR_LABEL,
             })
     # Summary with paired CIs vs IMC (same sealed list, same seeds).
@@ -191,7 +224,7 @@ def main() -> None:
     summary: list[dict[str, object]] = []
     for algo in ALGORITHMS:
         objectives = np.asarray([r["objective"] for r in details if r["algorithm"] == algo], dtype=float)
-        mean_ratio, lo95, hi95 = _paired_ratio_ci(objectives, imc_objectives, seed=args.seed + 77)
+        paired_mean, lo95, hi95 = _paired_ratio_ci(objectives, imc_objectives, seed=args.seed + 77)
         ratios = objectives / np.maximum(imc_objectives, 1e-12)
         subset = [r for r in details if r["algorithm"] == algo]
         summary.append({
@@ -199,10 +232,13 @@ def main() -> None:
             "scenarios": len(subset),
             "mean_objective": float(np.mean(objectives)),
             "std_objective": float(np.std(objectives, ddof=1)) if len(objectives) > 1 else 0.0,
+            # 主统计量：逐场景配对比均值 mean(objective/imc) 及其 bootstrap CI。
             "mean_ratio_to_imc": float(np.mean(ratios)),
-            "paired_ratio_mean": mean_ratio,
+            "paired_ratio_mean": paired_mean,
             "paired_ratio_lo95": lo95,
             "paired_ratio_hi95": hi95,
+            # 次统计量：平均目标之比 mean(obj)/mean(imc)，仅作对照，不得与主统计量混用。
+            "ratio_of_means_to_imc": _ratio_of_means(objectives, imc_objectives),
             "noninferior_to_imc": int(hi95 <= 1.02),
             "better_than_imc": int(hi95 < 1.0),
             "stable_rate": float(np.mean([r["stable"] for r in subset])),
@@ -225,11 +261,12 @@ def main() -> None:
             metrics = calculate_metrics(simulate(scenario, PIController(*gains), seed=args.seed + 700_000 + ordinal))
             objectives.append(float(metrics["objective"]))
         objectives_arr = np.asarray(objectives)
-        mean_ratio, lo95, hi95 = _paired_ratio_ci(objectives_arr, imc_objectives, seed=args.seed + 101 + idx)
+        paired_mean, lo95, hi95 = _paired_ratio_ci(objectives_arr, imc_objectives, seed=args.seed + 101 + idx)
         ablation_rows.append({
             "method": name, "kp": gains[0], "ki": gains[1],
             "mean_objective": float(np.mean(objectives_arr)),
-            "paired_ratio_mean": mean_ratio, "paired_ratio_lo95": lo95, "paired_ratio_hi95": hi95,
+            "paired_ratio_mean": paired_mean, "paired_ratio_lo95": lo95, "paired_ratio_hi95": hi95,
+            "ratio_of_means_to_imc": _ratio_of_means(objectives_arr, imc_objectives),
             "note": "same 80 sealed scenarios/seeds; isolates search vs conservative init" if "random" in name else "IMC formula default without lambda search",
         })
 
@@ -242,6 +279,28 @@ def main() -> None:
     _write(output / "sealed_80_details.csv", details)
     _write(output / "sealed_80_summary.csv", summary)
     _write(output / "sealed_ablation.csv", ablation_rows)
+    # E2 evidence: full sealed scenario list (params, not just seeds).
+    scen_rows: list[dict[str, object]] = []
+    for ordinal, (repeat_seed, scenario_index, scenario) in enumerate(sealed):
+        scen_rows.append({
+            "ordinal": ordinal + 1, "repeat_seed": repeat_seed, "scenario_index": scenario_index,
+            "noise_seed": args.seed + 700_000 + ordinal,
+            "duration_hours": float(scenario.duration_hours), "dt_minutes": float(scenario.dt_minutes),
+            "initial_zone_c": float(scenario.initial_zone_c), "setpoint_c": float(scenario.setpoint_c),
+            "outdoor_c": float(scenario.outdoor_c), "internal_load_w": float(scenario.internal_load_w),
+            "door_open_hour": float(scenario.door_open_hour) if scenario.door_open_hour is not None else -1.0,
+            "setpoint_change_hour": float(scenario.setpoint_change_hour) if scenario.setpoint_change_hour is not None else -1.0,
+            "setpoint_after_c": float(scenario.setpoint_after_c) if scenario.setpoint_after_c is not None else -1.0,
+            "integration_substeps": int(getattr(scenario, "integration_substeps", 6)),
+        })
+    _write(output / "sealed_scenarios.csv", scen_rows)
+    # Freeze the executing manifest copy alongside results.
+    try:
+        manifest_src = Path(str(manifest.get("_manifest_path", ROOT / "experiments/manifests/v4.yaml")))
+        if manifest_src.exists():
+            (output / "manifest.yaml").write_bytes(manifest_src.read_bytes())
+    except Exception:
+        pass
     # P1 attribution: is the Safe-BO gain from search or from the init seed?
     safe_bo_attribution = "unknown (no safe_bo_history.csv in artifact_dir)"
     safe_hist = artifact_dir / "safe_bo_history.csv"
@@ -267,7 +326,11 @@ def main() -> None:
             "current evidence supports THIS conservative parameter set, not the BO search mechanism itself"
         )
     provenance = {
+        "experiment_id": "E2",
+        "experiment_name": "frozen-policy reevaluation on unified v4 sealed list (NOT unified training)",
         "code_sha": git_head_sha(),
+        "code_dirty": _git_is_dirty()[0],
+        "worktree_status_sha16": _git_is_dirty()[1],
         "manifest_sha256": manifest.get("_manifest_sha256", manifest_sha256()),
         "manifest_path": str(manifest.get("_manifest_path", "experiments/manifests/v4.yaml")),
         "artifact_dir": str(artifact_dir.resolve()),
@@ -275,19 +338,21 @@ def main() -> None:
         "policies": {"zn": list(zn_gains), "imc": list(imc_gains), "bo": list(bo_gains),
                      "safe-bo": list(safe_gains), "llm": list(llm_gains), "llm_source": llm_source},
         "safe_bo_attribution": safe_bo_attribution,
-        "stat_note": "mean_ratio_to_imc is ratio-of-means; paired_ratio_* is mean-of-paired-ratios with bootstrap CI; report both, do not conflate",
+        "stat_primary": "paired_ratio_* = mean of per-scenario ratios mean(obj/imc) + bootstrap 95% CI (2000 resamples, seed+77); PRIMARY for E2 conclusions",
+        "stat_secondary": "ratio_of_means_to_imc = mean(obj)/mean(imc); reference only, dominated by large-objective scenarios; do not conflate with primary",
+        "stat_note": "mean_ratio_to_imc equals paired_ratio_mean point estimate (both are mean of ratios); ratio_of_means_to_imc is the distinct secondary statistic",
         "sealed": {"repeats": args.repeats, "per_repeat": args.per_repeat, "total": len(sealed),
                    "acceptance_seeds": list(acceptance_seeds), "pipeline_seed": args.seed},
         "integrator": INTEGRATOR_LABEL,
         "elapsed_seconds": time.perf_counter() - started,
-        "comparability": "all 7 on same 80 scenarios/seeds/metrics; LLM is replay-frozen, not live; do not rank across protocols",
+        "comparability": "E2: all 7 on same 80 scenarios/seeds/metrics/integrator; frozen policies from mixed origins (v3 frozen + legacy conservative + replay-frozen); LLM replay is NOT live; do not claim unified training or cross-protocol ranking",
     }
     (output / "sealed_provenance.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"sealed 80x7: {len(details)} detail rows, {len(summary)} summary rows -> {output.resolve()}")
     for row in summary:
         print(f"  {row['algorithm']:7s} mean={float(row['mean_objective']):.3f} "
               f"paired_ratio={float(row['paired_ratio_mean']):.4f} [{float(row['paired_ratio_lo95']):.4f},{float(row['paired_ratio_hi95']):.4f}] "
-              f"stable={float(row['stable_rate']):.2f}")
+              f"stable={float(row['stable_rate']):.2f} validation={float(row['validation_rate']):.2f}")
 
 
 if __name__ == "__main__":
