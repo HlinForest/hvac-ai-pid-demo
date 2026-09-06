@@ -14,11 +14,15 @@ seed 815 reproduces the pipeline BO exactly):
 
 Each arm's winner (by training mean) is scored on the SAME sealed 80 with
 the E2 primary statistic.  Reported per search seed plus pooled paired
-differences (gp-minus-random, gp-minus-init) with bootstrap 95% CIs.
+differences (gp-minus-random, gp-minus-init).  The PRIMARY interval is a
+two-way cluster bootstrap over (search seed, scenario): the pooled diffs
+are not independent (one fitted policy per seed, repeated scenarios), so
+the naive row bootstrap is reference-only.
 
 Causal wording licensed by this output: arms differ ONLY in the 7 appended
-points, so a pooled gp-minus-random CI below 0 supports a GP contribution
+points, so a cluster gp-random CI below 0 supports a GP contribution
 *under this budget*; anything else stays an observation, not a mechanism.
+Only 4 search-seed replicates exist; mechanism conclusions stay limited.
 """
 from __future__ import annotations
 
@@ -69,10 +73,32 @@ def _paired_ci(candidate: np.ndarray, baseline: np.ndarray, seed: int) -> tuple[
 
 
 def _diff_ci(diffs: np.ndarray, seed: int) -> tuple[float, float, float]:
+    """Naive pooled bootstrap (reference only; ignores clustering)."""
     rng = np.random.default_rng(seed)
     idx = rng.integers(0, len(diffs), size=(2000, len(diffs)))
     boot = np.mean(diffs[idx], axis=1)
     return float(np.mean(diffs)), float(np.quantile(boot, 0.025)), float(np.quantile(boot, 0.975))
+
+
+def _cluster_diff_ci(per_seed_diffs: list[np.ndarray], seed: int) -> tuple[float, float, float]:
+    """Two-way cluster bootstrap over (search seed, scenario).
+
+    The pooled 320 diffs are NOT independent: one fitted policy is shared
+    per search seed and each scenario repeats across seeds.  Resample seeds
+    with replacement, then scenarios with replacement inside the drawn
+    seeds, and average.  With only 4 search seeds the interval is honest
+    about how little search-level replication exists.
+    """
+    stacked = np.vstack(per_seed_diffs)  # (n_seeds, n_scenarios)
+    n_seeds, n_scen = stacked.shape
+    rng = np.random.default_rng(seed)
+    boots = []
+    for _ in range(2000):
+        seed_idx = rng.integers(0, n_seeds, size=n_seeds)
+        scen_idx = rng.integers(0, n_scen, size=n_scen)
+        boots.append(float(np.mean(stacked[np.ix_(seed_idx, scen_idx)])))
+    boots_arr = np.asarray(boots)
+    return float(np.mean(stacked)), float(np.quantile(boots_arr, 0.025)), float(np.quantile(boots_arr, 0.975))
 
 
 def main() -> None:
@@ -106,6 +132,8 @@ def main() -> None:
     rows: list[dict[str, object]] = []
     pooled_gr: list[float] = []
     pooled_gi: list[float] = []
+    per_seed_gr: list[np.ndarray] = []
+    per_seed_gi: list[np.ndarray] = []
     for search_seed in search_seeds:
         rng = np.random.default_rng(search_seed)
         init_points = [tuner._encode(imc_init)] + [p for p in rng.random((6, 2))]
@@ -144,9 +172,15 @@ def main() -> None:
                           - sealed_arms["random-14"] / np.maximum(imc_sealed, 1e-12)).tolist())
         pooled_gi.extend((sealed_arms["gp-full"] / np.maximum(imc_sealed, 1e-12)
                           - sealed_arms["init-only-7"] / np.maximum(imc_sealed, 1e-12)).tolist())
+        per_seed_gr.append(sealed_arms["gp-full"] / np.maximum(imc_sealed, 1e-12)
+                           - sealed_arms["random-14"] / np.maximum(imc_sealed, 1e-12))
+        per_seed_gi.append(sealed_arms["gp-full"] / np.maximum(imc_sealed, 1e-12)
+                           - sealed_arms["init-only-7"] / np.maximum(imc_sealed, 1e-12))
 
     diff_gr = _diff_ci(np.asarray(pooled_gr), args.seed + 913)
     diff_gi = _diff_ci(np.asarray(pooled_gi), args.seed + 914)
+    clu_gr = _cluster_diff_ci(per_seed_gr, args.seed + 915)
+    clu_gi = _cluster_diff_ci(per_seed_gi, args.seed + 916)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
@@ -157,11 +191,18 @@ def main() -> None:
         "manifest_sha256": manifest.get("_manifest_sha256", manifest_sha256()),
         "artifact_dir": str(args.artifact_dir.resolve()),
         "search_seeds": search_seeds, "n_pooled_pairs": len(pooled_gr),
-        "pooled_gp_minus_random": {"mean": diff_gr[0], "lo95": diff_gr[1], "hi95": diff_gr[2]},
-        "pooled_gp_minus_init": {"mean": diff_gi[0], "lo95": diff_gi[1], "hi95": diff_gi[2]},
-        "reading": ("GP contribution supported under this budget (pooled gp-random CI below 0)"
-                    if diff_gr[2] < 0 else
+        "pooled_gp_minus_random": {"mean": diff_gr[0], "lo95": diff_gr[1], "hi95": diff_gr[2],
+                                   "method": "naive row bootstrap (ignores clustering; reference only)"},
+        "pooled_gp_minus_init": {"mean": diff_gi[0], "lo95": diff_gi[1], "hi95": diff_gi[2],
+                                 "method": "naive row bootstrap (ignores clustering; reference only)"},
+        "cluster_gp_minus_random": {"mean": clu_gr[0], "lo95": clu_gr[1], "hi95": clu_gr[2],
+                                    "method": "two-way cluster bootstrap over (search seed, scenario); PRIMARY"},
+        "cluster_gp_minus_init": {"mean": clu_gi[0], "lo95": clu_gi[1], "hi95": clu_gi[2],
+                                  "method": "two-way cluster bootstrap over (search seed, scenario); PRIMARY"},
+        "reading": ("GP contribution supported under this budget (cluster gp-random CI below 0)"
+                    if clu_gr[2] < 0 else
                     "no pooled GP advantage over same-budget random; mechanism contribution unverified"),
+        "caveat": "only 4 search-seed replicates; mechanism conclusions remain limited",
         "elapsed_seconds": time.perf_counter() - started,
     }
     args.output.with_name("gp_attribution_summary.json").write_text(
@@ -170,8 +211,10 @@ def main() -> None:
     for r in rows:
         print(f"  seed={r['search_seed']} {str(r['method']):12s} train={float(r['train_mean_objective']):.2f} "
               f"sealed={float(r['sealed_mean_objective']):.2f} paired={float(r['paired_ratio_mean']):.4f}")
-    print(f"pooled gp-random diff: {diff_gr[0]:+.4f} [{diff_gr[1]:+.4f},{diff_gr[2]:+.4f}] (n={len(pooled_gr)})")
-    print(f"pooled gp-init   diff: {diff_gi[0]:+.4f} [{diff_gi[1]:+.4f},{diff_gi[2]:+.4f}] (n={len(pooled_gi)})")
+    print(f"pooled gp-random diff: {diff_gr[0]:+.4f} [{diff_gr[1]:+.4f},{diff_gr[2]:+.4f}] (n={len(pooled_gr)}, naive)")
+    print(f"pooled gp-init   diff: {diff_gi[0]:+.4f} [{diff_gi[1]:+.4f},{diff_gi[2]:+.4f}] (n={len(pooled_gi)}, naive)")
+    print(f"cluster gp-random: {clu_gr[0]:+.4f} [{clu_gr[1]:+.4f},{clu_gr[2]:+.4f}] (PRIMARY, 4 seeds)")
+    print(f"cluster gp-init:   {clu_gi[0]:+.4f} [{clu_gi[1]:+.4f},{clu_gi[2]:+.4f}] (PRIMARY, 4 seeds)")
 
 
 if __name__ == "__main__":

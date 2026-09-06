@@ -16,6 +16,7 @@ Prefer this over calling the individual ``run_*.py`` scripts directly::
     python run.py budget --run artifacts/runs/<run_id> --sealed artifacts/runs/<sealed>
     python run.py failures --sealed artifacts/runs/<sealed>
     python run.py figures --artifact-dir artifacts/runs/<run_id> --sealed artifacts/runs/<sealed>
+    python run.py controls --artifact-dir artifacts/runs/<run_id> --sealed artifacts/runs/<sealed>
 
 Each subcommand forwards its remaining arguments verbatim to the
 corresponding module's ``main()``.
@@ -43,6 +44,7 @@ _SUBCOMMANDS: dict[str, str] = {
     "budget": "tools.make_budget_table",
     "failures": "tools.analyze_failures",
     "figures": "tools.make_sealed_figures",
+    "controls": "tools.failure_control_tests",
 }
 
 
@@ -82,6 +84,7 @@ def build_parser() -> argparse.ArgumentParser:
         "budget": "training-budget ledger (B2/B3 naming)",
         "failures": "sealed acceptance-failure autopsy",
         "figures": "reproducible sealed figures for the main report",
+        "controls": "controlled-variable tests for acceptance failures",
     }
     for command in _SUBCOMMANDS:
         sub.add_parser(command, help=helps[command]).add_argument(

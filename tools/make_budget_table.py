@@ -1,20 +1,27 @@
-"""Training-budget ledger for the "same configuration, unified scenarios" claim (B2/B3).
+"""Counted compute budget ledger (NOT a complete measured cost).
 
 Every closed-loop simulation costs one 5 h object run.  Counts are derived
-from the frozen histories inside --run (no re-simulation):
+from the frozen histories inside --run (no re-simulation).  Deliberately
+NOT covered (see omissions below): short-horizon replays, repeated
+evaluations inside training loops beyond the counted rounds, integration
+substeps, plotting/report rendering, and wall-clock time except an optional
+pipeline total passed via --wall-seconds.  Do NOT use this table for exact
+cost ranking between methods with different training flows.
 
+Counted rows:
   * imc-lambda: rows(imc_lambda_tuning.csv) x train scenarios
   * bo: rows(bayesian_search_history.csv) x train scenarios (= evals)
   * safe-bo: rows(safe_bo_history.csv) x train scenarios
   * fnn-labels: sum(training_labels.csv:bo_evaluations) + 2 x train (ZN/IMC
     reference sims per scenario, see tuning.generate_label_rows)
-  * fnn-select: rows(fnn_training_history.csv) x validation scenarios
-  * rl-train: rows(rl_training_transitions.csv) counted as environment steps;
-    reported separately as steps (NOT full 5 h sims)
-  * rl-select: rows(rl_training_history.csv) x validation scenarios
-  * deploy-gate: rows(deployment_acceptance.csv) closed-loop sims
-    (2 candidates + 1 IMC baseline per qualification scenario)
-  * sealed-final: 7 algorithms x 80 scenarios (E2-B3 record-only)
+  * fnn-select: one (baseline, learned) validation round (finite
+    validation_learned_objective rows)
+  * rl-train: environment steps = sum(rl_training_history.csv:environment_steps);
+    falls back to rows(rl_training_transitions.csv) only if present.
+    Steps are NOT full 5 h sims and stay in their own row.
+  * rl-select: one validation round per non-NaN checkpoint + final
+  * deploy-gate: 3 sims (IMC + 2 candidates) per qualification scenario
+  * sealed-final: 7 algorithms x 80 scenarios (record-only)
 
 Only the BO/random arms share an identical budget; every other pair of
 methods must NOT be called a "same-budget comparison".
@@ -78,14 +85,30 @@ def main() -> None:
                 n += 1
         return n
 
+    def _fsum(rows: list[dict[str, str]], key: str) -> float:
+        total = 0.0
+        for r in rows:
+            try:
+                v = float(r.get(key, "nan"))
+            except (TypeError, ValueError):
+                continue
+            if v == v:
+                total += v
+        return total
+
     # Selection cost = validation full sims actually run: FNN one
     # (baseline, learned) round; RL one round per non-NaN checkpoint + final.
     fnn_select_sims = 2 * val_n if _finite(fnn_hist, "validation_learned_objective") else 0
     rl_select_sims = (_finite(rl_hist, "checkpoint_validation_objective") + 1) * val_n
+    # RL environment steps survive pruning via the history file (transitions
+    # CSV is pruned from the repo; never emit -1).
+    rl_steps_hist = _fsum(rl_hist, "environment_steps")
     try:
         rl_steps = len(_rows(run / "rl_training_transitions.csv"))
+        rl_steps_note = "rows(rl_training_transitions.csv)"
     except FileNotFoundError:
-        rl_steps = -1
+        rl_steps = int(rl_steps_hist)
+        rl_steps_note = "sum(rl_training_history.csv:environment_steps); transitions CSV pruned"
     gate_rows = _rows(run / "deployment_acceptance.csv")
     # deployment gate: per qualification scenario, IMC baseline + FNN + RL sims.
     gate_sims = qual_n * 3 if qual_n else 0
@@ -103,7 +126,7 @@ def main() -> None:
         {"method": "fnn-select", "train_scenarios": val_n, "candidate_evals": 2,
          "closed_loop_sims": fnn_select_sims, "note": "one (baseline, learned) validation round"},
         {"method": "rl-train", "train_scenarios": train_n, "candidate_evals": rl_steps,
-         "closed_loop_sims": 0, "note": "offline environment STEPS, not full sims; kept separate"},
+         "closed_loop_sims": 0, "note": f"offline environment STEPS, not full sims ({rl_steps_note})"},
         {"method": "rl-select", "train_scenarios": val_n, "candidate_evals": rl_select_sims // max(val_n, 1),
          "closed_loop_sims": rl_select_sims, "note": "one validation round per checkpoint + final"},
         {"method": "deploy-gate", "train_scenarios": qual_n, "candidate_evals": 3,
@@ -120,8 +143,12 @@ def main() -> None:
         writer = csv.DictWriter(handle, fieldnames=list(legend[0].keys()))
         writer.writeheader()
         writer.writerows(legend)
-    meta = {"run": str(run.resolve()), "sealed": str(sealed.resolve()),
+    meta = {"title": "counted compute budget (NOT a complete measured cost)",
+            "run": str(run.resolve()), "sealed": str(sealed.resolve()),
             "hours_per_sim": HOURS_PER_SIM, "pipeline_wall_seconds": args.wall_seconds,
+            "omissions": ["short-horizon replays", "repeated in-loop evaluations beyond counted rounds",
+                          "integration substeps", "plotting/report rendering",
+                          "per-method wall time (only pipeline total, if given)"],
             "warning": "Only BO/random arms share an identical budget."}
     out.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"budget table: {len(legend)} rows -> {out.resolve()}")
