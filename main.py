@@ -13,6 +13,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--output", type=Path, default=Path("outputs"), help="result directory")
     parser.add_argument("--train-samples", type=int, default=48, help="offline labeled contexts")
     parser.add_argument("--validation-samples", type=int, default=16, help="model-selection contexts")
+    parser.add_argument("--qualification-samples", type=int, default=16,
+                        help="deployment-gate contexts (never reused by the final sealed test)")
     parser.add_argument("--test-samples", type=int, default=16, help="held-out contexts")
     parser.add_argument(
         "--acceptance-seeds",
@@ -35,6 +37,7 @@ def main() -> None:
     if args.quick:
         args.train_samples = 20
         args.validation_samples = 6
+        args.qualification_samples = 6
         args.test_samples = 6
         args.bo_iterations = 3
         args.acceptance_seeds = "101"
@@ -45,6 +48,7 @@ def main() -> None:
         args.output,
         train_samples=args.train_samples,
         validation_samples=args.validation_samples,
+        qualification_samples=args.qualification_samples,
         test_samples=args.test_samples,
         bo_iterations=args.bo_iterations,
         seed=args.seed,

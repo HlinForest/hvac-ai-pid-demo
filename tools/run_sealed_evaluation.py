@@ -70,6 +70,14 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--repeats", type=int, default=5)
     parser.add_argument("--acceptance-seeds", type=str, default="101,211,307,401,503",
                         help="comma-separated sealed repeat ids")
+    parser.add_argument("--train-samples", type=int, default=48,
+                        help="training-split size the replay freeze must use (use the pipeline value)")
+    parser.add_argument("--train-seed", type=int, default=None,
+                        help="training-split seed (default: --seed, matching the pipeline)")
+    parser.add_argument("--protocol-label", type=str, default="E2",
+                        help="experiment id written to provenance (e.g. E2-B3)")
+    parser.add_argument("--design-note", type=str, default="",
+                        help="free-text design note recorded in provenance")
     return parser.parse_args()
 
 
@@ -149,7 +157,10 @@ def main() -> None:
     bo_gains = tuple(bundle.bo_gains)
     safe_gains = tuple(bundle.safe_bo_gains)
     # Training split for the one-time LLM replay freeze (never sealed).
-    training = sample_adaptive_scenarios(8, seed=args.seed, duration_hours=5.0)
+    # Must be the FULL training split (same count/seed as the pipeline),
+    # not a small ad-hoc subset.
+    train_seed = args.train_seed if args.train_seed is not None else args.seed
+    training = sample_adaptive_scenarios(args.train_samples, seed=train_seed, duration_hours=5.0)
     llm_gains, llm_source = _frozen_llm_gains(artifact_dir, output, training, imc_gains, seed=args.seed + 31337)
     # FNN/RL candidate vs deployed (candidate files may equal deployed when accepted).
     fnn_candidate_path = artifact_dir / "fnn_rule_table_candidate.npy"
@@ -279,19 +290,16 @@ def main() -> None:
     _write(output / "sealed_80_details.csv", details)
     _write(output / "sealed_80_summary.csv", summary)
     _write(output / "sealed_ablation.csv", ablation_rows)
-    # E2 evidence: full sealed scenario list (params, not just seeds).
+    # E2 evidence: full sealed scenario list (ALL dataclass fields, so any
+    # figure or metric is exactly reproducible from this file + noise_seed).
+    from dataclasses import asdict as _asdict
     scen_rows: list[dict[str, object]] = []
     for ordinal, (repeat_seed, scenario_index, scenario) in enumerate(sealed):
+        full = _asdict(scenario)
+        full.pop("FEATURE_NAMES", None)
         scen_rows.append({
             "ordinal": ordinal + 1, "repeat_seed": repeat_seed, "scenario_index": scenario_index,
-            "noise_seed": args.seed + 700_000 + ordinal,
-            "duration_hours": float(scenario.duration_hours), "dt_minutes": float(scenario.dt_minutes),
-            "initial_zone_c": float(scenario.initial_zone_c), "setpoint_c": float(scenario.setpoint_c),
-            "outdoor_c": float(scenario.outdoor_c), "internal_load_w": float(scenario.internal_load_w),
-            "door_open_hour": float(scenario.door_open_hour) if scenario.door_open_hour is not None else -1.0,
-            "setpoint_change_hour": float(scenario.setpoint_change_hour) if scenario.setpoint_change_hour is not None else -1.0,
-            "setpoint_after_c": float(scenario.setpoint_after_c) if scenario.setpoint_after_c is not None else -1.0,
-            "integration_substeps": int(getattr(scenario, "integration_substeps", 6)),
+            "noise_seed": args.seed + 700_000 + ordinal, **full,
         })
     _write(output / "sealed_scenarios.csv", scen_rows)
     # Freeze the executing manifest copy alongside results.
@@ -326,8 +334,14 @@ def main() -> None:
             "current evidence supports THIS conservative parameter set, not the BO search mechanism itself"
         )
     provenance = {
-        "experiment_id": "E2",
-        "experiment_name": "frozen-policy reevaluation on unified v4 sealed list (NOT unified training)",
+        "experiment_id": args.protocol_label,
+        "experiment_name": (
+            "unified-scenario evaluation of policies re-frozen under their documented "
+            "training configurations (NOT a same-budget comparison; only BO/random arms use that wording)"
+            if args.protocol_label != "E2" else
+            "frozen-policy reevaluation on unified v4 sealed list (NOT unified training)"
+        ),
+        "design_note": args.design_note,
         "code_sha": git_head_sha(),
         "code_dirty": _git_is_dirty()[0],
         "worktree_status_sha16": _git_is_dirty()[1],
@@ -343,9 +357,19 @@ def main() -> None:
         "stat_note": "mean_ratio_to_imc equals paired_ratio_mean point estimate (both are mean of ratios); ratio_of_means_to_imc is the distinct secondary statistic",
         "sealed": {"repeats": args.repeats, "per_repeat": args.per_repeat, "total": len(sealed),
                    "acceptance_seeds": list(acceptance_seeds), "pipeline_seed": args.seed},
+        "llm_freeze": {"train_samples": args.train_samples, "train_seed": train_seed,
+                       "note": "replay frozen on the full training split, never on sealed"},
         "integrator": INTEGRATOR_LABEL,
         "elapsed_seconds": time.perf_counter() - started,
-        "comparability": "E2: all 7 on same 80 scenarios/seeds/metrics/integrator; frozen policies from mixed origins (v3 frozen + legacy conservative + replay-frozen); LLM replay is NOT live; do not claim unified training or cross-protocol ranking",
+        "comparability": (
+            "E2-B3: unified-scenario evaluation; deployment gate ran on the qualification "
+            "split only, sealed test unseen during selection; LLM replay frozen on the full "
+            "training split, not live; only BO/random arms may use same-budget wording"
+            if not any(v == "1" for v in (bundle.provenance.get("bo_legacy_fallback", "0"),
+                                          bundle.provenance.get("safe_bo_legacy_fallback", "0")))
+            else
+            "E2: all 7 on same 80 scenarios/seeds/metrics/integrator; frozen policies from mixed origins (v3 frozen + legacy conservative + replay-frozen); LLM replay is NOT live; do not claim unified training or cross-protocol ranking"
+        ),
     }
     (output / "sealed_provenance.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     print(f"sealed 80x7: {len(details)} detail rows, {len(summary)} summary rows -> {output.resolve()}")

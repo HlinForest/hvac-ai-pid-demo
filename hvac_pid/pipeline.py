@@ -55,6 +55,8 @@ def _write_run_manifest_and_provenance(
     train_samples: int,
     validation_samples: int,
     test_samples: int,
+    qualification_samples: int,
+    qualification_seed: int,
     bo_iterations: int,
     acceptance_seeds: tuple[int, ...],
 ) -> None:
@@ -97,6 +99,9 @@ def _write_run_manifest_and_provenance(
             "seed": seed,
             "train_samples": train_samples,
             "validation_samples": validation_samples,
+            "qualification_samples": qualification_samples,
+            "qualification_seed": qualification_seed,
+            "deployment_gate": "qualification split only; sealed test is record-only",
             "test_samples": test_samples,
             "bo_iterations": bo_iterations,
             "acceptance_seeds": list(acceptance_seeds),
@@ -111,6 +116,7 @@ def _write_run_manifest_and_provenance(
     tracked = [
         "classical_tuning_history.csv", "fopdt_fit_history.csv",
         "training_scenarios.csv", "validation_scenarios.csv",
+        "qualification_scenarios.csv",
         "dataset_manifest.csv", "holdout_scenarios.csv",
         "imc_lambda_tuning.csv", "global_bayesian_tuning.csv",
         "bo_policy.json", "safe_bo_history.csv", "safe_bo_policy.json",
@@ -185,7 +191,20 @@ def _dataset_manifest_rows(
     return rows
 
 
+def _paired_ratio_ci(
+    candidate: np.ndarray, baseline: np.ndarray, seed: int
+) -> tuple[float, float, float]:
+    """E2 primary: mean of per-scenario ratios + bootstrap 95% CI (2000 resamples)."""
+    ratios = candidate / np.maximum(baseline, 1e-12)
+    rng = np.random.default_rng(seed)
+    indices = rng.integers(0, len(candidate), size=(2000, len(candidate)))
+    boot = np.mean(ratios[indices], axis=1)
+    return float(np.mean(ratios)), float(np.quantile(boot, 0.025)), float(np.quantile(boot, 0.975))
+
+
 def _paired_ratio_upper95(candidate: np.ndarray, baseline: np.ndarray, seed: int) -> float:
+    # Legacy ratio-of-means upper95, kept for history only; the deployment
+    # gate and all E2 conclusions use _paired_ratio_ci (mean of ratios).
     rng = np.random.default_rng(seed)
     indices = rng.integers(0, len(candidate), size=(2000, len(candidate)))
     ratios = np.mean(candidate[indices], axis=1) / np.maximum(np.mean(baseline[indices], axis=1), 1e-12)
@@ -202,10 +221,21 @@ def _deployment_acceptance(
     *,
     fnn_rule_coverage: float,
     seed: int,
+    noise_base: int | None = None,
 ) -> tuple[list[dict[str, object]], dict[str, bool]]:
+    """Deployment gate on a qualification set NEVER reused by the final test.
+
+    Protocol (post-1904e09 fix): the sealed/final-test scenarios must not
+    participate in any candidate-vs-fallback decision.  Callers pass the
+    dedicated qualification split here; ``noise_base`` defaults to
+    ``seed + 710_000`` so qualification noise cannot collide with the sealed
+    ``seed + 700_000`` stream either.
+    """
+    if noise_base is None:
+        noise_base = seed + 710_000
     raw: dict[str, list[dict[str, float]]] = {"FNN": [], "RL": []}
     for ordinal, (test_seed, scenario_index, scenario) in enumerate(seeded_scenarios):
-        simulation_seed = seed + 700_000 + ordinal
+        simulation_seed = noise_base + ordinal
         baseline_result = simulate(scenario, PIController(*imc_gains), seed=simulation_seed)
         baseline_metrics = calculate_metrics(baseline_result)
         candidates = {
@@ -234,8 +264,9 @@ def _deployment_acceptance(
     for name, values in raw.items():
         candidate = np.asarray([row["candidate_objective"] for row in values])
         baseline = np.asarray([row["baseline_objective"] for row in values])
-        mean_ratio = float(np.mean(candidate) / max(np.mean(baseline), 1e-12))
-        upper95 = _paired_ratio_upper95(candidate, baseline, seed + (11 if name == "FNN" else 29))
+        # E2 primary statistic: mean of per-scenario ratios + bootstrap CI.
+        mean_ratio, _lo95, upper95 = _paired_ratio_ci(
+            candidate, baseline, seed + (11 if name == "FNN" else 29))
         stable_rate = float(np.mean([row["stable"] for row in values]))
         adaptive_fraction = float(np.mean([row["adaptive_fraction"] for row in values]))
         fallback_fraction = float(np.mean([row["fallback_fraction"] for row in values]))
@@ -448,10 +479,19 @@ def run_pipeline(
     train_samples: int = 48,
     validation_samples: int = 16,
     test_samples: int = 16,
+    qualification_samples: int = 16,
+    qualification_seed: int | None = None,
     bo_iterations: int = 7,
     seed: int = 7,
     acceptance_seeds: tuple[int, ...] = (101, 211, 307, 401, 503),
 ) -> dict[str, object]:
+    """Full training pipeline with an independent deployment-qualification split.
+
+    Splits: train (select gains) / validation (model selection) /
+    qualification (deployment gate ONLY) / sealed test (record-only final
+    evaluation; never feeds any decision).  ``qualification_seed`` defaults
+    to ``seed + 70_003``.
+    """
     started = time.perf_counter()
     output = Path(output_dir)
     output.mkdir(parents=True, exist_ok=True)
@@ -480,15 +520,19 @@ def run_pipeline(
         fopdt_fit_history,
     )
     _write_rows(output / "classical_tuning_steps.csv", classical_steps)
-    if min(train_samples, validation_samples, test_samples) <= 0:
-        raise ValueError("train, validation and test sample counts must all be positive")
+    if min(train_samples, validation_samples, test_samples, qualification_samples) <= 0:
+        raise ValueError("train, validation, qualification and test sample counts must all be positive")
     if not acceptance_seeds:
         raise ValueError("acceptance_seeds must not be empty")
+    if qualification_seed is None:
+        qualification_seed = seed + 70_003
     training_scenarios = sample_adaptive_scenarios(train_samples, seed=seed, duration_hours=5.0)
     validation_seed = seed + 50_003
     validation_scenarios = sample_adaptive_scenarios(validation_samples, seed=validation_seed, duration_hours=5.0)
+    qualification_scenarios = sample_adaptive_scenarios(qualification_samples, seed=qualification_seed, duration_hours=5.0)
     _write_rows(output / "training_scenarios.csv", _scenario_rows(training_scenarios))
     _write_rows(output / "validation_scenarios.csv", _scenario_rows(validation_scenarios))
+    _write_rows(output / "qualification_scenarios.csv", _scenario_rows(qualification_scenarios))
     imc_tune = tune_global_imc_lambda(
         training_scenarios,
         commissioning_fopdt,
@@ -626,7 +670,8 @@ def run_pipeline(
         seeded_scenarios.extend((acceptance_seed, index + 1, scenario) for index, scenario in enumerate(scenarios))
     test_scenarios = [scenario for _, _, scenario in seeded_scenarios]
     manifest = _dataset_manifest_rows(
-        [("train", seed, training_scenarios), ("validation", validation_seed, validation_scenarios), *test_partitions]
+        [("train", seed, training_scenarios), ("validation", validation_seed, validation_scenarios),
+         ("qualification", qualification_seed, qualification_scenarios), *test_partitions]
     )
     _write_rows(output / "dataset_manifest.csv", manifest)
     _write_rows(output / "holdout_scenarios.csv", _scenario_rows(test_scenarios))
@@ -634,8 +679,12 @@ def run_pipeline(
     fnn_context = fnn_context_candidates[-1] if fnn_context_candidates else np.zeros((2, 4), dtype=float)
     rl_candidate = rl_candidates[-1] if rl_candidates else rl_q_table
     fnn_coverage = float(fnn_history[-1]["rule_coverage_pct"]) / 100.0 if fnn_history else 0.0
+    # Deployment gate on the qualification split ONLY.  The sealed test set
+    # below is record-only from here on: no result may switch policy tables.
+    qualification_seeded = [(qualification_seed, index + 1, scenario)
+                            for index, scenario in enumerate(qualification_scenarios)]
     acceptance_rows, acceptance = _deployment_acceptance(
-        seeded_scenarios,
+        qualification_seeded,
         imc_gains,
         fnn_candidate,
         fnn_context,
@@ -643,6 +692,7 @@ def run_pipeline(
         rl_covered,
         fnn_rule_coverage=fnn_coverage,
         seed=seed,
+        noise_base=seed + 710_000,
     )
     _write_rows(output / "deployment_acceptance.csv", acceptance_rows)
     fnn_rule_table = fnn_candidate if acceptance["FNN"] else np.broadcast_to(np.asarray(imc_gains), (5, 5, 2)).copy()
@@ -795,6 +845,8 @@ def run_pipeline(
         train_samples=train_samples,
         validation_samples=validation_samples,
         test_samples=test_samples,
+        qualification_samples=qualification_samples,
+        qualification_seed=qualification_seed,
         bo_iterations=bo_iterations,
         acceptance_seeds=acceptance_seeds,
     )

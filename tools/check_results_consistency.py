@@ -57,6 +57,11 @@ def check_sealed(sealed_dir: Path) -> None:
     assert "worktree_status_sha16" in prov, "provenance must record worktree dirtiness"
     assert "ratio_of_means_to_imc" in (summary[0] or {}), "summary must carry secondary ratio_of_means_to_imc"
     assert (sealed_dir / "sealed_scenarios.csv").exists(), "missing sealed_scenarios.csv (E2 evidence)"
+    scen = _read_csv(sealed_dir / "sealed_scenarios.csv")
+    assert len(scen) == 80, f"want 80 sealed scenarios, got {len(scen)}"
+    for field in ("cooling_capacity_w", "door_open_load_w", "door_open_duration_minutes",
+                  "occupied_load_add_w", "occupied_end_hour", "setpoint_change_hour"):
+        assert field in scen[0], f"sealed_scenarios.csv missing {field} (failure autopsy needs it)"
     assert (sealed_dir / "manifest.yaml").exists(), "missing frozen manifest.yaml copy"
     imc = np.asarray([float(r["objective"]) for r in details if r["algorithm"] == "imc"])
     for row in summary:

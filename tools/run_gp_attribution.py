@@ -1,21 +1,24 @@
-"""GP mechanism attribution under the same training budget (E3+).
+"""Strict GP-vs-random attribution (E3+, post-1904e09 protocol).
 
-Compares, on the SAME training split and the SAME sealed list:
-  * bo-full: frozen BO gains from --artifact-dir (7 init + 7 GP = 14 evals)
-  * init-only-7: best of the identical 7 init points (1 IMC + 6 random,
-    seed+808, no GP steps) -> isolates the GP search contribution
-  * random-14: best of 14 i.i.d. log-uniform random gains (same 14-eval
-    budget, no model) -> isolates search-vs-luck
-  * conservative-imc-formula: IMC formula default, no search at all
-  * imc: frozen tuned baseline (reference, ratio = 1)
+For each search seed, all arms share the SAME 7 init points
+(1 IMC + 6 random from ``rng(search_seed)``), the SAME training split and
+the SAME scoring noise (``search_seed + index``, which for the canonical
+seed 815 reproduces the pipeline BO exactly):
 
-Training selection uses mean objective over --train-samples scenarios
-(seed=train-seed, noise train-seed+index, identical to pipeline
-tune_global_fixed).  Sealed evaluation reuses the E2 convention
-(acceptance seeds, noise seed+700000+ordinal, six-substep integrator).
+  * gp-full: 7 init + 7 GP-EI steps via ``tune_global_fixed`` (14 evals)
+  * rand-14: same 7 init + 7 further i.i.d. draws continuing the same RNG
+    stream (14 evals) -> the ONLY difference vs gp-full is how the last 7
+    points were chosen
+  * init-only-7: best of the shared 7 init points, zero further evals
+  * imc: frozen tuned baseline (reference)
 
-Output: gp_attribution.csv with sealed mean objective, paired
-mean-of-ratios + bootstrap 95% CI vs IMC, and training-selection scores.
+Each arm's winner (by training mean) is scored on the SAME sealed 80 with
+the E2 primary statistic.  Reported per search seed plus pooled paired
+differences (gp-minus-random, gp-minus-init) with bootstrap 95% CIs.
+
+Causal wording licensed by this output: arms differ ONLY in the 7 appended
+points, so a pooled gp-minus-random CI below 0 supports a GP contribution
+*under this budget*; anything else stays an observation, not a mechanism.
 """
 from __future__ import annotations
 
@@ -38,21 +41,21 @@ from hvac_pid.manifest import git_head_sha, load_manifest, manifest_sha256
 from hvac_pid.metrics import calculate_metrics
 from hvac_pid.policy_bundle import PolicyBundle
 from hvac_pid.simulator import simulate
-from hvac_pid.tuning import BayesianGainTuner
+from hvac_pid.tuning import BayesianGainTuner, tune_global_fixed
+
+CANONICAL_SEED = 815  # pipeline: seed(7) + 808
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Same-budget GP attribution (E3+)")
+    parser = argparse.ArgumentParser(description="Strict GP-vs-random attribution (E3+)")
     parser.add_argument("--artifact-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path,
                         default=Path("artifacts/runs/sealed-80x7-v4-retrain/gp_attribution.csv"))
     parser.add_argument("--seed", type=int, default=7)
-    parser.add_argument("--train-seed", type=int, default=7,
-                        help="training split seed (pipeline uses --seed)")
+    parser.add_argument("--train-seed", type=int, default=7)
     parser.add_argument("--train-samples", type=int, default=48)
-    parser.add_argument("--bo-eval-seed", type=int, default=7 + 808,
-                        help="pipeline tune_global_fixed seed (seed+808)")
-    parser.add_argument("--random-seed", type=int, default=7 + 5500)
+    parser.add_argument("--bo-iterations", type=int, default=7)
+    parser.add_argument("--search-seeds", type=str, default="815,5001,9002,12077")
     parser.add_argument("--acceptance-seeds", type=str, default="101,211,307,401,503")
     return parser.parse_args()
 
@@ -65,8 +68,16 @@ def _paired_ci(candidate: np.ndarray, baseline: np.ndarray, seed: int) -> tuple[
     return float(np.mean(ratios)), float(np.quantile(boot, 0.025)), float(np.quantile(boot, 0.975))
 
 
+def _diff_ci(diffs: np.ndarray, seed: int) -> tuple[float, float, float]:
+    rng = np.random.default_rng(seed)
+    idx = rng.integers(0, len(diffs), size=(2000, len(diffs)))
+    boot = np.mean(diffs[idx], axis=1)
+    return float(np.mean(diffs)), float(np.quantile(boot, 0.025)), float(np.quantile(boot, 0.975))
+
+
 def main() -> None:
     args = parse_args()
+    search_seeds = [int(v.strip()) for v in args.search_seeds.split(",") if v.strip()]
     acceptance_seeds = tuple(int(v.strip()) for v in args.acceptance_seeds.split(",") if v.strip())
     manifest = load_manifest()
     bundle = PolicyBundle.load(args.artifact_dir, project_root=ROOT)
@@ -74,101 +85,93 @@ def main() -> None:
     started = time.perf_counter()
 
     training = sample_adaptive_scenarios(args.train_samples, seed=args.train_seed, duration_hours=5.0)
-
-    def train_score(gains: tuple[float, float]) -> float:
-        scores = [calculate_metrics(simulate(s, PIController(*gains), seed=args.train_seed + i))["objective"]
-                  for i, s in enumerate(training)]
-        return float(np.mean(scores))
-
-    # Exact pipeline init (1 IMC + 6 random from bo-eval seed).
     imc_init = imc_pi(identify_fopdt(training[0]))
-    rng_init = np.random.default_rng(args.bo_eval_seed)
-    init_points = [tuner._encode(imc_init)] + [p for p in rng_init.random((6, 2))]
-    init_gains = [tuner._decode(p) for p in init_points]
-    init_scores = [train_score(g) for g in init_gains]
-    init_best = init_gains[int(np.argmin(init_scores))]
-
-    # Same-budget pure random search: 14 i.i.d. draws, best on training.
-    rng = np.random.default_rng(args.random_seed)
-    random_gains = [tuner._decode(p) for p in rng.random((14, 2))]
-    random_scores = [train_score(g) for g in random_gains]
-    random_best = random_gains[int(np.argmin(random_scores))]
-
-    conservative = imc_pi(identify_fopdt(training[0])) if False else None
-    # Conservative formula default: replicate controllers.imc_pi default path
-    # (closed_loop_time=None -> max(tau/3, 3L, 12)).  Call without scan.
-    from hvac_pid.controllers import imc_pi as _imc
-    import inspect as _inspect
-    if "closed_loop_time" in _inspect.signature(_imc).parameters:
-        conservative_gains = _imc(identify_fopdt(training[0]), closed_loop_time=None)
-    else:  # pragma: no cover - signature guard
-        conservative_gains = _imc(identify_fopdt(training[0]))
-    conservative_gains = (float(conservative_gains[0]), float(conservative_gains[1]))
-
-    contenders: dict[str, tuple[float, float]] = {
-        "imc": tuple(bundle.imc_gains),
-        "bo-full": tuple(bundle.bo_gains),
-        "init-only-7": (float(init_best[0]), float(init_best[1])),
-        "random-14": (float(random_best[0]), float(random_best[1])),
-        "conservative-imc-formula": conservative_gains,
-    }
-    train_lookup = {
-        "imc": train_score(tuple(bundle.imc_gains)),
-        "bo-full": train_score(tuple(bundle.bo_gains)),
-        "init-only-7": float(np.min(init_scores)),
-        "random-14": float(np.min(random_scores)),
-        "conservative-imc-formula": train_score(conservative_gains),
-    }
-
-    sealed: list = []
+    sealed = []
     for acc in acceptance_seeds:
         sealed.extend(sample_adaptive_scenarios(16, seed=args.seed + 100_003 + acc, duration_hours=5.0))
     assert len(sealed) == 80
-    sealed_obj: dict[str, np.ndarray] = {}
-    for name, gains in contenders.items():
-        vals = [float(calculate_metrics(simulate(s, PIController(*gains),
-                        seed=args.seed + 700_000 + k))["objective"]) for k, s in enumerate(sealed)]
-        sealed_obj[name] = np.asarray(vals)
-    imc_sealed = sealed_obj["imc"]
 
+    def train_score(gains: tuple[float, float], noise_base: int) -> float:
+        return float(np.mean([
+            calculate_metrics(simulate(s, PIController(*gains), seed=noise_base + i))["objective"]
+            for i, s in enumerate(training)]))
+
+    def sealed_obj(gains: tuple[float, float]) -> np.ndarray:
+        return np.asarray([
+            float(calculate_metrics(simulate(s, PIController(*gains),
+                                             seed=args.seed + 700_000 + k))["objective"])
+            for k, s in enumerate(sealed)])
+
+    imc_sealed = sealed_obj(tuple(bundle.imc_gains))
     rows: list[dict[str, object]] = []
-    for name, gains in contenders.items():
-        mean, lo, hi = _paired_ci(sealed_obj[name], imc_sealed, seed=args.seed + 77)
-        rows.append({
-            "method": name,
-            "kp": gains[0], "ki": gains[1],
-            "train_evals": 14 if name in ("bo-full", "random-14") else (7 if name == "init-only-7" else 0),
-            "train_mean_objective": train_lookup[name],
-            "sealed_mean_objective": float(np.mean(sealed_obj[name])),
-            "paired_ratio_mean": mean, "paired_ratio_lo95": lo, "paired_ratio_hi95": hi,
-            "note": {
-                "imc": "frozen tuned baseline",
-                "bo-full": "frozen BO (7 init + 7 GP-EI); same 14-eval budget as random-14",
-                "init-only-7": "best of identical 7 init points, zero GP steps; BO-full minus init-only = GP contribution",
-                "random-14": "best of 14 i.i.d. log-uniform draws on same training split",
-                "conservative-imc-formula": "formula default, no search",
-            }[name],
-        })
+    pooled_gr: list[float] = []
+    pooled_gi: list[float] = []
+    for search_seed in search_seeds:
+        rng = np.random.default_rng(search_seed)
+        init_points = [tuner._encode(imc_init)] + [p for p in rng.random((6, 2))]
+        extra_points = [p for p in rng.random((args.bo_iterations, 2))]
+        init_gains = [tuner._decode(p) for p in init_points]
+        init_scores = [train_score(g, search_seed) for g in init_gains]
+        init_best = init_gains[int(np.argmin(init_scores))]
+        # GP arm: exact pipeline procedure on the same split.
+        gp_tune = tune_global_fixed(training, iterations=args.bo_iterations, seed=search_seed)
+        gp_best = (float(gp_tune.kp), float(gp_tune.ki))
+        if search_seed == CANONICAL_SEED:
+            frozen = tuple(bundle.bo_gains)
+            assert abs(gp_best[0] - frozen[0]) < 1e-9 and abs(gp_best[1] - frozen[1]) < 1e-9, \
+                f"canonical reproduction drift: {gp_best} vs frozen {frozen}"
+            print(f"canonical seed {search_seed}: reproduced frozen BO {gp_best}")
+        # Random arm: SHARED init + 7 continuing draws, identical scoring.
+        extra_gains = [tuner._decode(p) for p in extra_points]
+        extra_scores = [train_score(g, search_seed) for g in extra_gains]
+        pool_gains = init_gains + extra_gains
+        pool_scores = init_scores + extra_scores
+        rand_best = pool_gains[int(np.argmin(pool_scores))]
+        arms = {"init-only-7": init_best, "gp-full": gp_best, "random-14": rand_best}
+        sealed_arms = {name: sealed_obj(g) for name, g in arms.items()}
+        for name, gains in arms.items():
+            mean, lo, hi = _paired_ci(sealed_arms[name], imc_sealed, seed=args.seed + 77)
+            rows.append({
+                "search_seed": search_seed, "method": name,
+                "kp": gains[0], "ki": gains[1],
+                "train_evals": 7 if name == "init-only-7" else 14,
+                "train_mean_objective": float(np.min(init_scores)) if name == "init-only-7" else (
+                    float(gp_tune.score) if name == "gp-full" else float(np.min(pool_scores))),
+                "sealed_mean_objective": float(np.mean(sealed_arms[name])),
+                "paired_ratio_mean": mean, "paired_ratio_lo95": lo, "paired_ratio_hi95": hi,
+            })
+        pooled_gr.extend((sealed_arms["gp-full"] / np.maximum(imc_sealed, 1e-12)
+                          - sealed_arms["random-14"] / np.maximum(imc_sealed, 1e-12)).tolist())
+        pooled_gi.extend((sealed_arms["gp-full"] / np.maximum(imc_sealed, 1e-12)
+                          - sealed_arms["init-only-7"] / np.maximum(imc_sealed, 1e-12)).tolist())
+
+    diff_gr = _diff_ci(np.asarray(pooled_gr), args.seed + 913)
+    diff_gi = _diff_ci(np.asarray(pooled_gi), args.seed + 914)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8-sig", newline="") as handle:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
-    meta = {
+    summary = {
         "experiment_id": "E3+", "code_sha": git_head_sha(),
         "manifest_sha256": manifest.get("_manifest_sha256", manifest_sha256()),
         "artifact_dir": str(args.artifact_dir.resolve()),
-        "bo_gains": list(bundle.bo_gains), "imc_gains": list(bundle.imc_gains),
+        "search_seeds": search_seeds, "n_pooled_pairs": len(pooled_gr),
+        "pooled_gp_minus_random": {"mean": diff_gr[0], "lo95": diff_gr[1], "hi95": diff_gr[2]},
+        "pooled_gp_minus_init": {"mean": diff_gi[0], "lo95": diff_gi[1], "hi95": diff_gi[2]},
+        "reading": ("GP contribution supported under this budget (pooled gp-random CI below 0)"
+                    if diff_gr[2] < 0 else
+                    "no pooled GP advantage over same-budget random; mechanism contribution unverified"),
         "elapsed_seconds": time.perf_counter() - started,
     }
-    args.output.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n",
-                                                encoding="utf-8")
-    print(f"gp attribution: {len(rows)} rows -> {args.output.resolve()}")
+    args.output.with_name("gp_attribution_summary.json").write_text(
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    print(f"gp strict attribution: {len(rows)} rows -> {args.output.resolve()}")
     for r in rows:
-        print(f"  {str(r['method']):24s} train={float(r['train_mean_objective']):.2f} "
-              f"sealed={float(r['sealed_mean_objective']):.2f} "
-              f"paired={float(r['paired_ratio_mean']):.4f} "
-              f"[{float(r['paired_ratio_lo95']):.4f},{float(r['paired_ratio_hi95']):.4f}]")
+        print(f"  seed={r['search_seed']} {str(r['method']):12s} train={float(r['train_mean_objective']):.2f} "
+              f"sealed={float(r['sealed_mean_objective']):.2f} paired={float(r['paired_ratio_mean']):.4f}")
+    print(f"pooled gp-random diff: {diff_gr[0]:+.4f} [{diff_gr[1]:+.4f},{diff_gr[2]:+.4f}] (n={len(pooled_gr)})")
+    print(f"pooled gp-init   diff: {diff_gi[0]:+.4f} [{diff_gi[1]:+.4f},{diff_gi[2]:+.4f}] (n={len(pooled_gi)})")
 
 
 if __name__ == "__main__":

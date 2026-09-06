@@ -139,6 +139,23 @@ def main() -> None:
     empty = [h for h, c in counts.items() if c == 0]
     assert not empty, f"空节: {empty}"
     print(f"sections OK ({len(counts)} 节均非空）")
+
+    # 6. figures: every ![alt](path) in MD must resolve to a non-empty image.
+    # (Existence + decodability; pagination/readability still needs a human
+    # pass over the rendered DOCX — see delivery checklist in 主报告附件.)
+    import re as _re
+    missing: list[str] = []
+    for match in _re.finditer(r"!\[[^\]]*\]\(([^)]+)\)", md):
+        img = args.md.parent / match.group(1)
+        if not img.exists() or img.stat().st_size == 0:
+            missing.append(match.group(1))
+    assert not missing, f"缺图: {missing}"
+    from PIL import Image as _Image  # pillow ships with matplotlib
+    for match in _re.finditer(r"!\[[^\]]*\]\(([^)]+)\)", md):
+        with _Image.open(args.md.parent / match.group(1)) as im:
+            im.verify()
+    n_imgs = len(_re.findall(r"!\[[^\]]*\]\([^)]+\)", md))
+    print(f"figures OK ({n_imgs} 张存在且可解码；分页可读性需人工逐页确认）")
     print("docx: ALL OK")
 
 
