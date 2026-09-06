@@ -6,13 +6,17 @@ Checks (fail loudly, no silent pass):
   3. supplement_metrics.json gains match the frozen source (no hard-code swap)
      and its objectives recompute under the six-substep v4 integrator.
   4. No legacy BO/Safe-BO archive read outside PolicyBundle provenance.
+  5. (E2-B4 only) SHA256SUMS + evidence_index integrity, sealed-vs-history
+     zero-overlap, GP attribution structure, failure-control recomputation,
+     provenance comparability label.
 
-Usage: python tools/check_results_consistency.py [--sealed-dir DIR]
+Usage: python tools/check_results_consistency.py [--sealed-dir DIR] [--require-sealed]
 """
 from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -56,6 +60,12 @@ def check_sealed(sealed_dir: Path) -> None:
     assert exp_id == "E2" or exp_id.startswith("E2-"), f"unexpected experiment_id {exp_id!r}"
     assert prov.get("code_sha") and len(str(prov["code_sha"])) >= 7, prov.get("code_sha")
     assert "worktree_status_sha16" in prov, "provenance must record worktree dirtiness"
+    # comparability label must name the actual batch (B4 provenance once
+    # carried a hardcoded "E2-B3" string; improve.md §4 requires uniformity).
+    comparability = str(prov.get("comparability", ""))
+    assert comparability.startswith(exp_id), (
+        f"comparability {comparability[:20]!r} does not start with experiment_id {exp_id!r}"
+    )
     assert "ratio_of_means_to_imc" in (summary[0] or {}), "summary must carry secondary ratio_of_means_to_imc"
     assert (sealed_dir / "sealed_scenarios.csv").exists(), "missing sealed_scenarios.csv (E2 evidence)"
     scen = _read_csv(sealed_dir / "sealed_scenarios.csv")
@@ -91,6 +101,126 @@ def check_sealed(sealed_dir: Path) -> None:
             want = 1 if (float(r["fallback_fraction"]) > 1e-12 and float(r["validation_passed"]) < 0.5) else 0
             assert int(float(r["fallback_failed"])) == want, f"{algo} ordinal={r.get('ordinal')} fallback_failed definition drift"
     print(f"sealed OK ({sealed_dir}: 560 details, 7 summaries, E2 stats+acceptance+provenance verified)")
+    if str(prov.get("experiment_id", "")) == "E2-B4":
+        check_b4_extras(sealed_dir, prov)
+
+
+def _scenario_digest_from_row(row: dict[str, str]) -> str:
+    """Canonical scenario digest identical to hvac_pid.pipeline._scenario_digest.
+
+    Rebuilds a Scenario from a sealed_scenarios.csv row (same coercion as
+    tools/make_sealed_figures._scenario) and hashes its canonical JSON.
+    """
+    import dataclasses
+
+    from hvac_pid.config import Scenario
+
+    none_fields = {"door_open_hour", "setpoint_change_hour", "setpoint_after_c"}
+    fields = {f.name for f in dataclasses.fields(Scenario)}
+    kwargs: dict[str, object] = {}
+    for key, value in row.items():
+        if key not in fields or key in ("FEATURE_NAMES",):
+            continue
+        if value is None or value == "":
+            kwargs[key] = None if key in none_fields else 0.0
+            continue
+        ftype = next(f.type for f in dataclasses.fields(Scenario) if f.name == key)
+        kwargs[key] = int(float(value)) if "int" in str(ftype) else float(value)
+    scen = Scenario(**kwargs)  # type: ignore[arg-type]
+    payload = dataclasses.asdict(scen)
+    payload.pop("FEATURE_NAMES", None)
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    return hashlib.sha256(canonical.encode("ascii")).hexdigest()
+
+
+def check_b4_extras(sealed_dir: Path, prov: dict) -> None:
+    """Strict E2-B4 gates (improve.md §2): integrity + isolation + attribution."""
+    # 5a. Acceptance seeds must be the fresh B4 set.
+    seeds = list(prov.get("sealed", {}).get("acceptance_seeds", []))
+    assert seeds == [601, 611, 621, 631, 641], f"B4 acceptance_seeds drift: {seeds}"
+    # 5b. SHA256SUMS integrity: every listed file exists with matching hash,
+    # and evidence_index.csv agrees (path/bytes/sha256).
+    sums_path = sealed_dir / "SHA256SUMS"
+    assert sums_path.exists(), "B4 missing SHA256SUMS (integrity evidence required)"
+    listed: dict[str, str] = {}
+    for line in sums_path.read_text(encoding="utf-8").splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        digest, name = line.split(None, 1)
+        listed[name.strip().replace("\\", "/")] = digest.strip()
+    assert listed, "SHA256SUMS is empty"
+    for name, want in sorted(listed.items()):
+        target = sealed_dir / name
+        assert target.exists(), f"SHA256SUMS lists missing file: {name}"
+        got = hashlib.sha256(target.read_bytes()).hexdigest()
+        assert got == want, f"hash drift for {name}: {got[:12]} != {want[:12]}"
+    index_path = sealed_dir / "evidence_index.csv"
+    assert index_path.exists(), "B4 missing evidence_index.csv"
+    indexed = {r["path"].replace("\\", "/"): r for r in _read_csv(index_path)}
+    assert set(indexed) == set(listed), (
+        f"evidence_index vs SHA256SUMS mismatch: "
+        f"only-index={sorted(set(indexed) - set(listed))[:3]} "
+        f"only-sums={sorted(set(listed) - set(indexed))[:3]}"
+    )
+    for name, row in indexed.items():
+        assert row["sha256"] == listed[name], f"evidence_index sha drift for {name}"
+        assert int(row["bytes"]) == (sealed_dir / name).stat().st_size, f"evidence_index size drift for {name}"
+    print(f"b4-integrity OK ({len(listed)} files, SHA256SUMS + evidence_index agree)")
+    # 5c. Zero overlap: B4 sealed digests must not intersect train/val/qual
+    # splits or any historical sealed list (B1/B2/B3 + old test partitions).
+    b4_rows = _read_csv(sealed_dir / "sealed_scenarios.csv")
+    b4_digests = {_scenario_digest_from_row(r) for r in b4_rows}
+    assert len(b4_digests) == 80, f"B4 sealed digests not unique: {len(b4_digests)}"
+    train_root = ROOT / "artifacts" / "runs" / "v4-20260906-bf6bda6"
+    manifest_rows = _read_csv(train_root / "dataset_manifest.csv")
+    known = {r["scenario_sha256"] for r in manifest_rows}
+    overlap = b4_digests.intersection(known)
+    assert not overlap, f"B4 overlaps train/val/qual/test partitions: {sorted(overlap)[:2]}"
+    historical = [
+        ROOT / "artifacts" / "runs" / "sealed-80x7-v4" / "sealed_scenarios.csv",
+        ROOT / "artifacts" / "runs" / "sealed-80x7-v4-retrain" / "sealed_scenarios.csv",
+        ROOT / "artifacts" / "runs" / "sealed-80x7-b3" / "sealed_scenarios.csv",
+    ]
+    for hist in historical:
+        if not hist.exists():
+            continue
+        hist_digests = {_scenario_digest_from_row(r) for r in _read_csv(hist)}
+        clash = b4_digests.intersection(hist_digests)
+        assert not clash, f"B4 overlaps historical {hist.parent.name}: {sorted(clash)[:2]}"
+    print(f"b4-isolation OK (80 fresh digests, zero overlap with 48/16/16 + B1/B2/B3)")
+    # 5d. GP attribution structure: 4 search seeds x 3 methods + cluster PRIMARY.
+    gp_path = sealed_dir / "gp_attribution.csv"
+    gp_sum_path = sealed_dir / "gp_attribution_summary.json"
+    assert gp_path.exists() and gp_sum_path.exists(), "B4 missing GP attribution evidence"
+    gp_rows = _read_csv(gp_path)
+    assert len(gp_rows) == 12, f"want 12 gp attribution rows (4 seeds x 3), got {len(gp_rows)}"
+    gp_sum = json.loads(gp_sum_path.read_text(encoding="utf-8"))
+    assert list(gp_sum.get("search_seeds", [])) == [815, 5001, 9002, 12077], gp_sum.get("search_seeds")
+    assert int(gp_sum.get("n_pooled_pairs", 0)) == 320, gp_sum.get("n_pooled_pairs")
+    for key in ("cluster_gp_minus_random", "cluster_gp_minus_init"):
+        block = gp_sum.get(key, {})
+        assert "PRIMARY" in str(block.get("method", "")), f"{key} must be the PRIMARY cluster interval"
+        assert "lo95" in block and "hi95" in block and "mean" in block, key
+    print("b4-attribution OK (12 rows, 4 search seeds, cluster PRIMARY intervals present)")
+    # 5e. Failure controls: recompute summary from tests; enforce gains- naming.
+    ctrl_path = sealed_dir / "failure_control_tests.csv"
+    ctrl_sum_path = sealed_dir / "failure_control_summary.csv"
+    assert ctrl_path.exists() and ctrl_sum_path.exists(), "B4 missing failure control evidence"
+    ctrl_rows = _read_csv(ctrl_path)
+    got_controls = sorted({r["control"] for r in ctrl_rows})
+    assert "kp-x0.5" not in got_controls and "kp-x2.0" not in got_controls, (
+        f"legacy kp-x* labels must be renamed to gains-x* (improve.md §4): {got_controls}"
+    )
+    assert got_controls == ["baseline-replay", "capacity-x1.5", "extend-8h", "gains-x0.5", "gains-x2.0"], got_controls
+    summary_rows = _read_csv(ctrl_sum_path)
+    for srow in summary_rows:
+        sub = [r for r in ctrl_rows if r["control"] == srow["control"] and r["screened_cause"] == srow["screened_cause"]]
+        assert len(sub) == int(srow["cases"]), f"{srow['control']}/{srow['screened_cause']} case count drift"
+        assert sum(int(r["validation_passed"]) for r in sub) == int(srow["flipped_to_pass"]), (
+            f"{srow['control']}/{srow['screened_cause']} flip count drift"
+        )
+    print(f"b4-controls OK ({len(ctrl_rows)} control runs, summary recomputed, gains-x* naming)")
 
 
 def check_supplement() -> None:
@@ -125,12 +255,16 @@ def check_no_implicit_archive() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--sealed-dir", type=Path, default=ROOT / "artifacts" / "runs" / "sealed-80x7-v4")
+    parser.add_argument("--require-sealed", action="store_true",
+                        help="fail (instead of skip) when --sealed-dir is missing; CI uses this for the B4 main batch")
     args = parser.parse_args()
     check_manifest()
     check_no_implicit_archive()
     check_supplement()
     if args.sealed_dir.exists():
         check_sealed(args.sealed_dir)
+    elif args.require_sealed:
+        raise SystemExit(f"required sealed batch missing: {args.sealed_dir}")
     else:
         print(f"skip sealed check (missing {args.sealed_dir}); run `python run.py sealed ...` first")
     print("consistency: ALL OK")

@@ -36,9 +36,9 @@ E2-B1 命名统一为“冻结策略重评”，禁止写成“七算法统一�
   同协议 E3+ 归因（`gp_attribution_summary.json` 含双向聚类区间）+ `failure_control_tests/summary.csv`（单因素控制实验）+
   `budget_table.csv/json`（含遗漏项声明）+ `figures/` + `SHA256SUMS`/`evidence_index.csv`（0.81 MB 全量入库，无裁剪）。
 - E2 统计主口径：主统计量为逐场景配对比均值 `mean(obj/imc)`（`mean_ratio_to_imc` = `paired_ratio_mean` 点估计）+ bootstrap 95% CI（2000 重采样，`seed+77`）；次统计量 `ratio_of_means_to_imc`（`mean(obj)/mean(imc)`）仅作对照，不得混用。验收主口径：`validation_passed = bounded & comfort_held & recovery_ok & actuator_compliant`；`fallback_failed = 有回退且 validation 未通过`；`stable` 仅表示数值有界（5–45°C 有限），不得等同验收通过。
-- 复现：`python run.py crossval artifacts/runs/<run_id>`；
-  `python run.py embedded --algorithm all --provider replay --artifact-dir <artifact_dir> --output <run>/embedded_smoke`；
-  `python run.py sealed --artifact-dir <artifact_dir> --output <run>/sealed-80x7`。
+- 复现（B4 主批次，每条可直接复制粘贴执行；输出到新目录，不覆盖主证据；完整链见 `docs/主报告.md` 附件）：
+  `python run.py sealed --artifact-dir artifacts/runs/v4-20260906-bf6bda6 --output artifacts/runs/sealed-80x7-b4-repro --protocol-label E2-B4 --acceptance-seeds 601,611,621,631,641 --design-note "fresh sealed scenarios unseen in any prior analysis"`；
+  另见 `python run.py crossval artifacts/runs/v4-20260906-bf6bda6`（E1 数值校验）。
 - 策略契约：`hvac_pid/policy_bundle.py:PolicyBundle`（IMC/BO/SafeBO/FNN 表+上下文/RL 表+掩码同目录冻结；缺文件报错，legacy 回退显式标记）。
 
 ## 场景与划分

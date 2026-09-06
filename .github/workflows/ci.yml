@@ -134,6 +134,7 @@ jobs:
         run: |
           python tools/check_results_consistency.py --sealed-dir artifacts/runs/sealed-80x7-v4 || python tools/check_results_consistency.py --sealed-dir archive/outputs_review_v3
           python tools/check_results_consistency.py --sealed-dir artifacts/runs/sealed-80x7-v4-retrain
+          python tools/check_results_consistency.py --sealed-dir artifacts/runs/sealed-80x7-b4 --require-sealed
           python -c "from hvac_pid.policy_bundle import PolicyBundle; b=PolicyBundle.load('archive/outputs_review_v3', project_root='.'); print('bundle OK', b.provenance['bo'][:40])"
           python -c "from hvac_pid.policy_bundle import PolicyBundle; b=PolicyBundle.load('artifacts/runs/v4-20260907-8f3fd5f', project_root='.'); assert b.provenance['bo_legacy_fallback']=='0' and b.provenance['safe_bo_legacy_fallback']=='0', b.provenance; print('retrain bundle legacy-free OK')"
       - name: Main-report DOCX audit (sections/tables/numbers/stale scan)

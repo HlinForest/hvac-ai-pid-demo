@@ -121,6 +121,37 @@ def _git_is_dirty() -> tuple[bool, str]:
         return (False, "unknown-no-git")
 
 
+def _git_worktree_evidence(max_lines: int = 50) -> dict[str, object]:
+    """Fuller worktree evidence for provenance (improve.md §3).
+
+    ``_git_is_dirty`` only keeps a 16-char hash of ``git status --porcelain``,
+    which cannot tell generated outputs apart from source edits.  This helper
+    additionally records the porcelain lines (truncated) and ``git diff --stat``
+    so a later reader can judge whether the dirty state touched simulation
+    source (``hvac_pid/``, ``tools/run_*`` …) or only generated evidence/docs.
+    Never fails: on any git error returns an ``unknown-*`` marker.
+    """
+    try:
+        st = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True, cwd=str(ROOT), timeout=10)
+        porcelain = st.stdout.strip().splitlines() if st.stdout.strip() else []
+        try:
+            df = subprocess.run(["git", "diff", "--stat"], capture_output=True, text=True, cwd=str(ROOT), timeout=10)
+            diff_stat = df.stdout.strip().splitlines() if df.stdout.strip() else []
+        except Exception:
+            diff_stat = ["unknown-diff-stat"]
+        return {
+            "worktree_status_lines": porcelain[:max_lines],
+            "worktree_status_truncated": len(porcelain) > max_lines,
+            "worktree_diff_stat": diff_stat[:max_lines],
+        }
+    except Exception:
+        return {
+            "worktree_status_lines": ["unknown-no-git"],
+            "worktree_status_truncated": False,
+            "worktree_diff_stat": ["unknown-no-git"],
+        }
+
+
 def _frozen_llm_gains(artifact_dir: Path, output_dir: Path, training: list[Scenario], fallback: tuple[float, float], seed: int) -> tuple[tuple[float, float], str]:
     frozen = artifact_dir / "llm_policy.json"
     if frozen.exists():
@@ -345,6 +376,7 @@ def main() -> None:
         "code_sha": git_head_sha(),
         "code_dirty": _git_is_dirty()[0],
         "worktree_status_sha16": _git_is_dirty()[1],
+        **_git_worktree_evidence(),
         "manifest_sha256": manifest.get("_manifest_sha256", manifest_sha256()),
         "manifest_path": str(manifest.get("_manifest_path", "experiments/manifests/v4.yaml")),
         "artifact_dir": str(artifact_dir.resolve()),
@@ -362,7 +394,7 @@ def main() -> None:
         "integrator": INTEGRATOR_LABEL,
         "elapsed_seconds": time.perf_counter() - started,
         "comparability": (
-            "E2-B3: unified-scenario evaluation; deployment gate ran on the qualification "
+            f"{args.protocol_label}: unified-scenario evaluation; deployment gate ran on the qualification "
             "split only, sealed test unseen during selection; LLM replay frozen on the full "
             "training split, not live; only BO/random arms may use same-budget wording"
             if not any(v == "1" for v in (bundle.provenance.get("bo_legacy_fallback", "0"),

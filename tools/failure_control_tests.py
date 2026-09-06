@@ -6,8 +6,11 @@ validation failure in --sealed, re-simulate with ONE factor changed:
   * extend: duration 5 h -> 8 h (tests the window hypothesis: failures caused
     only by a short observation window should flip to pass)
   * capacity-x1.5: cooling_capacity_w x 1.5 (tests the capacity hypothesis)
-  * kp-x0.5 / kp-x2.0: IMC gains scaled (clipped to safety bounds; tests the
-    tuning hypothesis: a genuine tuning shortfall may respond to gain moves)
+  * gains-x0.5 / gains-x2.0: BOTH IMC gains (Kp AND Ki) scaled together
+    (clipped to safety bounds; tests the tuning hypothesis: a genuine tuning
+    shortfall may respond to gain moves).  The name is deliberately
+    ``gains-`` (not ``kp-``): earlier ``kp-x0.5`` labels scaled Kp and Ki
+    together and were misleading as a proportional-only move.
 
 Saturation and start/stop cycling are measured from the replayed baseline
 timeseries (command at limits, compressor events).  A flip to
@@ -38,7 +41,11 @@ from hvac_pid.policy_bundle import PolicyBundle
 from hvac_pid.simulator import simulate
 from tools.make_sealed_figures import _scenario
 
-CONTROLS = ("baseline-replay", "extend-8h", "capacity-x1.5", "kp-x0.5", "kp-x2.0")
+CONTROLS = ("baseline-replay", "extend-8h", "capacity-x1.5", "gains-x0.5", "gains-x2.0")
+# Legacy labels from the B4 first cut (scaled both Kp and Ki despite the
+# ``kp-`` prefix).  Accepted on read so old CSVs still validate; all new
+# writes use the ``gains-`` names above.
+LEGACY_CONTROL_ALIASES = {"kp-x0.5": "gains-x0.5", "kp-x2.0": "gains-x2.0"}
 KP_BOUNDS = (0.002, 1.5)
 KI_BOUNDS = (1e-5, 0.08)
 
@@ -78,8 +85,8 @@ def main() -> None:
             "baseline-replay": (scen, imc),
             "extend-8h": (replace(scen, duration_hours=8.0), imc),
             "capacity-x1.5": (replace(scen, cooling_capacity_w=scen.cooling_capacity_w * 1.5), imc),
-            "kp-x0.5": (scen, _clip((imc[0] * 0.5, imc[1] * 0.5))),
-            "kp-x2.0": (scen, _clip((imc[0] * 2.0, imc[1] * 2.0))),
+            "gains-x0.5": (scen, _clip((imc[0] * 0.5, imc[1] * 0.5))),
+            "gains-x2.0": (scen, _clip((imc[0] * 2.0, imc[1] * 2.0))),
         }
         for control, (scene, gains) in variants.items():
             result = simulate(scene, PIController(*gains), seed=noise)

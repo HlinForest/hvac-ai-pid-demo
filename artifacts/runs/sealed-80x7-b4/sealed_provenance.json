@@ -67,5 +67,13 @@
   },
   "integrator": "六子步v4积分器(外层60s/内层10s×6, integration_substeps=6)",
   "elapsed_seconds": 25.424009199996362,
-  "comparability": "E2-B3: unified-scenario evaluation; deployment gate ran on the qualification split only, sealed test unseen during selection; LLM replay frozen on the full training split, not live; only BO/random arms may use same-budget wording"
+  "comparability": "E2-B4: unified-scenario evaluation; deployment gate ran on the qualification split only, sealed test unseen during selection; LLM replay frozen on the full training split, not live; only BO/random arms may use same-budget wording",
+  "worktree_status_lines": [
+    "<not recorded at runtime (only worktree_status_sha16 kept); see CODE_DIRTY_NOTE.md for post-hoc reconstruction>"
+  ],
+  "worktree_status_truncated": false,
+  "worktree_diff_stat": [
+    "<not recorded at runtime; see CODE_DIRTY_NOTE.md>"
+  ],
+  "code_dirty_note": "code_dirty=true at runtime (worktree_status_sha16=2ce4cc8434e8fad7). Post-hoc: git diff e7a22ae..1d67d9a (code_sha..B4 commit) touches only artifacts/runs/sealed-80x7-b4/*, docs/main-report md/docx+figures, EXPERIMENTS/RESULTS, reports sub-report 11 and tools/check_docx.py (audit-only); no hvac_pid/*.py, no tools/run_*.py, no tools/make_*.py, no tools/analyze_*.py, no tools/failure_*.py changes. Hence the dirty state was uncommitted B4 evidence + report work, not simulation-source edits; numerics unaffected. check_docx.py diff only repoints key-number audit from B2/B3 to B4. Future runs record worktree_status_lines + worktree_diff_stat (see tools/run_sealed_evaluation._git_worktree_evidence)."
 }

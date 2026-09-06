@@ -8,9 +8,9 @@ extend-8h,tuning,41,9
 capacity-x1.5,capacity,0,0
 capacity-x1.5,window,4,0
 capacity-x1.5,tuning,41,0
-kp-x0.5,capacity,0,0
-kp-x0.5,window,4,0
-kp-x0.5,tuning,41,28
-kp-x2.0,capacity,0,0
-kp-x2.0,window,4,0
-kp-x2.0,tuning,41,0
+gains-x0.5,capacity,0,0
+gains-x0.5,window,4,0
+gains-x0.5,tuning,41,28
+gains-x2.0,capacity,0,0
+gains-x2.0,window,4,0
+gains-x2.0,tuning,41,0
