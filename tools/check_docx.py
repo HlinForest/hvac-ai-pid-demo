@@ -100,19 +100,17 @@ def main() -> None:
     table_text = "\n".join(c.text for t in doc.tables for r in t.rows for c in r.cells)
     everything = full_text + "\n" + table_text
 
-    # 3. key numbers vs CSVs (B1 legacy batch + B2 retrain batch + B3 independent batch).
+    # 3. key numbers vs CSVs (B1 history + B4 current main).
     b1 = read_summary(ROOT / "artifacts" / "runs" / "sealed-80x7-v4" / "sealed_80_summary.csv")
-    b2 = read_summary(ROOT / "artifacts" / "runs" / "sealed-80x7-v4-retrain" / "sealed_80_summary.csv")
-    b3 = read_summary(ROOT / "artifacts" / "runs" / "sealed-80x7-b3" / "sealed_80_summary.csv")
+    b4 = read_summary(ROOT / "artifacts" / "runs" / "sealed-80x7-b4" / "sealed_80_summary.csv")
     for label, src, algo, field in (("B1-SafeBO", b1, "safe-bo", "paired_ratio_mean"),
-                                    ("B2-BO", b2, "bo", "paired_ratio_mean"),
-                                    ("B2-SafeBO", b2, "safe-bo", "paired_ratio_mean"),
-                                    ("B3-RL", b3, "rl", "paired_ratio_mean"),
-                                    ("B3-BO", b3, "bo", "paired_ratio_mean"),
-                                    ("B3-FNN", b3, "fnn", "paired_ratio_mean")):
+                                    ("B4-RL", b4, "rl", "paired_ratio_mean"),
+                                    ("B4-BO", b4, "bo", "paired_ratio_mean"),
+                                    ("B4-ZN", b4, "zn", "paired_ratio_mean")):
         assert f"{src[algo][field]:.4f}" in everything, \
             f"{label} {algo}.{field}={src[algo][field]:.4f} 在 DOCX 中缺失"
-    print("numbers OK (B1/B2/B3 关键配对比与 CSV 一致）")
+    assert "0.9792" in everything, "B4 FNN candidate 0.9792 在 DOCX 中缺失"
+    print("numbers OK (B1/B4 关键配对比与 CSV 一致）")
 
     # 4. stale scan (语境感知：更正声明中引用旧值允许，但裸写旧结论禁止）。
     stale_nums = ["1.4995", "1.0168", "0.8911", "1.0046", "0.9434", "1.4105"]

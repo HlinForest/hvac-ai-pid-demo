@@ -10,7 +10,8 @@
 | E1 | 数值积分与 FOPDT 校验 | 证明模型实现与代理精度（已通过） | `artifacts/runs/v4-20260906-2870262/` |
 | E2-B1 | 混合冻结策略统一重评（80×7=560） | 历史；混合冻结来源，非统一训练比较 | `artifacts/runs/sealed-80x7-v4/` |
 | E2-B2 | 统一重训后重评（80×7=560） | 历史；首轮统一重训，但部署门用了密封集（独立性缺陷，B3 已修） | `artifacts/runs/sealed-80x7-v4-retrain/` + 训练冻结 `artifacts/runs/v4-20260907-8f3fd5f/` |
-| E2-B3 | 独立密封重评（80×7=560） | 当前主实验；各方法按既定训练配置重新冻结后的统一场景评价 + 密封集选择全程未见 | `artifacts/runs/sealed-80x7-b3/` + 训练冻结 `artifacts/runs/v4-20260906-bf6bda6/` |
+| E2-B3 | 独立密封重评（80×7=560） | 历史；协议已独立，但 80 场景与 B2 完全复用（含噪声），新结论以 B4 为准 | `artifacts/runs/sealed-80x7-b3/` + 训练冻结 `artifacts/runs/v4-20260906-bf6bda6/` |
+| E2-B4 | 全新密封集复评（80×7=560） | 当前主实验；新场景（601–641，从未参与任何分析）+ 冻结 B3 策略评价一次 | `artifacts/runs/sealed-80x7-b4/`（策略冻结复用 B3 run，不重训） |
 | E3 | 同初始化同预算整定对照（随机×4 + 保守公式） | Safe-BO 机制归因：搜索 vs 保守初值 | `sealed_ablation.csv` + `safe_bo_attribution` |
 | E3+ | GP 同预算归因（BO-full/初值最优/纯随机14/保守公式） | GP 机制贡献：同训练谱选型、同密封评价 | `sealed-80x7-v4-retrain/gp_attribution.csv`（`run.py attribution`） |
 | E4 | LLM 真实调用矩阵（18 次） | 独立实验：采用率/回退后验收率/成本，不参与 E2 排名 | `archive/outputs_llm_matrix_v3/` |
@@ -28,8 +29,12 @@ E2-B1 命名统一为“冻结策略重评”，禁止写成“七算法统一�
 - `artifacts/runs/sealed-80x7-v4-retrain/`：E2-B2 同一密封清单在 B2 冻结策略上的重评（`policy_provenance` legacy 双零）+ `gp_attribution.csv/json`（E3+ 同预算归因）。
 - `artifacts/runs/v4-20260906-bf6bda6/`：E2-B3 训练冻结（48 训练/16 验证/16 资格/80 密封四向隔离，部署门仅用资格集，约 198 s；`SHA256SUMS` 为裁剪前完整索引）。
 - `artifacts/runs/sealed-80x7-b3/`：E2-B3 独立密封重评（`experiment_id=E2-B3`，LLM replay 在完整 48 训练集冻结）+
-  `gp_attribution.csv`（E3+ 严格对照：同初值同噪声，4 搜索种子配对差）+ `budget_table.csv`（训练预算台账）+
-  `failure_cases/causes.csv`（失败归因）+ `figures/`（中位/失败同轴曲线，可复现）。
+  `gp_attribution.csv`（E3+ 严格对照：同初值同噪声，4 搜索种子配对差）+ `budget_table.csv`（已计入的计算预算台账）+
+  `failure_cases/causes.csv`（失败初筛）+ `figures/`（中位/失败同轴曲线，可复现）。
+- `artifacts/runs/sealed-80x7-b4/`：E2-B4 全新密封集复评（`acceptance_seeds=601,611,621,631,641`，
+  与训练/验证/资格/旧密封零摘要重叠，已验；`experiment_id=E2-B4`；冻结 B3 策略评价一次，不重训）+
+  同协议 E3+ 归因（`gp_attribution_summary.json` 含双向聚类区间）+ `failure_control_tests/summary.csv`（单因素控制实验）+
+  `budget_table.csv/json`（含遗漏项声明）+ `figures/` + `SHA256SUMS`/`evidence_index.csv`（0.81 MB 全量入库，无裁剪）。
 - E2 统计主口径：主统计量为逐场景配对比均值 `mean(obj/imc)`（`mean_ratio_to_imc` = `paired_ratio_mean` 点估计）+ bootstrap 95% CI（2000 重采样，`seed+77`）；次统计量 `ratio_of_means_to_imc`（`mean(obj)/mean(imc)`）仅作对照，不得混用。验收主口径：`validation_passed = bounded & comfort_held & recovery_ok & actuator_compliant`；`fallback_failed = 有回退且 validation 未通过`；`stable` 仅表示数值有界（5–45°C 有限），不得等同验收通过。
 - 复现：`python run.py crossval artifacts/runs/<run_id>`；
   `python run.py embedded --algorithm all --provider replay --artifact-dir <artifact_dir> --output <run>/embedded_smoke`；

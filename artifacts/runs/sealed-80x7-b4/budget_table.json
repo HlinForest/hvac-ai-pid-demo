@@ -1,0 +1,15 @@
+{
+  "title": "counted compute budget (NOT a complete measured cost)",
+  "run": "D:\\havc\\hvac-ai-pid-demo\\artifacts\\runs\\v4-20260906-bf6bda6",
+  "sealed": "D:\\havc\\hvac-ai-pid-demo\\artifacts\\runs\\sealed-80x7-b4",
+  "hours_per_sim": 5.0,
+  "pipeline_wall_seconds": 197.8,
+  "omissions": [
+    "short-horizon replays",
+    "repeated in-loop evaluations beyond counted rounds",
+    "integration substeps",
+    "plotting/report rendering",
+    "per-method wall time (only pipeline total, if given)"
+  ],
+  "warning": "Only BO/random arms share an identical budget."
+}

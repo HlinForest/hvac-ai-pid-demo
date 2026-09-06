@@ -1,0 +1,11 @@
+﻿method,train_scenarios,candidate_evals,closed_loop_sims,note,object_hours
+zn-formula,1,0,0,commissioning FOPDT only; no search,0.0
+imc-lambda,48,21,1008,lambda scan on training split,5040.0
+bo,48,14,672,7 init + 7 GP-EI; same 14-eval budget as E3+ random-14 only,3360.0
+safe-bo,48,4,192,risk-constrained local search,960.0
+fnn-labels,48,672,768,per-scenario BO labels + ZN/IMC references,3840.0
+fnn-select,16,2,32,"one (baseline, learned) validation round",160.0
+rl-train,48,67590000,0,"offline environment STEPS, not full sims (sum(rl_training_history.csv:environment_steps); transitions CSV pruned)",0.0
+rl-select,16,31,496,one validation round per checkpoint + final,2480.0
+deploy-gate,16,3,48,qualification split only (IMC+FNN+RL per scenario); sealed test never decides,240.0
+sealed-final,80,7,560,"record-only final evaluation, 7 algorithms x 80 scenarios",2800.0
