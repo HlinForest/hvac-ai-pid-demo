@@ -100,24 +100,28 @@ def main() -> None:
     table_text = "\n".join(c.text for t in doc.tables for r in t.rows for c in r.cells)
     everything = full_text + "\n" + table_text
 
-    # 3. key numbers vs CSVs (B1 legacy batch + B2 retrain batch).
+    # 3. key numbers vs CSVs (B1 legacy batch + B2 retrain batch + B3 independent batch).
     b1 = read_summary(ROOT / "artifacts" / "runs" / "sealed-80x7-v4" / "sealed_80_summary.csv")
     b2 = read_summary(ROOT / "artifacts" / "runs" / "sealed-80x7-v4-retrain" / "sealed_80_summary.csv")
-    for label, algo, field in (("B1-RL", "rl", "paired_ratio_mean"),
-                               ("B2-BO", "bo", "paired_ratio_mean"),
-                               ("B2-SafeBO", "safe-bo", "paired_ratio_mean")):
-        src = b1 if label.startswith("B1") else b2
+    b3 = read_summary(ROOT / "artifacts" / "runs" / "sealed-80x7-b3" / "sealed_80_summary.csv")
+    for label, src, algo, field in (("B1-SafeBO", b1, "safe-bo", "paired_ratio_mean"),
+                                    ("B2-BO", b2, "bo", "paired_ratio_mean"),
+                                    ("B2-SafeBO", b2, "safe-bo", "paired_ratio_mean"),
+                                    ("B3-RL", b3, "rl", "paired_ratio_mean"),
+                                    ("B3-BO", b3, "bo", "paired_ratio_mean"),
+                                    ("B3-FNN", b3, "fnn", "paired_ratio_mean")):
         assert f"{src[algo][field]:.4f}" in everything, \
             f"{label} {algo}.{field}={src[algo][field]:.4f} 在 DOCX 中缺失"
-    print("numbers OK (B1-RL/B2-BO/B2-SafeBO 与 CSV 一致）")
+    print("numbers OK (B1/B2/B3 关键配对比与 CSV 一致）")
 
     # 4. stale scan (语境感知：更正声明中引用旧值允许，但裸写旧结论禁止）。
     stale_nums = ["1.4995", "1.0168", "0.8911", "1.0046", "0.9434", "1.4105"]
     hits = [s for s in stale_nums if s in everything]
     assert not hits, f"DOCX 含已更正旧统计值: {hits}"
-    for pos, marker in ((m.start(), m.group(0)) for m in re.finditer("0.9664|回退基准本身合格|15/18 stable", everything)):
+    for pos, marker in ((m.start(), m.group(0)) for m in re.finditer("0.9664|回退基准本身合格|15/18 stable|过拟合", everything)):
         window = everything[max(0, pos - 30):pos + 60]
-        assert any(k in window for k in ("旧版", "更正", "已更正", "否定", "不得", "曾", "实为")), \
+        assert any(k in window for k in ("旧版", "更正", "已更正", "否定", "不得", "曾", "实为",
+                                         "尚未", "禁止", "撤回", "未完成")), \
             f"旧表述疑似当作现行结论: ...{window}..."
     print("stale scan OK (旧值仅出现在更正/否定语境）")
 

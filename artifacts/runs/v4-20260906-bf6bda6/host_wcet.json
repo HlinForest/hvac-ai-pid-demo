@@ -1,0 +1,5 @@
+{
+  "scope": "HOST-ONLY reference; target MCU WCET pending external validation",
+  "artifact_dir": "D:\\havc\\hvac-ai-pid-demo\\artifacts\\runs\\v4-20260906-bf6bda6",
+  "note": "Do not copy these numbers into target WCET gates."
+}

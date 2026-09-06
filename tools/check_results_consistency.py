@@ -52,7 +52,8 @@ def check_sealed(sealed_dir: Path) -> None:
     prov_path = sealed_dir / "sealed_provenance.json"
     assert prov_path.exists(), f"missing {prov_path}"
     prov = json.loads(prov_path.read_text(encoding="utf-8"))
-    assert prov.get("experiment_id") == "E2", prov.get("experiment_id")
+    exp_id = str(prov.get("experiment_id", ""))
+    assert exp_id == "E2" or exp_id.startswith("E2-"), f"unexpected experiment_id {exp_id!r}"
     assert prov.get("code_sha") and len(str(prov["code_sha"])) >= 7, prov.get("code_sha")
     assert "worktree_status_sha16" in prov, "provenance must record worktree dirtiness"
     assert "ratio_of_means_to_imc" in (summary[0] or {}), "summary must carry secondary ratio_of_means_to_imc"

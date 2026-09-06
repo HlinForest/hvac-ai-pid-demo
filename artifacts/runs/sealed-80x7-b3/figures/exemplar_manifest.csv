@@ -1,0 +1,3 @@
+﻿figure,timeseries,ordinal,noise_seed,imc_objective,validation_passed,reason
+fig_median_coaxial.png,exemplar_median_timeseries.csv,38,700044,35.12154308642091,1.0,median IMC objective of the 80 sealed scenarios
+fig_failure_coaxial.png,exemplar_failure_timeseries.csv,70,700076,111.08134747207056,0.0,highest-objective IMC validation failure (tuning-analysis case)

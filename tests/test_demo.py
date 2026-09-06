@@ -132,6 +132,7 @@ class LearningTests(unittest.TestCase):
                 "training_labels.csv",
                 "training_scenarios.csv",
                 "validation_scenarios.csv",
+                "qualification_scenarios.csv",
                 "dataset_manifest.csv",
                 "deployment_acceptance.csv",
                 "classical_tuning_history.csv",

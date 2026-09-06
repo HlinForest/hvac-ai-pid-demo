@@ -35,9 +35,10 @@ def _boxes(ax, items: list[tuple[str, str]], vertical: bool = False):
                              transform=ax.transAxes)
         ax.add_patch(box)
         cx, cy = xy[0] + w / 2, xy[1] + h / 2
-        ax.text(cx, cy + (0.06 if not vertical else 0.05), title, ha="center", va="center",
+        dy_t, dy_s = (0.06, 0.09) if not vertical else (0.022, 0.026)
+        ax.text(cx, cy + dy_t, title, ha="center", va="center",
                 fontsize=9, fontweight="bold", color=INK, transform=ax.transAxes)
-        ax.text(cx, cy - (0.09 if not vertical else 0.07), sub, ha="center", va="center",
+        ax.text(cx, cy - dy_s, sub, ha="center", va="center",
                 fontsize=7, color=INK, transform=ax.transAxes)
         patches.append((cx, cy, w, h))
     for (x0, y0, w0, h0), (x1, y1, w1, h1) in zip(patches, patches[1:]):

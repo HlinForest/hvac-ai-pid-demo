@@ -1,0 +1,24 @@
+{
+  "python": "3.11.7",
+  "numpy": "1.26.4",
+  "scipy": "1.11.4",
+  "git_sha": "bf6bda6d6d5a1a5f69ca4276610d445f11fbcdb5",
+  "manifest_sha256": "ee4caa461fcc11a685ca65def2130466ddfad157dee1d0fb2b638c2bac7dfd8c",
+  "seed": 7,
+  "train_samples": 48,
+  "validation_samples": 16,
+  "qualification_samples": 16,
+  "qualification_seed": 70010,
+  "deployment_gate": "qualification split only; sealed test is record-only",
+  "test_samples": 16,
+  "bo_iterations": 7,
+  "acceptance_seeds": [
+    101,
+    211,
+    307,
+    401,
+    503
+  ],
+  "integration_substeps": 6,
+  "integrator": "explicit-Euler 6x substep (10s inner, 60s outer)"
+}

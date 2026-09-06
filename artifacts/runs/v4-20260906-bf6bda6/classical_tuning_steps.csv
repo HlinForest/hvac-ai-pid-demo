@@ -1,0 +1,23 @@
+﻿step,method,quantity,formula_or_action,substitution,result,meaning
+1,共同FOPDT辨识,名义工况,固定室外温度、目标、热负荷和容量,"To=34°C, Tsp=24°C, Qint=900W, Qmax=7000W",生成恒定辨识工况,先去掉昼夜温差、开门和设定值变化，避免把扰动误认为对象动态
+2,共同FOPDT辨识,等效室外热阻,Reff=1/[1/Roz+1/(Rzw+Row)],"Roz=0.012, Rzw=0.006, Row=0.02 K/W",Reff=0.0082105263 K/W,只用于在虚拟环境中建立一个名义基准工作点
+3,共同FOPDT辨识,基准热负荷,Qbal=(To-Tsp)/Reff+Qint,(34-24)/0.0082105263+900,Qbal=2117.95 W,目标温度附近需要抵消的总热量
+4,共同FOPDT辨识,基准制冷指令,"u0=clip(Qbal/Qmax,0.15,0.70)",2117.95/7000,u0=0.30256410 (30.2564%),真实系统中应由稳定运行记录获得，而不是依赖未知模型参数
+5,共同FOPDT辨识,阶跃输入,u1=u0+Δu,Δu=0.12,u1=0.42256410 (42.2564%),在虚拟机房中把制冷能力提高12个百分点
+6,共同FOPDT辨识,采集阶跃响应,运行3R2C+执行器并记录 Tz(t),"时长=168h, 步长=1min",10081个温度样本,长时虚拟试验用于暴露慢墙体/机柜蓄热尾部
+7,共同FOPDT辨识,FOPDT曲线,"T_hat(t)=T0-A[1-exp(-(t-L)/tau)], t>L",T0=24°C；初值见fopdt_fit_history.csv,同时拟合A、tau、L,FOPDT把复杂阶跃响应压缩成三个控制参数，不是原始物理模型
+8,共同FOPDT辨识,最小二乘拟合,min Σ[T_hat(t)-T_meas(t)]²,共44次残差函数评价,RMSE=0.380735°C,每次候选K、tau、L及当前最优值全部保存
+9,共同FOPDT辨识,过程增益K,K=A/Δu,"A=6.62001°C, Δu=0.12",K=55.166733 °C/指令,制冷指令增加1.0时，稳态温度下降幅度的拟合值
+10,共同FOPDT辨识,时间常数与延迟,由有界最小二乘联合估计,"实测诊断交叉点 t28=105min, t63=787min","tau=912.32533min, L=5min",交叉点只作诊断，不再把未到达的试验末点冒充t63
+11,共同FOPDT辨识,FOPDT传递函数,G(s)=-K exp(-Ls)/(tau s+1),"K=55.166733, tau=912.32533, L=5",完成低阶代理,负号表示制冷指令增大使室温下降
+12,Ziegler-Nichols,未限幅Kp,Kp_raw=0.9tau/(KL),0.9×912.32533/(55.166733×5),Kp_raw=2.9767679,Z-N反应曲线经验公式
+13,Ziegler-Nichols,积分时间Ti,Ti=3.33L,3.33×5,Ti=16.65min,先算积分时间，再换算代码使用的Ki
+14,Ziegler-Nichols,未限幅Ki,Ki_raw=Kp_raw/Ti,2.9767679/16.65,Ki_raw=0.17878486 min^-1,Python PI使用并联形式 u=Kp e+Ki∫e dt
+15,Ziegler-Nichols,安全限幅,"Kp=clip(Kp_raw,0.002,1.5); Ki=clip(Ki_raw,1e-5,0.08)","Kp_raw=2.9767679, Ki_raw=0.17878486","部署Kp=1.5, Ki=0.08",本例Z-N原值过于激进，因此两个增益都被安全边界截断
+16,IMC PI,闭环速度lambda,"lambda=max(tau/3,3L,12min)","max(912.32533/3,3×5,12)",lambda=304.10844min,lambda越大越保守；这是工程选择，不是神经网络训练
+17,IMC PI,未限幅Kp,Kp_raw=tau/[K(lambda+L)],912.32533/[55.166733×(304.10844+5)],Kp_raw=0.053500963,由期望闭环速度和FOPDT模型计算
+18,IMC PI,积分时间Ti,"Ti=min[tau,4(lambda+L)]","min(912.32533,4×(304.10844+5))",Ti=912.32533min,限制积分环节不要比对象慢得不合理
+19,IMC PI,未限幅Ki,Ki_raw=Kp_raw/Ti,0.053500963/912.32533,Ki_raw=5.8642417e-05 min^-1,换算为并联PI的积分增益
+20,IMC PI,安全限幅,"Kp=clip(Kp_raw,0.002,1.5); Ki=clip(Ki_raw,1e-5,0.08)","Kp_raw=0.053500963, Ki_raw=5.8642417e-05","部署Kp=0.053500963, Ki=5.8642417e-05",本例IMC原值位于安全边界内，因此限幅前后相同
+21,IMC λ训练集调参,公平比较协议,仅在训练工况搜索lambda；Kp/Ti仍由IMC公式约束,21个lambda候选；测试工况未参与,选择训练集平均目标最低的lambda,避免拿未经任务调节的保守回退参数与已优化算法直接比较
+22,IMC λ训练集调参,选定参数,lambda*=argmin mean_train J(IMC(lambda)),lambda=26.924215 min,"Kp=0.51802681, Ki=0.0040566918",进入留出集和三个案例后冻结，不利用测试结果回调参数

@@ -1,0 +1,71 @@
+{
+  "experiment_id": "E2-B3",
+  "experiment_name": "unified-scenario evaluation of policies re-frozen under their documented training configurations (NOT a same-budget comparison; only BO/random arms use that wording)",
+  "design_note": "deployment gate on qualification split only; sealed test unseen during selection; LLM replay on full 48 training split",
+  "code_sha": "bf6bda6d6d5a1a5f69ca4276610d445f11fbcdb5",
+  "code_dirty": true,
+  "worktree_status_sha16": "90968740afad894e",
+  "manifest_sha256": "ee4caa461fcc11a685ca65def2130466ddfad157dee1d0fb2b638c2bac7dfd8c",
+  "manifest_path": "D:\\havc\\hvac-ai-pid-demo\\experiments\\manifests\\v4.yaml",
+  "artifact_dir": "D:\\havc\\hvac-ai-pid-demo\\artifacts\\runs\\v4-20260906-bf6bda6",
+  "policy_provenance": {
+    "artifact_dir": "D:\\havc\\hvac-ai-pid-demo\\artifacts\\runs\\v4-20260906-bf6bda6",
+    "imc": "artifacts\\runs\\v4-20260906-bf6bda6\\imc_lambda_tuning.csv#0437d1cbf9b4a11e",
+    "bo": "artifacts\\runs\\v4-20260906-bf6bda6\\global_bayesian_tuning.csv#92f9fe35148156a4",
+    "bo_legacy_fallback": "0",
+    "safe_bo": "artifacts\\runs\\v4-20260906-bf6bda6\\safe_bo_policy.json#316a798cd6eafd87",
+    "safe_bo_legacy_fallback": "0",
+    "fnn_rule_table": "artifacts\\runs\\v4-20260906-bf6bda6\\fnn_rule_table.npy#13eed3fb18436adc",
+    "fnn_context": "artifacts\\runs\\v4-20260906-bf6bda6\\fnn_context_coefficients.npy#9b1b4ed2dee079a2",
+    "rl_q_table": "artifacts\\runs\\v4-20260906-bf6bda6\\rl_q_table.npy#6a99e54de3668ddb",
+    "rl_mask": "artifacts\\runs\\v4-20260906-bf6bda6\\rl_covered_mask.npy#78edbf1f294f65b6"
+  },
+  "policies": {
+    "zn": [
+      1.5,
+      0.08
+    ],
+    "imc": [
+      0.5180268093342884,
+      0.004056691798618942
+    ],
+    "bo": [
+      0.6265068944346303,
+      0.005895908382254749
+    ],
+    "safe-bo": [
+      0.5180268093342882,
+      0.004056691798618943
+    ],
+    "llm": [
+      0.5180268093342884,
+      0.004056691798618942
+    ],
+    "llm_source": "LLMAgentAutoTuner(Replay, training-split freeze)"
+  },
+  "safe_bo_attribution": "selected=1/known baseline kp=0.5180268093342882 ki=0.004056691798618943; if phase is 'local qualification seed', the gain is the conservative init, not a GP search improvement",
+  "stat_primary": "paired_ratio_* = mean of per-scenario ratios mean(obj/imc) + bootstrap 95% CI (2000 resamples, seed+77); PRIMARY for E2 conclusions",
+  "stat_secondary": "ratio_of_means_to_imc = mean(obj)/mean(imc); reference only, dominated by large-objective scenarios; do not conflate with primary",
+  "stat_note": "mean_ratio_to_imc equals paired_ratio_mean point estimate (both are mean of ratios); ratio_of_means_to_imc is the distinct secondary statistic",
+  "sealed": {
+    "repeats": 5,
+    "per_repeat": 16,
+    "total": 80,
+    "acceptance_seeds": [
+      101,
+      211,
+      307,
+      401,
+      503
+    ],
+    "pipeline_seed": 7
+  },
+  "llm_freeze": {
+    "train_samples": 48,
+    "train_seed": 7,
+    "note": "replay frozen on the full training split, never on sealed"
+  },
+  "integrator": "六子步v4积分器(外层60s/内层10s×6, integration_substeps=6)",
+  "elapsed_seconds": 23.290006100003666,
+  "comparability": "E2-B3: unified-scenario evaluation; deployment gate ran on the qualification split only, sealed test unseen during selection; LLM replay frozen on the full training split, not live; only BO/random arms may use same-budget wording"
+}

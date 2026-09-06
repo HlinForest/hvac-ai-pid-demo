@@ -1,0 +1,7 @@
+{
+  "kp": 0.6265068944346303,
+  "ki": 0.005895908382254749,
+  "objective": 37.87096615694812,
+  "evaluations": 14,
+  "source": "tune_global_fixed on training split"
+}

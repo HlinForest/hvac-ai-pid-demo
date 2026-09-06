@@ -1,0 +1,7 @@
+{
+  "kp": 0.5180268093342882,
+  "ki": 0.004056691798618943,
+  "risk_objective": 52.16120892175229,
+  "evaluations": 4,
+  "source": "RiskAwareSafeBOTuner on training split, IMC baseline"
+}

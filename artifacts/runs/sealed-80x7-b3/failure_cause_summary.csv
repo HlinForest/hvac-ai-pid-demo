@@ -1,0 +1,8 @@
+﻿algorithm,scenarios,failed,cause_capacity,cause_window,cause_tuning,mean_J_passed,mean_J_failed
+bo,80,47,1,6,40,25.69,58.59
+fnn,80,40,1,6,33,27.37,55.11
+imc,80,40,1,6,33,27.37,55.11
+llm,80,40,1,6,33,27.37,55.11
+rl,80,41,1,6,34,27.32,51.67
+safe-bo,80,40,1,6,33,27.37,55.11
+zn,80,74,1,6,67,24.99,64.7

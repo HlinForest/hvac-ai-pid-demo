@@ -1,0 +1,7 @@
+{
+  "run": "D:\\havc\\hvac-ai-pid-demo\\artifacts\\runs\\v4-20260906-bf6bda6",
+  "sealed": "D:\\havc\\hvac-ai-pid-demo\\artifacts\\runs\\sealed-80x7-b3",
+  "hours_per_sim": 5.0,
+  "pipeline_wall_seconds": 197.8,
+  "warning": "Only BO/random arms share an identical budget."
+}

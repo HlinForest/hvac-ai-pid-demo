@@ -1,0 +1,25 @@
+{
+  "experiment_id": "E3+",
+  "code_sha": "bf6bda6d6d5a1a5f69ca4276610d445f11fbcdb5",
+  "manifest_sha256": "ee4caa461fcc11a685ca65def2130466ddfad157dee1d0fb2b638c2bac7dfd8c",
+  "artifact_dir": "D:\\havc\\hvac-ai-pid-demo\\artifacts\\runs\\v4-20260906-bf6bda6",
+  "search_seeds": [
+    815,
+    5001,
+    9002,
+    12077
+  ],
+  "n_pooled_pairs": 320,
+  "pooled_gp_minus_random": {
+    "mean": -0.005726445046575085,
+    "lo95": -0.037307682608084564,
+    "hi95": 0.028406847531895256
+  },
+  "pooled_gp_minus_init": {
+    "mean": -0.1114757239915809,
+    "lo95": -0.14189488196360084,
+    "hi95": -0.0791292648128466
+  },
+  "reading": "no pooled GP advantage over same-budget random; mechanism contribution unverified",
+  "elapsed_seconds": 121.50568070000008
+}

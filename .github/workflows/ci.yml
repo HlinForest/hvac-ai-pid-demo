@@ -161,3 +161,7 @@ jobs:
           else
             echo "skip interactive HTML check (no demo HTML built in CI)"
           fi
+      - name: Embedded single-algorithm smoke + interactive HTML check (never skipped)
+        run: |
+          python run.py embedded --algorithm imc --provider replay --artifact-dir archive/outputs_review_v3 --output "$(pwd)/ci_embedded_smoke"
+          node tests/check_interactive_html.mjs "$(pwd)/ci_embedded_smoke/imc_temperature_demo.html"
