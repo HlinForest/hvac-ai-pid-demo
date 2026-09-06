@@ -64,10 +64,15 @@ SEALED_FOPDT = {  # archive/outputs_review_v3/engineering_report.md §1.1 / 报�
     "设定温度突变": (59.89, 912.1, 7.0),
     "持续外界热扰动": (64.63, 913.2, 8.0),
 }
-SUPPLEMENT_GAINS = {
+# P0 fix: no hand-written gains.  Resolved at runtime from the unified
+# PolicyBundle (artifact_dir) or, for LLM, from the frozen supplement JSON
+# with explicit provenance.  Re-running this script must not silently swap
+# 0.4657/0.00364 <-> 0.4057/0.002769.
+SUPPLEMENT_GAINS_FALLBACK = {
     "safebo": {"kp": 0.3838, "ki": 0.004441, "label": "风险感知安全 BO"},
-    "llm": {"kp": 0.4057, "ki": 0.002769, "label": "LLM Agent"},
+    "llm": {"kp": 0.4657376424916451, "ki": 0.00364826335084437, "label": "LLM Agent"},
 }
+INTEGRATOR_LABEL = "六子步v4积分器(外层60s/内层10s×6, Scenario.integration_substeps=6)"
 DYN_NAME = {
     "Ziegler-Nichols": "Z-N 反应曲线法",
     "IMC PI": "IMC-λ",
@@ -535,24 +540,67 @@ def _run_figure(scenario, gains, seed, title, color, fname, events):
     return {k: float(m[k]) for k in METRIC_KEYS}
 
 
-def supplement_runs():
-    out = {"gains": SUPPLEMENT_GAINS,
-           "label": "补跑：冻结增益（不做任何训练/搜索），与 v3 同对象同约束同种子",
+def supplement_runs(artifact_dir: str | Path | None = None):
+    """Frozen-gain supplement runs with full provenance (no hard-coded swap).
+
+    Gains resolve from the unified PolicyBundle when ``artifact_dir`` is
+    given; otherwise the frozen ``supplement_metrics.json`` values are kept
+    so a re-run never silently rewrites 0.4657/0.00364 into 0.4057/0.002769.
+    """
+    import argparse as _argparse  # local to avoid import cost for other entry points
+
+    gains: dict[str, dict[str, object]] = {
+        key: dict(value) for key, value in SUPPLEMENT_GAINS_FALLBACK.items()
+    }
+    gains_source: dict[str, str] = {key: "SUPPLEMENT_GAINS_FALLBACK(frozen)" for key in gains}
+    if artifact_dir is not None:
+        try:
+            from hvac_pid.policy_bundle import PolicyBundle as _Bundle
+            bundle = _Bundle.load(Path(artifact_dir), project_root=PROJECT_ROOT)
+            gains["safebo"] = {
+                "kp": float(bundle.safe_bo_gains[0]),
+                "ki": float(bundle.safe_bo_gains[1]),
+                "label": "风险感知安全 BO",
+            }
+            gains_source["safebo"] = str(bundle.provenance.get("safe_bo", artifact_dir))
+        except Exception as exc:
+            print(f"  warn: cannot load Safe-BO from {artifact_dir}: {exc}; keep frozen")
+    else:
+        frozen = DATA / "supplement_metrics.json"
+        if frozen.exists():
+            try:
+                prior = json.loads(frozen.read_text(encoding="utf-8"))
+                for key in ("safebo", "llm"):
+                    if key in prior.get("gains", {}):
+                        gains[key] = dict(prior["gains"][key])
+                        gains_source[key] = f"frozen {frozen.name} (no overwrite on re-run)"
+            except Exception as exc:
+                print(f"  warn: cannot read frozen {frozen}: {exc}; keep fallback")
+    try:
+        from hvac_pid.manifest import git_head_sha as _git_sha
+        code_sha = _git_sha()
+    except Exception:
+        code_sha = "unknown"
+    out = {"gains": gains,
+           "gains_source": gains_source,
+           "integrator": INTEGRATOR_LABEL,
+           "code_sha": code_sha,
+           "label": f"补跑：冻结增益（不做任何训练/搜索），{INTEGRATOR_LABEL}；与v3同对象同约束同种子但积分版本不同，不可直接排名",
            "cases": {}, "dynamic": {}}
     scenarios = typical_case_scenarios()
     short_of = {c[0]: c[1] for c in CASE_INFO}
     desc_of = {c[0]: c[2] for c in CASE_INFO}
-    for key, info in SUPPLEMENT_GAINS.items():
-        gains = (info["kp"], info["ki"])
+    for key, info in gains.items():
+        pair = (float(info["kp"]), float(info["ki"]))
         out["cases"][key] = {}
         for case_index, (case, scenario) in enumerate(scenarios.items()):
-            title = f"{short_of[case]}（{desc_of[case]}）— {info['label']}（补跑：冻结增益）"
+            title = f"{short_of[case]}（{desc_of[case]}）— {info['label']}（补跑：冻结增益，{INTEGRATOR_LABEL}）"
             out["cases"][key][case] = _run_figure(
-                scenario, gains, PIPELINE_SEED + CASE_SEED_OFFSET + case_index,
+                scenario, pair, PIPELINE_SEED + CASE_SEED_OFFSET + case_index,
                 title, C_AI_AUTO, f"fig_case{case_index + 1}_{key}.png", _events_for(scenario))
         scenario = dynamic_demo_scenario()
-        title = f"混合工况 12 h 复合测试 — {info['label']}（补跑：冻结增益）"
-        m = _run_figure(scenario, gains, PIPELINE_SEED + DYNAMIC_SEED_OFFSET,
+        title = f"混合工况 12 h 复合测试 — {info['label']}（补跑：冻结增益，{INTEGRATOR_LABEL}）"
+        m = _run_figure(scenario, pair, PIPELINE_SEED + DYNAMIC_SEED_OFFSET,
                         title, C_AI_AUTO, f"fig_mixed_{key}.png", _events_for(scenario))
         m["fallback_events"] = 0.0
         out["dynamic"][key] = m
@@ -609,7 +657,14 @@ def copy_figures():
     print(f"  verified {len(names)} single-source figures (no copy, see ../figures/)")
 
 
-def main():
+def main(artifact_dir: str | Path | None = None):
+    import argparse as _argparse
+    if artifact_dir is None:
+        _parser = _argparse.ArgumentParser(description="sub-report figures (manifest-driven)")
+        _parser.add_argument("--artifact-dir", type=Path, default=None,
+                             help="PolicyBundle dir for Safe-BO gains; omit to keep frozen supplement JSON")
+        _args, _unknown = _parser.parse_known_args()
+        artifact_dir = _args.artifact_dir
     print("[1/6] FOPDT 拟合 / 交叉验证 / 收敛图（重跑辨识并断言封存值）")
     fig_two_point_failure()
     fig_fopdt_fit()
@@ -618,7 +673,7 @@ def main():
     print("[2/6] 七张算法运行框图")
     flow_zn(); flow_imc(); flow_bo(); flow_safebo(); flow_llm(); flow_fnn(); flow_rl()
     print("[3/6] 安全 BO / LLM 三工况与混合工况补跑")
-    supplement_runs()
+    supplement_runs(artifact_dir)
     print("[4/6] 混合工况五算法曲线（封存 CSV）")
     mixed_figures_main5()
     print("[5/6] 复制复用图")

@@ -7,6 +7,7 @@ Prefer this over calling the individual ``run_*.py`` scripts directly::
     python run.py benchmark --help
     python run.py crossval artifacts/runs/<run_id>
     python run.py embedded --algorithm all --provider replay
+    python run.py sealed --artifact-dir archive/outputs_review_v3 --output artifacts/runs/sealed-80x7
     python run.py llm-agent --provider replay
     python run.py advanced --quick --llm-provider heuristic
     python run.py matrix archive/outputs_llm_matrix_v3
@@ -28,6 +29,7 @@ _SUBCOMMANDS: dict[str, str] = {
     "benchmark": "tools.run_tuning_benchmark",
     "crossval": "tools.run_cross_validation",
     "embedded": "tools.run_embedded_demo",
+    "sealed": "tools.run_sealed_evaluation",
     "llm-agent": "tools.run_llm_agent_demo",
     "advanced": "tools.run_advanced_tuning_benchmark",
     "matrix": "tools.aggregate_llm_matrix",
@@ -61,6 +63,7 @@ def build_parser() -> argparse.ArgumentParser:
         "benchmark": "PI tuning timing benchmark",
         "crossval": "numerical/OpenModelica cross-validation",
         "embedded": "ESP32 seven-algorithm temperature demo",
+        "sealed": "seven-algorithm 80-scenario sealed evaluation (P1)",
         "llm-agent": "tool-using LLM agent demo",
         "advanced": "risk-aware safe BO + LLM supervisory benchmark",
         "matrix": "aggregate an LLM matrix directory",

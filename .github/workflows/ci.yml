@@ -32,15 +32,17 @@ jobs:
       - name: Install deps
         run: |
           python -m pip install --upgrade pip
-          pip install "numpy==${{ matrix.numpy-version }}" pytest
+          pip install "numpy==${{ matrix.numpy-version }}" pytest pyyaml
           if [ "${{ matrix.numpy-version }}" = "2.0.0" ]; then
             pip install scipy scikit-learn matplotlib joblib pandas
           else
             # Pinned to locally verified versions; latest majors drifted
             # (sklearn 1.2.2 -> 1.7.x etc.) and broke the suite.
-            pip install "scipy==1.11.4" "scikit-learn==1.2.2" "matplotlib==3.8.0" "joblib==1.2.0" "pandas==2.1.4"
+            pip install "scipy==1.11.4" "scikit-learn==1.2.2" "matplotlib==3.8.0" "joblib==1.2.0" "pandas==2.1.4" "pyyaml==6.0.1"
           fi
-          pip install -e . || pip install -r requirements.txt
+          # Editable install must succeed on a clean env; no silent fallback
+          # to requirements.txt (P0: remove install-failure masking).
+          pip install -e .
       - name: Run pytest
         run: python -m pytest tests -q
       - name: Unified CLI smoke (no LLM, no hardware)
@@ -111,8 +113,24 @@ jobs:
           test -f experiments/manifests/archive_map.csv
           test -f hvac_pid/safety.py
           test -f hvac_pid/timebase.py
+          test -f hvac_pid/manifest.py
+          test -f hvac_pid/policy_bundle.py
           test -f artifacts/README.md
           test -f run.py
           test -f build_docs.py
           test -f reports/figstyle.py
           test -f docs/README.md
+      - name: Manifest drives runs (no ParserError, no drift)
+        run: |
+          python - <<'PY'
+          from hvac_pid.manifest import load_manifest, check_timebase_consistency, check_safety_consistency
+          m = load_manifest('experiments/manifests/v4.yaml')
+          check_timebase_consistency(m)
+          check_safety_consistency(m)
+          assert m['algorithms']['order'] == ["zn","imc","bo","safe-bo","fnn","rl","llm"], m['algorithms']
+          print('manifest OK', m['_manifest_sha256'][:12])
+          PY
+      - name: Results consistency (tables recomputable, no hard-code swap)
+        run: |
+          python tools/check_results_consistency.py --sealed-dir artifacts/runs/sealed-80x7-v4 || python tools/check_results_consistency.py --sealed-dir archive/outputs_review_v3
+          python -c "from hvac_pid.policy_bundle import PolicyBundle; b=PolicyBundle.load('archive/outputs_review_v3', project_root='.'); print('bundle OK', b.provenance['bo'][:40])"

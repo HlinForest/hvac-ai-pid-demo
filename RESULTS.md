@@ -26,7 +26,16 @@ v3 同表第 2 行为 `max=0.150350, passed=0`；v4 物理推进改为 10 s×6 �
 
 - v3 80 场景密封排名仅适用于 Z-N/IMC/BO/FNN/RL；Safe BO 与 LLM 不可加入同一排名。
 - v4 `embedded_smoke/seven_algorithm_summary.csv`（同一 demo 场景 + 同一 commissioning 门，7 行）仅验证 `--artifact-dir` 管道与统一评价 plumbing，不作为 80 密封排名。
-- v4 完整 `80×7` 统一密封（v4 物理 48/16/16 重训 FNN/RL + SafeBO/LLM 同清单）状态为 PENDING；完成前任何七算法统一排名均须标注不可比较。
+- v4 统一 `80×7` 密封已完成首轮：`artifacts/runs/sealed-80x7-v4/`（560 条主测试记录，同 80 场景、同噪声种子、同六子步积分器、同指标；`sealed_80_details.csv:2-561`，`sealed_provenance.json` 记录 code/manifest/policy 哈希）。
+  - 统计口径：`mean_ratio_to_imc` 为均值之比，`paired_ratio_*` 为逐场景配对目标比均值 + bootstrap 95% CI；两者不同，不得混用。
+  - 本轮（冻结策略来自 `archive/outputs_review_v3` + `archive/outputs_advanced_quick`，v4 物理）：
+    - Z-N 1.4995 [1.4105,1.5954] 显著差于 IMC；
+    - BO 1.0168 [0.9975,1.0375] 不能称优于 IMC；
+    - Safe-BO 0.8911 [0.8597,0.9214] 显著优于 IMC，但选中为 `evaluation=2/local qualification seed (0.3838/0.00444)`，证明的是该保守参数集，尚不能归因于 GP 搜索机制（见 `sealed_provenance.json:safe_bo_attribution` + `sealed_ablation.csv` 随机/保守对照 3–8× 更差）；
+    - FNN 1.0046 [0.9964,1.0133] 非劣于 IMC（上界 1.0133 ≤1.02），不足以称显著优于 IMC；
+    - RL 0.9664 [0.9434,0.9917] 在本协议内改善（含覆盖掩码一致加载，fallback 5% 场景）；
+    - LLM(replay-frozen) 1.0000 与 IMC 持平（训练集无接受候选，回退 IMC；`llm_policy.json:accepted=false`），非实时模型调用；18 次真实矩阵仍为独立证据（`archive/outputs_llm_matrix_v3`，15/18 stable 按演示判据，3×hard_r73 回退后仍 stable=0 已拆为 `fallback_failed`，不得直接解释为数学发散或全部验收通过）。
+  - 完整 v4 48/16/16 重训 FNN/RL + SafeBO/LLM 同清单冻结仍待算力；新 `run.py sealed` + `PolicyBundle` 已消除隐式归档依赖，新流水线（`bo_policy.json`/`safe_bo_policy.json`/`rl_covered_mask.npy`/`provenance.csv`）不再触发 legacy 回退。
 - LLM 矩阵：18 运行 / 18 真实 / 5 部署（`archive/outputs_llm_matrix_v3/matrix_summary.csv:2–19`，`AGGREGATE_REPORT.md:3–6`）。
 
 ## 工程与依赖

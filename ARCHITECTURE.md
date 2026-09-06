@@ -1,7 +1,7 @@
 # ARCHITECTURE (v4)
 
 唯一事实源：`experiments/manifests/v4.yaml`；产物根：`artifacts/runs/<run_id>/`。
-Markdown 为源文件，DOCX/PPT/图片均为生成物。正式报告集为 `reports/分报告/00–08`。
+Markdown 为源文件，DOCX/PPT/图片均为生成物。正式报告集为 `reports/分报告/00–12`（连载式教程：00 总览、01–03 入门主线、04–10 七算法、11 统一比较、12 部署验证）。
 
 ```mermaid
 flowchart TD
@@ -35,7 +35,7 @@ flowchart TD
 | 安全执行 | `hvac_pid/safety.py`（`MAX_FRACTIONAL_GAIN_CHANGE=0.10`）、`actuator.py`、候选安全门、IMC 回退 |
 | 时间口径 | `hvac_pid/timebase.py`：仿真 300 s / 演示 120 s / MCU 2 s+100 ms 三口径分离，禁止统一写 2 s |
 | 实验评估 | `pipeline.py`、`validation.py`（OMC 经 `OPENMODELICAHOME`/`MODELICA_OMC`/PATH 定位）、`metrics.py`、`plotting.py` |
-| 报告 | `reports/分报告/00–08`（源）、`reports/make_*.py`、`md2docx.py` |
+| 报告 | `reports/分报告/00–12`（源）、`reports/make_*.py`、`md2docx.py` |
 | 部署 | `embedded/export_policy.py`、C++ 控制器、CRC、PC-SIL、ESP32/Modbus |
 
 ## 关键口径更正（v4）

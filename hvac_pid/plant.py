@@ -91,4 +91,15 @@ def effective_outdoor_resistance(s: Scenario) -> float:
 
 # Backward-compatible name for notebooks or scripts created before the model
 # was correctly identified as three thermal resistances and two capacitances.
-ThermalPlant2R2C = ThermalPlant3R2C
+# P2: new code must import ThermalPlant3R2C; this alias emits a warning.
+def __getattr__(name: str):  # PEP 562 lazy alias with warning
+    if name == "ThermalPlant2R2C":
+        import warnings as _warnings
+
+        _warnings.warn(
+            "ThermalPlant2R2C is a legacy alias; use ThermalPlant3R2C.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return ThermalPlant3R2C
+    raise AttributeError(name)

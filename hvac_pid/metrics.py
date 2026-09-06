@@ -20,7 +20,12 @@ def calculate_metrics(result: SimulationResult, comfort_band_c: float = 0.5) -> 
     sub_minimum = running & (result.command < result.minimum_running_command - 1e-9)
     itae = float(np.sum(result.minute / 60.0 * abs_error) * dt_hours)
     command_variance = float(np.var(result.command))
-    stable = bool(np.all(np.isfinite(result.zone_c)) and np.all((result.zone_c > 5.0) & (result.zone_c < 45.0)))
+    # P0: split the overloaded `stable` flag into independently auditable
+    # fields.  `stable` is kept as the legacy numeric-boundedness gate
+    # (finite + 5..45 C) so old thresholds keep working; the new fields
+    # distinguish "回退成功" from "温控验收通过".
+    bounded = bool(np.all(np.isfinite(result.zone_c)) and np.all((result.zone_c > 5.0) & (result.zone_c < 45.0)))
+    stable = bounded
 
     within = abs_error <= comfort_band_c
     settling_hours = result.minute[-1] / 60.0
@@ -73,8 +78,24 @@ def calculate_metrics(result: SimulationResult, comfort_band_c: float = 0.5) -> 
         "compressor_output_variance": command_variance,
         "mean_ai_inference_us": float(np.mean(result.inference_us[result.inference_us > 0])) if np.any(result.inference_us > 0) else 0.0,
         "fallback_events": float(np.count_nonzero(np.diff(result.fallback_active.astype(int), prepend=0) > 0)),
+        "fallback_fraction": float(np.mean(result.fallback_active)),
         "stable": float(stable),
+        # Split acceptance semantics (P0): numeric boundedness vs comfort /
+        # recovery / actuator compliance.  Callers must not equate
+        # "fallback executed" with "control acceptance passed".
+        "bounded": float(bounded),
+        "comfort_held": float(settling_hours < result.minute[-1] / 60.0 - 1e-9),
+        "recovery_ok": float(disturbance_recovered),
+        "actuator_compliant": float(
+            float(np.count_nonzero(running_slew > result.command_slew_limit_per_minute + 1e-9)) == 0.0
+            and float(np.mean(sub_minimum)) <= 1e-12
+        ),
     }
+    metrics["validation_passed"] = float(
+        metrics["bounded"] > 0.5
+        and metrics["comfort_held"] > 0.5
+        and metrics["actuator_compliant"] > 0.5
+    )
     metrics["objective"] = objective_from_metrics(metrics)
     return metrics
 

@@ -1,20 +1,22 @@
 # EXPERIMENTS (v4)
 
-清单：`experiments/manifests/v4.yaml`；基线：`baseline-v3-pre-v4`（SHA `2870262`）。
+清单：`experiments/manifests/v4.yaml`（唯一可执行事实源，缺字段立即报错；`hvac_pid/manifest.py:load_manifest`）；基线：`baseline-v3-pre-v4`（SHA `2870262`，仅历史对照，执行以实际 `git rev-parse HEAD` + `provenance.csv` 为准）。
 历史 15 个顶层 `outputs*` 为只读归档；新产物只写 `artifacts/runs/<run_id>/`。
 
 ## v4 运行
 
 - `artifacts/runs/v4-20260906-2870262/`：数值/FOPDT 交叉验证 + 步长收敛 + 七算法冒烟 + 溯源。
+- `artifacts/runs/sealed-80x7-v4/`：七算法同一 80 场景密封（560 行，`run.py sealed --artifact-dir <bundle> --output <run>`；候选 vs 执行、配对 CI、消融、回退失败拆分）。
 - 复现：`python run.py crossval artifacts/runs/<run_id>`；
-  `python run.py embedded --algorithm all --provider replay --artifact-dir <artifact_dir> --output <run>/embedded_smoke`。
+  `python run.py embedded --algorithm all --provider replay --artifact-dir <artifact_dir> --output <run>/embedded_smoke`；
+  `python run.py sealed --artifact-dir <artifact_dir> --output <run>/sealed-80x7`。
+- 策略契约：`hvac_pid/policy_bundle.py:PolicyBundle`（IMC/BO/SafeBO/FNN 表+上下文/RL 表+掩码同目录冻结；缺文件报错，legacy 回退显式标记）。
 
 ## 场景与划分
 
-- 正式划分：48 训练 / 16 验证 / 16 测试，三向隔离，`scenario_id` + SHA-256；密封 `5×16=80`。
+- 正式划分：48 训练 / 16 验证 / 16 测试，三向隔离，`scenario_id` + SHA-256；密封 `5×16=80`（`acceptance_seeds=101,211,307,401,503`，`seed+100003+acceptance_seed`，噪声种子 `seed+700000+ordinal`，六子步积分器固定）。
 - 三类典型场景：初次快速降温（4 h）、设定温度突变（5 h）、持续外界热扰动（6 h）。
-- v3 的 80 场景密封只覆盖 Z-N/IMC/BO/FNN/RL；Safe BO 与 LLM 来自其他测试集。
-  在接入同一场景清单前，禁止七算法统一排名（见 `sealed_80_summary.csv`）。
+- v3 的 80 场景密封只覆盖 Z-N/IMC/BO/FNN/RL；v4 首轮 `sealed-80x7-v4` 已将 SafeBO/LLM(replay-frozen) 接入同一清单（见 `sealed_provenance.json`），但 SafeBO 仍为 legacy 保守参数、RL 掩码为重建值；新流水线重训后 legacy 标记清零。
 
 ## 数值验证（已修复）
 

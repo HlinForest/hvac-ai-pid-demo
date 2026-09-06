@@ -1,5 +1,15 @@
 from __future__ import annotations
 
+"""Legacy ExtraTrees gain scheduler (P2: not part of the seven-algorithm mainline).
+
+Only tests reference this module; pipeline/demo/export never import it.
+Kept for backward compatibility with a DeprecationWarning.  Do not add new
+callers.  ``joblib`` stays declared only for this legacy path; BO itself
+needs scikit-learn regardless.
+"""
+
+import warnings as _warnings
+
 from pathlib import Path
 
 import joblib
@@ -8,6 +18,13 @@ from sklearn.ensemble import ExtraTreesRegressor
 
 from .config import Scenario
 from .tuning import GainBounds
+
+
+_warnings.warn(
+    "hvac_pid.scheduler.GainScheduler is legacy and outside the v4 seven-algorithm path.",
+    DeprecationWarning,
+    stacklevel=2,
+)
 
 
 class GainScheduler:

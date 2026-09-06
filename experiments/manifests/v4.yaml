@@ -39,15 +39,10 @@ scenarios:
   demo_5h_virtual_cabinet: {duration_hours: 5.0, virtual_to_wall: "5h->90s (200x presentation-only)"}
 
 algorithms:
-  - zn
-  - imc
-  - bo
-  - safe-bo
-  - fnn
-  - rl
-  - llm
-  fnn_spec: "5x5零阶TSK基础面 + 4项上下文残差修正"
-  rl_spec: "状态 5x5x3，动作数 9"
+  order: ["zn", "imc", "bo", "safe-bo", "fnn", "rl", "llm"]
+  specs:
+    fnn: "5x5零阶TSK基础面 + 4项上下文残差修正"
+    rl: "状态 5x5x3，动作数 9"
 
 thresholds:
   physical_cross_validation_max_abs_c: 0.15
@@ -69,9 +64,10 @@ llm:
   reporting: "LLM同时报告多次运行分布与回退率；不同协议数据不参与统一排名"
 
 hardware_gates:
-  - "实体板10分钟遥测：待外部验证"
-  - "真实WCET：待外部验证"
-  - "HIL/Modbus写入：待外部验证"
+  items:
+    - "实体板10分钟遥测：待外部验证"
+    - "真实WCET：待外部验证"
+    - "HIL/Modbus写入：待外部验证"
   rule: "硬件门不得用仿真补成已完成"
 
 acceptance:

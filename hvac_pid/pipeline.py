@@ -12,6 +12,7 @@ import numpy as np
 
 from .config import Scenario, dynamic_demo_scenario, sample_adaptive_scenarios, typical_case_scenarios
 from .ai_controllers import FNNGainController, IncrementalRLController, train_fnn_rule_table, train_offline_q_policy
+from .advanced_tuning import RiskAwareSafeBOTuner, RiskSafetyConfig
 from .algorithm_reports import write_algorithm_reports
 from .controllers import (
     PIController,
@@ -45,6 +46,104 @@ def _write_rows(path: Path, rows: list[dict[str, object]]) -> None:
         writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
         writer.writeheader()
         writer.writerows(rows)
+
+
+def _write_run_manifest_and_provenance(
+    output: Path,
+    *,
+    seed: int,
+    train_samples: int,
+    validation_samples: int,
+    test_samples: int,
+    bo_iterations: int,
+    acceptance_seeds: tuple[int, ...],
+) -> None:
+    """Freeze the manifest + execution provenance inside the run dir.
+
+    P0: records the *actual* git SHA (not the frozen baseline), the manifest
+    SHA-256, and per-artifact SHA-256 so any result can be traced to
+    ``run_id + file + git SHA``.  Missing hashes fail loudly downstream.
+    """
+    import platform
+    import shutil
+    import subprocess
+
+    from .manifest import DEFAULT_MANIFEST, manifest_sha256
+
+    project_root = Path(__file__).resolve().parents[1]
+    try:
+        git_sha = subprocess.run(
+            ["git", "rev-parse", "HEAD"], capture_output=True, text=True,
+            cwd=str(project_root), timeout=10,
+        ).stdout.strip() or "unknown-no-git"
+    except Exception:
+        git_sha = "unknown-no-git"
+    manifest_src = project_root / "experiments" / "manifests" / "v4.yaml"
+    if manifest_src.exists():
+        shutil.copy2(manifest_src, output / "manifest.yaml")
+        manifest_sha = manifest_sha256(manifest_src)
+    else:
+        manifest_sha = "missing"
+    try:
+        import numpy as _np
+        import scipy as _scipy
+
+        env = {
+            "python": platform.python_version(),
+            "numpy": _np.__version__,
+            "scipy": _scipy.__version__,
+            "git_sha": git_sha,
+            "manifest_sha256": manifest_sha,
+            "seed": seed,
+            "train_samples": train_samples,
+            "validation_samples": validation_samples,
+            "test_samples": test_samples,
+            "bo_iterations": bo_iterations,
+            "acceptance_seeds": list(acceptance_seeds),
+            "integration_substeps": 6,
+            "integrator": "explicit-Euler 6x substep (10s inner, 60s outer)",
+        }
+    except Exception as exc:  # pragma: no cover - environment must be recordable
+        raise RuntimeError(f"cannot record environment: {exc}") from exc
+    (output / "environment.json").write_text(
+        json.dumps(env, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+    )
+    tracked = [
+        "classical_tuning_history.csv", "fopdt_fit_history.csv",
+        "training_scenarios.csv", "validation_scenarios.csv",
+        "dataset_manifest.csv", "holdout_scenarios.csv",
+        "imc_lambda_tuning.csv", "global_bayesian_tuning.csv",
+        "bo_policy.json", "safe_bo_history.csv", "safe_bo_policy.json",
+        "fnn_training_history.csv", "fnn_rule_table.npy",
+        "fnn_context_coefficients.npy", "rl_training_history.csv",
+        "rl_q_table.npy", "rl_covered_mask.npy",
+        "holdout_metrics.csv", "holdout_summary.csv",
+        "deployment_acceptance.csv",
+        "physical_cross_validation.csv", "fopdt_cross_validation.csv",
+        "openmodelica_cross_validation.csv",
+    ]
+    prov_rows: list[dict[str, object]] = []
+    for name in tracked:
+        path = output / name
+        if not path.exists():
+            sha = "MISSING"
+        else:
+            sha = hashlib.sha256(path.read_bytes()).hexdigest()
+        prov_rows.append({
+            "artifact": name, "git_sha": git_sha,
+            "sha256": sha, "source": "hvac_pid/pipeline.py:run_pipeline",
+            "status": "ok" if sha != "MISSING" else "MISSING",
+        })
+    # Manifest + environment themselves are also hashed.
+    for name in ("manifest.yaml", "environment.json"):
+        path = output / name
+        sha = hashlib.sha256(path.read_bytes()).hexdigest() if path.exists() else "MISSING"
+        prov_rows.append({
+            "artifact": name, "git_sha": git_sha, "sha256": sha,
+            "source": "hvac_pid/pipeline.py:_write_run_manifest_and_provenance",
+            "status": "ok" if sha != "MISSING" else "MISSING",
+        })
+    _write_rows(output / "provenance.csv", prov_rows)
 
 
 def _scenario_rows(scenarios: list[Scenario]) -> list[dict[str, object]]:
@@ -433,6 +532,30 @@ def run_pipeline(
     fixed_gains = (global_tune.kp, global_tune.ki)
     _write_rows(output / "global_bayesian_tuning.csv", [{"kp": global_tune.kp, "ki": global_tune.ki, "objective": global_tune.score, "evaluations": global_tune.evaluations}])
     _write_rows(output / "bayesian_search_history.csv", list(global_tune.history))
+    # P0: freeze ordinary-BO + Safe-BO policies inside the same run dir so the
+    # demo/export path never reads archive/outputs_advanced_quick implicitly.
+    (output / "bo_policy.json").write_text(
+        json.dumps(
+            {"kp": float(global_tune.kp), "ki": float(global_tune.ki),
+             "objective": float(global_tune.score), "evaluations": int(global_tune.evaluations),
+             "source": "tune_global_fixed on training split"},
+            ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
+    safe_bo_tune = RiskAwareSafeBOTuner(
+        iterations=max(4, bo_iterations),
+        candidates=512,
+        config=RiskSafetyConfig(),
+    ).tune(training_scenarios, imc_gains, seed=seed + 909)
+    _write_rows(output / "safe_bo_history.csv", list(safe_bo_tune.history))
+    (output / "safe_bo_policy.json").write_text(
+        json.dumps(
+            {"kp": float(safe_bo_tune.kp), "ki": float(safe_bo_tune.ki),
+             "risk_objective": float(safe_bo_tune.score), "evaluations": int(safe_bo_tune.evaluations),
+             "source": "RiskAwareSafeBOTuner on training split, IMC baseline"},
+            ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     fnn_samples: list[dict[str, float]] = []
     fnn_candidates: list[np.ndarray] = []
     fnn_context_candidates: list[np.ndarray] = []
@@ -491,6 +614,8 @@ def run_pipeline(
             int(transition["state_delta_bin"]),
             int(transition["state_command_bin"]),
         ] = True
+    # P0: freeze the exact mask the sealed gate and the demo must share.
+    np.save(output / "rl_covered_mask.npy", rl_covered.astype(np.uint8))
 
     print("[2/3] Evaluating five controllers on sealed held-out thermal contexts ...")
     seeded_scenarios: list[tuple[int, int, Scenario]] = []
@@ -662,6 +787,17 @@ def run_pipeline(
         "与 <a href=\"review_defect_matrix.csv\">review_defect_matrix.csv</a>。</p></section>"
     )
     html_path.write_text(html_document.replace("</body>", acceptance_html + "</body>"), encoding="utf-8")
+
+    # P0: manifest truly drives the run + full provenance with real hashes.
+    _write_run_manifest_and_provenance(
+        output,
+        seed=seed,
+        train_samples=train_samples,
+        validation_samples=validation_samples,
+        test_samples=test_samples,
+        bo_iterations=bo_iterations,
+        acceptance_seeds=acceptance_seeds,
+    )
 
     elapsed = time.perf_counter() - started
     zn_mean = next(float(row["mean_objective"]) for row in summary_rows if row["controller"] == "Ziegler-Nichols")

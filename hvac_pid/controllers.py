@@ -50,6 +50,9 @@ class ScheduledPIController(PIController):
     ``max_fractional_change=0.35`` is intentionally distinct from the
     deployed v4 default ``MAX_FRACTIONAL_GAIN_CHANGE=0.10`` in
     :mod:`hvac_pid.safety` and must not be quoted as the safety bound.
+
+    P2: no production caller may instantiate this; it remains only for
+    backward-compatible imports and will emit a DeprecationWarning.
     """
 
     def __init__(
@@ -59,6 +62,14 @@ class ScheduledPIController(PIController):
         update_interval_minutes: float = 30.0,
         max_fractional_change: float = 0.35,
     ):
+        import warnings as _warnings
+
+        _warnings.warn(
+            "ScheduledPIController is legacy (35% slew, not the deployed 10%); "
+            "do not use for v4 seven-algorithm comparisons.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         super().__init__(*fallback_gains)
         self.predictor = predictor
         self.fallback_gains = fallback_gains

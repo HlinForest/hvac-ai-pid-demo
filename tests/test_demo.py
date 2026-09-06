@@ -138,6 +138,9 @@ class LearningTests(unittest.TestCase):
                 "classical_tuning_steps.csv",
                 "fopdt_fit_history.csv",
                 "bayesian_search_history.csv",
+                "safe_bo_history.csv",
+                "bo_policy.json",
+                "safe_bo_policy.json",
                 "fnn_training_history.csv",
                 "fnn_training_samples.csv",
                 "rl_training_history.csv",
@@ -151,6 +154,7 @@ class LearningTests(unittest.TestCase):
                 "fnn_context_coefficients_candidate.npy",
                 "rl_q_table.npy",
                 "rl_q_table_candidate.npy",
+                "rl_covered_mask.npy",
                 "holdout_scenarios.csv",
                 "holdout_metrics.csv",
                 "holdout_summary.csv",
@@ -182,6 +186,9 @@ class LearningTests(unittest.TestCase):
                 "fopdt_cross_validation.png",
                 "review_defect_matrix.csv",
                 "review_remediation.md",
+                "manifest.yaml",
+                "environment.json",
+                "provenance.csv",
             }
             self.assertEqual(expected, {item.name for item in output.iterdir()})
             reports = output / "algorithm_reports"

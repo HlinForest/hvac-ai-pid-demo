@@ -1,0 +1,59 @@
+{
+  "code_sha": "096d1bbc4018b70d7e3f89e6035dd70c0c9717fe",
+  "manifest_sha256": "ee4caa461fcc11a685ca65def2130466ddfad157dee1d0fb2b638c2bac7dfd8c",
+  "manifest_path": "D:\\havc\\hvac-ai-pid-demo\\experiments\\manifests\\v4.yaml",
+  "artifact_dir": "D:\\havc\\hvac-ai-pid-demo\\archive\\outputs_review_v3",
+  "policy_provenance": {
+    "artifact_dir": "D:\\havc\\hvac-ai-pid-demo\\archive\\outputs_review_v3",
+    "imc": "archive\\outputs_review_v3\\imc_lambda_tuning.csv#479d71b8c31e1732",
+    "bo": "archive\\outputs_review_v3\\global_bayesian_tuning.csv#23872ad610f16cac",
+    "bo_legacy_fallback": "0",
+    "safe_bo": "D:\\havc\\hvac-ai-pid-demo\\archive\\outputs_advanced_quick\\advanced_holdout_summary.csv#a121c5df3c67a4be",
+    "safe_bo_legacy_fallback": "1",
+    "fnn_rule_table": "archive\\outputs_review_v3\\fnn_rule_table.npy#e72d0bfad5681068",
+    "fnn_context": "archive\\outputs_review_v3\\fnn_context_coefficients.npy#5aaca69764710335",
+    "rl_q_table": "archive\\outputs_review_v3\\rl_q_table.npy#6a99e54de3668ddb",
+    "rl_mask": "archive\\outputs_review_v3\\rl_training_transitions.csv#reconstructed"
+  },
+  "policies": {
+    "zn": [
+      1.5,
+      0.08
+    ],
+    "imc": [
+      0.5174862694351612,
+      0.004053625945382633
+    ],
+    "bo": [
+      0.5355348409080782,
+      0.006345139307458152
+    ],
+    "safe-bo": [
+      0.38378310556466666,
+      0.0044410980778422605
+    ],
+    "llm": [
+      0.5174862694351612,
+      0.004053625945382633
+    ],
+    "llm_source": "LLMAgentAutoTuner(Replay, training-split freeze)"
+  },
+  "safe_bo_attribution": "legacy archive/outputs_advanced_quick/safe_bo_history.csv: selected evaluation=2/local qualification seed (0.3838/0.00444); current evidence supports THIS conservative parameter set, not the BO search mechanism itself",
+  "stat_note": "mean_ratio_to_imc is ratio-of-means; paired_ratio_* is mean-of-paired-ratios with bootstrap CI; report both, do not conflate",
+  "sealed": {
+    "repeats": 5,
+    "per_repeat": 16,
+    "total": 80,
+    "acceptance_seeds": [
+      101,
+      211,
+      307,
+      401,
+      503
+    ],
+    "pipeline_seed": 7
+  },
+  "integrator": "六子步v4积分器(外层60s/内层10s×6, integration_substeps=6)",
+  "elapsed_seconds": 23.623780500000066,
+  "comparability": "all 7 on same 80 scenarios/seeds/metrics; LLM is replay-frozen, not live; do not rank across protocols"
+}

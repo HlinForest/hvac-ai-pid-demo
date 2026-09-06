@@ -21,17 +21,16 @@ from .advanced_tuning import (
     OpenAICompatibleChatAgentPolicy,
     OpenAIResponsesPIDAgentPolicy,
     ReplayPIDAgentPolicy,
-    RiskAwareSafeBOTuner,
     RiskSafetyConfig,
 )
 from .ai_controllers import FNNGainController, IncrementalRLController
 from .config import Scenario, sample_adaptive_scenarios
-from .controllers import PIController, identify_fopdt, imc_pi, ziegler_nichols_pi
+from .controllers import PIController, identify_fopdt, ziegler_nichols_pi
 from .metrics import calculate_metrics
+from .policy_bundle import PolicyBundle
 from .safety import MAX_FRACTIONAL_GAIN_CHANGE
 from .simulator import SimulationResult, simulate
 from .timebase import DEMO_SUPERVISORY_PERIOD_S, MCU_AI_PERIOD_MS, MCU_FAST_PI_PERIOD_MS
-from .tuning import tune_global_fixed
 
 
 ALGORITHM_ORDER = ("zn", "imc", "bo", "safe-bo", "fnn", "rl", "llm")
@@ -140,26 +139,15 @@ def _accepted(artifact_dir: Path, name: str) -> bool:
     return bool(row and float(row.get("deployment_accepted", 0.0)) > 0.5)
 
 
-def _selected_imc(artifact_dir: Path, fallback: tuple[float, float]) -> tuple[float, float]:
-    path = artifact_dir / "imc_lambda_tuning.csv"
-    if not path.exists():
-        return fallback
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        for row in csv.DictReader(handle):
-            if int(float(row.get("selected", 0))) == 1:
-                return float(row["candidate_kp"]), float(row["candidate_ki"])
-    return fallback
+def _resolve_bundle(
+    artifact_dir: Path, project_root: Path
+) -> PolicyBundle:
+    """Single entry for all policy loads; no caller may bypass it.
 
-
-def _advanced_gain(project_root: Path, method: str) -> tuple[float, float] | None:
-    path = project_root / "archive/outputs_advanced_quick" / "advanced_holdout_summary.csv"
-    if not path.exists():
-        return None
-    with path.open("r", encoding="utf-8-sig", newline="") as handle:
-        for row in csv.DictReader(handle):
-            if row.get("method") == method:
-                return float(row["kp"]), float(row["ki"])
-    return None
+    BO / Safe-BO / FNN / RL all resolve inside ``artifact_dir`` first.
+    Legacy archive reads (if any) are flagged in ``bundle.provenance``.
+    """
+    return PolicyBundle.load(artifact_dir, project_root=project_root)
 
 
 def _status_rows(
@@ -232,8 +220,15 @@ def _status_rows(
             }
         )
     metrics = calculate_metrics(result)
+    candidate_metrics = calculate_metrics(candidate_result) if candidate_result is not None else None
     first_band = next((float(row["simulated_minute"]) for row in rows if row["in_comfort_band"]), float("nan"))
     recovery = recovered_first - event_end if np.isfinite(recovered_first) else float("nan")
+    # P0: “回退成功”不等于“温控验收通过”.  Split numeric boundedness,
+    # comfort hold, recovery and actuator compliance; a fallback that still
+    # does not settle is flagged separately as fallback_failed.
+    fallback_failed = bool(
+        forced_fallback and not (np.isfinite(stable_first) and metrics["bounded"] > 0.5)
+    )
     summary: dict[str, object] = {
         "algorithm": algorithm,
         "display_name": DISPLAY_NAMES[algorithm],
@@ -247,11 +242,19 @@ def _status_rows(
         "door_recovery_minutes": recovery,
         "final_temperature_c": float(result.zone_c[-1]),
         "objective": float(metrics["objective"]),
+        "candidate_objective": float(candidate_metrics["objective"]) if candidate_metrics is not None else float(metrics["objective"]),
         "max_overheat_c": float(metrics["max_overheat_c"]),
         "max_undershoot_c": float(metrics["max_undershoot_c"]),
         "control_movement": float(metrics["control_movement"]),
         "stable": int(metrics["stable"] > 0.5 and np.isfinite(stable_first)),
+        # Split acceptance: demo comfort-band hold vs core numeric boundedness.
+        "bounded": int(metrics["bounded"] > 0.5),
+        "comfort_held": int(np.isfinite(stable_first) and metrics["bounded"] > 0.5),
+        "recovery_ok": int(metrics["disturbance_recovered"] > 0.5),
+        "actuator_compliant": int(metrics["actuator_compliant"] > 0.5),
+        "validation_passed": int(metrics["validation_passed"] > 0.5 and np.isfinite(stable_first)),
         "fallback_used": int(forced_fallback or np.any(result.fallback_active)),
+        "fallback_failed": int(fallback_failed),
     }
     return tuple(rows), summary
 
@@ -280,6 +283,7 @@ class _DemoContext:
     scenario: Scenario
     model_fopdt: object
     fallback: tuple[float, float]
+    bundle: PolicyBundle
     seed: int
     provider: str
     model: str
@@ -316,53 +320,61 @@ def _prepare_imc(context: _DemoContext) -> _PreparedDemo:
 
 
 def _prepare_bo(context: _DemoContext) -> _PreparedDemo:
-    gains = _advanced_gain(context.root, "ordinary BO")
-    if gains is None:
-        training = sample_adaptive_scenarios(5, seed=context.seed + 10, duration_hours=3.0)
-        tuned = tune_global_fixed(training, iterations=2, seed=context.seed + 11)
-        gains = (tuned.kp, tuned.ki)
+    # P0: BO gains come from the same PolicyBundle (artifact_dir-controlled).
+    gains = context.bundle.bo_gains
+    source = f"offline bounded Bayesian optimization artifact ({context.bundle.provenance.get('bo', '')})"
     return _PreparedDemo(
         controller=PIController(*gains),
-        source="offline bounded Bayesian optimization artifact",
+        source=source,
     )
 
 
 def _prepare_safe_bo(context: _DemoContext) -> _PreparedDemo:
-    gains = _advanced_gain(context.root, "risk-aware safe BO")
-    if gains is None:
-        training = sample_adaptive_scenarios(5, seed=context.seed + 20, duration_hours=3.0)
-        tuned = RiskAwareSafeBOTuner(
-            iterations=3,
-            candidates=256,
-            config=RiskSafetyConfig(repeats=1, max_undershoot_c=4.0),
-        ).tune(training, context.fallback, seed=context.seed + 21)
-        gains = (tuned.kp, tuned.ki)
+    gains = context.bundle.safe_bo_gains
+    source = f"RaGoOSE-style risk-aware safe BO artifact ({context.bundle.provenance.get('safe_bo', '')})"
     return _PreparedDemo(
         controller=PIController(*gains),
-        source="RaGoOSE-style risk-aware safe BO artifact",
+        source=source,
     )
 
 
 def _prepare_fnn(context: _DemoContext) -> _PreparedDemo:
-    accepted = _accepted(context.artifact_dir, "fnn_training_history.csv")
+    # P0: load BOTH the rule table and the (2,4) context coefficients via
+    # the bundle; the shadow candidate also carries its context.
+    accepted = bool(context.bundle.fnn_accepted)
     candidate_path = context.artifact_dir / "fnn_rule_table_candidate.npy"
-    deployed_path = context.artifact_dir / "fnn_rule_table.npy"
-    candidate_table = np.load(candidate_path if candidate_path.exists() else deployed_path)
+    candidate_context_path = context.artifact_dir / "fnn_context_coefficients_candidate.npy"
+    if candidate_path.exists():
+        candidate_table = np.load(candidate_path)
+    else:
+        candidate_table = np.asarray(context.bundle.fnn_rule_table)
+    if candidate_context_path.exists():
+        candidate_context = np.load(candidate_context_path)
+    else:
+        candidate_context = np.asarray(context.bundle.fnn_context)
     shadow: SimulationResult | None = None
     if accepted:
         controller: PIController = FNNGainController(
-            context.fallback, rule_table=np.load(deployed_path), update_interval_seconds=DEMO_SUPERVISORY_PERIOD_S
+            context.fallback,
+            rule_table=np.asarray(context.bundle.fnn_rule_table),
+            context_coefficients=np.asarray(context.bundle.fnn_context),
+            update_interval_seconds=DEMO_SUPERVISORY_PERIOD_S,
         )
     else:
         controller = PIController(*context.fallback)
         shadow = simulate(
             context.scenario,
-            FNNGainController(context.fallback, rule_table=candidate_table, update_interval_seconds=DEMO_SUPERVISORY_PERIOD_S),
+            FNNGainController(
+                context.fallback,
+                rule_table=candidate_table,
+                context_coefficients=candidate_context,
+                update_interval_seconds=DEMO_SUPERVISORY_PERIOD_S,
+            ),
             seed=context.seed,
         )
     return _PreparedDemo(
         controller=controller,
-        source="validated FNN table" if accepted else "rejected FNN candidate in shadow mode + IMC fallback",
+        source="validated FNN table+context" if accepted else "rejected FNN candidate in shadow mode + IMC fallback",
         deployment_accepted=accepted,
         forced_fallback=not accepted,
         candidate_result=shadow,
@@ -370,11 +382,15 @@ def _prepare_fnn(context: _DemoContext) -> _PreparedDemo:
 
 
 def _prepare_rl(context: _DemoContext) -> _PreparedDemo:
-    accepted = _accepted(context.artifact_dir, "rl_training_history.csv")
-    table_path = context.artifact_dir / ("rl_q_table.npy" if accepted else "rl_q_table_candidate.npy")
-    if accepted and table_path.exists():
+    # P0: load BOTH the Q table and the (5,5,3) coverage mask used by the
+    # sealed acceptance; uncovered states fail closed to IMC.
+    accepted = bool(context.bundle.rl_accepted)
+    if accepted:
         controller: PIController = IncrementalRLController(
-            context.fallback, q_table=np.load(table_path), update_interval_seconds=DEMO_SUPERVISORY_PERIOD_S
+            context.fallback,
+            q_table=np.asarray(context.bundle.rl_q_table),
+            covered_mask=np.asarray(context.bundle.rl_covered_mask),
+            update_interval_seconds=DEMO_SUPERVISORY_PERIOD_S,
         )
         forced = False
     else:
@@ -382,7 +398,7 @@ def _prepare_rl(context: _DemoContext) -> _PreparedDemo:
         forced = True
     return _PreparedDemo(
         controller=controller,
-        source="validated frozen RL policy" if accepted else "RL candidate rejected + IMC fallback",
+        source="validated frozen RL policy+mask" if accepted else "RL candidate rejected + IMC fallback",
         deployment_accepted=accepted,
         forced_fallback=forced,
     )
@@ -469,12 +485,16 @@ def run_algorithm_demo(
             resolved_artifact_dir = root / "archive/outputs_review_v3"
     artifact_dir = resolved_artifact_dir
     model_fopdt = identify_fopdt(scenario)
+    # P0: one bundle for every algorithm; IMC fallback is the bundle's
+    # selected lambda row, never a per-caller re-identification.
+    bundle = _resolve_bundle(artifact_dir, root)
     context = _DemoContext(
         root=root,
         artifact_dir=artifact_dir,
         scenario=scenario,
         model_fopdt=model_fopdt,
-        fallback=_selected_imc(artifact_dir, imc_pi(model_fopdt)),
+        fallback=tuple(bundle.imc_gains),
+        bundle=bundle,
         seed=seed,
         provider=provider,
         model=model,
@@ -509,6 +529,11 @@ def run_algorithm_demo(
             "source": prepared.source,
             "deployment_accepted": int(prepared.deployment_accepted),
             "provider": provider if algorithm == "llm" else "not_applicable",
+            # Provenance: every row traces to the same bundle + code version.
+            "policy_source": context.bundle.provenance.get(algorithm, context.bundle.provenance.get("artifact_dir", "")),
+            "artifact_dir": str(artifact_dir.resolve()) if hasattr(artifact_dir, "resolve") else str(artifact_dir),
+            "bundle_bo_legacy": context.bundle.provenance.get("bo_legacy_fallback", "0"),
+            "bundle_safe_bo_legacy": context.bundle.provenance.get("safe_bo_legacy_fallback", "0"),
         }
     )
     evaluated_agent_rows = [row for row in prepared.agent_trace if row.get("tool") == "evaluate_candidate"]
