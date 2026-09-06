@@ -1,16 +1,33 @@
 """P2: unified results consistency check (tables recomputable from timeseries).
 
+Two explicit modes (improve.md: do not conflate them):
+
+  * Evidence mode (default): ``--sealed-dir DIR [--require-sealed]`` verifies
+    one batch internally -- summary recomputable from details, provenance
+    label, and (E2-B4 only) SHA256SUMS + evidence_index integrity,
+    sealed-vs-history zero-overlap, GP attribution structure and
+    failure-control recomputation.
+  * Repro mode: ``--sealed-dir REPRO --reference-dir EVIDENCE`` skips the
+    integrity extras (a fresh repro directory has no SHA256SUMS by design)
+    and instead aligns REPRO against EVIDENCE by (algorithm, scenario) and
+    compares numerics within 1e-9.  This is what the main report's
+    "repro-to-evidence" command does; the evidence batch itself is still
+    verified with ``sha256sum -c`` + evidence mode.
+
 Checks (fail loudly, no silent pass):
   1. manifest parses and matches hvac_pid.safety/timebase constants.
   2. sealed_80_summary recomputable from sealed_80_details (means + paired CI).
   3. supplement_metrics.json gains match the frozen source (no hard-code swap)
      and its objectives recompute under the six-substep v4 integrator.
   4. No legacy BO/Safe-BO archive read outside PolicyBundle provenance.
-  5. (E2-B4 only) SHA256SUMS + evidence_index integrity, sealed-vs-history
-     zero-overlap, GP attribution structure, failure-control recomputation,
-     provenance comparability label.
+  5. (E2-B4 evidence mode only) SHA256SUMS + evidence_index integrity,
+     sealed-vs-history zero-overlap, GP attribution structure,
+     failure-control recomputation, provenance comparability label.
+  6. (repro mode only) REPRO summaries + per-scenario objectives match
+     REFERENCE within 1e-9.
 
 Usage: python tools/check_results_consistency.py [--sealed-dir DIR] [--require-sealed]
+       python tools/check_results_consistency.py --sealed-dir REPRO --reference-dir EVIDENCE
 """
 from __future__ import annotations
 
@@ -46,7 +63,7 @@ def check_manifest() -> None:
     print(f"manifest OK ({manifest['_manifest_sha256'][:12]})")
 
 
-def check_sealed(sealed_dir: Path) -> None:
+def check_sealed(sealed_dir: Path, reference_dir: Path | None = None) -> None:
     details = _read_csv(sealed_dir / "sealed_80_details.csv")
     summary = _read_csv(sealed_dir / "sealed_80_summary.csv")
     assert len(details) == 560, f"want 560 detail rows, got {len(details)}"
@@ -101,8 +118,44 @@ def check_sealed(sealed_dir: Path) -> None:
             want = 1 if (float(r["fallback_fraction"]) > 1e-12 and float(r["validation_passed"]) < 0.5) else 0
             assert int(float(r["fallback_failed"])) == want, f"{algo} ordinal={r.get('ordinal')} fallback_failed definition drift"
     print(f"sealed OK ({sealed_dir}: 560 details, 7 summaries, E2 stats+acceptance+provenance verified)")
-    if str(prov.get("experiment_id", "")) == "E2-B4":
+    if reference_dir is not None:
+        check_repro_against_reference(sealed_dir, reference_dir)
+    elif str(prov.get("experiment_id", "")) == "E2-B4":
         check_b4_extras(sealed_dir, prov)
+
+
+def check_repro_against_reference(new_dir: Path, ref_dir: Path) -> None:
+    """Repro mode: align REPRO against EVIDENCE by (algorithm, scenario).
+
+    Compares summary statistics and per-scenario objectives within 1e-9.
+    Integrity extras (SHA256SUMS, overlap, attribution, controls) are NOT
+    required here: a fresh repro directory carries no SHA256SUMS by design,
+    and its provenance/scenario identity is already covered by the core
+    sealed check above (E2-B4 seeds + manifest copy + scenario list).
+    """
+    assert ref_dir.exists(), f"reference batch missing: {ref_dir}"
+    new_sum = {r["algorithm"]: r for r in _read_csv(new_dir / "sealed_80_summary.csv")}
+    ref_sum = {r["algorithm"]: r for r in _read_csv(ref_dir / "sealed_80_summary.csv")}
+    assert set(new_sum) == set(ref_sum) == {"zn", "imc", "bo", "safe-bo", "fnn", "rl", "llm"}, (
+        set(new_sum), set(ref_sum))
+    fields = ("mean_objective", "std_objective", "mean_ratio_to_imc",
+              "paired_ratio_mean", "paired_ratio_lo95", "paired_ratio_hi95",
+              "ratio_of_means_to_imc", "validation_rate", "stable_rate",
+              "fallback_rate", "mean_fallback_fraction")
+    for algo in sorted(ref_sum):
+        for field in fields:
+            assert field in new_sum[algo], f"repro summary missing {algo}.{field}"
+            drift = abs(float(new_sum[algo][field]) - float(ref_sum[algo][field]))
+            assert drift < 1e-9, f"repro drift {algo}.{field}: {drift}"
+    new_det = {(r["algorithm"], r["ordinal"]): r for r in _read_csv(new_dir / "sealed_80_details.csv")}
+    ref_det = {(r["algorithm"], r["ordinal"]): r for r in _read_csv(ref_dir / "sealed_80_details.csv")}
+    assert set(new_det) == set(ref_det) and len(ref_det) == 560, (len(new_det), len(ref_det))
+    for key in sorted(ref_det):
+        drift = abs(float(new_det[key]["objective"]) - float(ref_det[key]["objective"]))
+        assert drift < 1e-9, f"repro drift objective {key}: {drift}"
+        assert new_det[key]["validation_passed"] == ref_det[key]["validation_passed"], \
+            f"repro drift validation_passed {key}"
+    print(f"repro OK ({new_dir.name}: 7 summaries + 560 objectives match {ref_dir.name} within 1e-9)")
 
 
 def _scenario_digest_from_row(row: dict[str, str]) -> str:
@@ -257,12 +310,15 @@ def main() -> None:
     parser.add_argument("--sealed-dir", type=Path, default=ROOT / "artifacts" / "runs" / "sealed-80x7-v4")
     parser.add_argument("--require-sealed", action="store_true",
                         help="fail (instead of skip) when --sealed-dir is missing; CI uses this for the B4 main batch")
+    parser.add_argument("--reference-dir", type=Path, default=None,
+                        help="repro mode: compare --sealed-dir numerics against this evidence batch within 1e-9 "
+                             "(skips SHA256SUMS integrity, which a fresh repro dir has no business carrying)")
     args = parser.parse_args()
     check_manifest()
     check_no_implicit_archive()
     check_supplement()
     if args.sealed_dir.exists():
-        check_sealed(args.sealed_dir)
+        check_sealed(args.sealed_dir, reference_dir=args.reference_dir)
     elif args.require_sealed:
         raise SystemExit(f"required sealed batch missing: {args.sealed_dir}")
     else:

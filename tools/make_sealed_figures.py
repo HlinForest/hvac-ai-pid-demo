@@ -142,7 +142,7 @@ def main() -> None:
         minutes = np.asarray(results["imc"].minute)
         ts_path = out / f"exemplar_{tag}_timeseries.csv"
         with ts_path.open("w", encoding="utf-8-sig", newline="") as handle:
-            writer = csv.writer(handle)
+            writer = csv.writer(handle, lineterminator="\n")
             writer.writerow(["minute"] + [f"{a}_zone_c" for a in ALGORITHMS]
                             + [f"{a}_command" for a in ALGORITHMS] + ["setpoint_c"])
             for i, minute in enumerate(minutes):
@@ -160,7 +160,7 @@ def main() -> None:
         print(f"figure {tag}: ordinal={row['ordinal']} J_imc={float(row['objective']):.2f} "
               f"replay OK -> {(out / f'fig_{tag}_coaxial.png').resolve()}")
     with (out / "exemplar_manifest.csv").open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(manifest[0].keys()))
+        writer = csv.DictWriter(handle, fieldnames=list(manifest[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(manifest)
     print(f"exemplars: {len(manifest)} figures + timeseries -> {out.resolve()}")

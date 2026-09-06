@@ -1,0 +1,7 @@
+# 证据完整性要求：同一文件在 Windows 与 Linux 检出下必须逐字节一致，
+# 否则 artifacts/**/SHA256SUMS 的哈希在 CI（Linux）下无法重现。
+# 因此证据目录与 manifest 源一律强制 LF；二进制文件显式标记 binary。
+artifacts/** text eol=lf
+artifacts/**/*.png binary
+artifacts/**/*.npy binary
+experiments/** text eol=lf

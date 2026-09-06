@@ -83,7 +83,7 @@ def main() -> None:
             "cause": cause,
         })
     with (args.sealed / "failure_cases.csv").open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(cases[0].keys()))
+        writer = csv.DictWriter(handle, fieldnames=list(cases[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(cases)
     algos = sorted({r["algorithm"] for r in details})
@@ -103,7 +103,7 @@ def main() -> None:
             "mean_J_failed": round(sum(failed_j) / max(len(failed_j), 1), 2),
         })
     with (args.sealed / "failure_cause_summary.csv").open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(summary[0].keys()))
+        writer = csv.DictWriter(handle, fieldnames=list(summary[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(summary)
     print(f"failures: {len(cases)} cases -> {(args.sealed / 'failure_cases.csv').resolve()}")

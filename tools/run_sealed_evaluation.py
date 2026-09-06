@@ -163,7 +163,7 @@ def _frozen_llm_gains(artifact_dir: Path, output_dir: Path, training: list[Scena
                               config=RiskSafetyConfig()).tune(training, fallback, seed=seed)
     payload = {"kp": float(tuned.kp), "ki": float(tuned.ki), "provider": "replay-frozen",
                "trace_steps": len(tuned.trace), "accepted": bool(tuned.accepted)}
-    (output_dir / "llm_policy.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (output_dir / "llm_policy.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     return ((float(tuned.kp), float(tuned.ki)), "LLMAgentAutoTuner(Replay, training-split freeze)")
 
 
@@ -313,8 +313,10 @@ def main() -> None:
         })
 
     def _write(path: Path, rows: list[dict[str, object]]) -> None:
+        # Evidence text is LF-normalized (see .gitattributes): csv's default
+        # CRLF lineterminator would break SHA256SUMS on Windows checkouts.
         with path.open("w", encoding="utf-8-sig", newline="") as handle:
-            writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+            writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
             writer.writeheader()
             writer.writerows(rows)
 
@@ -403,7 +405,7 @@ def main() -> None:
             "E2: all 7 on same 80 scenarios/seeds/metrics/integrator; frozen policies from mixed origins (v3 frozen + legacy conservative + replay-frozen); LLM replay is NOT live; do not claim unified training or cross-protocol ranking"
         ),
     }
-    (output / "sealed_provenance.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    (output / "sealed_provenance.json").write_text(json.dumps(provenance, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"sealed 80x7: {len(details)} detail rows, {len(summary)} summary rows -> {output.resolve()}")
     for row in summary:
         print(f"  {row['algorithm']:7s} mean={float(row['mean_objective']):.3f} "

@@ -140,7 +140,7 @@ def main() -> None:
     out = args.output or (sealed / "budget_table.csv")
     out.parent.mkdir(parents=True, exist_ok=True)
     with out.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(legend[0].keys()))
+        writer = csv.DictWriter(handle, fieldnames=list(legend[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(legend)
     meta = {"title": "counted compute budget (NOT a complete measured cost)",
@@ -150,7 +150,7 @@ def main() -> None:
                           "integration substeps", "plotting/report rendering",
                           "per-method wall time (only pipeline total, if given)"],
             "warning": "Only BO/random arms share an identical budget."}
-    out.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+    out.with_suffix(".json").write_text(json.dumps(meta, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"budget table: {len(legend)} rows -> {out.resolve()}")
     for row in legend:
         print(f"  {row['method']:16s} sims={row['closed_loop_sims']:>6} obj-h={row['object_hours']:>9} :: {row['note']}")

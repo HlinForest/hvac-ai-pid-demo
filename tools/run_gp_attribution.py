@@ -183,7 +183,7 @@ def main() -> None:
     clu_gi = _cluster_diff_ci(per_seed_gi, args.seed + 916)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with args.output.open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     summary = {
@@ -206,7 +206,7 @@ def main() -> None:
         "elapsed_seconds": time.perf_counter() - started,
     }
     args.output.with_name("gp_attribution_summary.json").write_text(
-        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        json.dumps(summary, ensure_ascii=False, indent=2) + "\n", encoding="utf-8", newline="\n")
     print(f"gp strict attribution: {len(rows)} rows -> {args.output.resolve()}")
     for r in rows:
         print(f"  seed={r['search_seed']} {str(r['method']):12s} train={float(r['train_mean_objective']):.2f} "

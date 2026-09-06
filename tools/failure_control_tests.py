@@ -109,8 +109,9 @@ def main() -> None:
                 "compressor_starts": int(metrics["compressor_start_events"]),
                 "compressor_stops": int(metrics["compressor_stop_events"]),
             })
+    # LF-normalized evidence text (see .gitattributes + run_sealed_evaluation._write).
     with (args.sealed / "failure_control_tests.csv").open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()))
+        writer = csv.DictWriter(handle, fieldnames=list(rows[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(rows)
     summary: list[dict[str, object]] = []
@@ -124,7 +125,7 @@ def main() -> None:
                 "flipped_to_pass": sum(int(r["validation_passed"]) for r in screened),
             })
     with (args.sealed / "failure_control_summary.csv").open("w", encoding="utf-8-sig", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=list(summary[0].keys()))
+        writer = csv.DictWriter(handle, fieldnames=list(summary[0].keys()), lineterminator="\n")
         writer.writeheader()
         writer.writerows(summary)
     print(f"control tests: {len(rows)} runs -> {(args.sealed / 'failure_control_tests.csv').resolve()}")
