@@ -2,7 +2,7 @@ name: Publish teaching reports
 
 on:
   push:
-    branches: ["codex/reconcile-experiments-v4-local"]
+    branches: ["main"]
   workflow_dispatch:
 
 permissions:
