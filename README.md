@@ -14,6 +14,7 @@
 |---|---|
 | 跑实验 | `python run.py --help`（7 个子命令；冒烟先跑 `python main.py --quick`） |
 | 看报告 | `reports/分报告/`（00 总览 → 01 对象 → 02–08 各算法，每篇 md + docx 成对） |
+| 看逐步教学网站 | `python tools/enrich_reports.py` → `python tools/build_site.py` → `cd site; npm install; npm run docs:dev` |
 | 玩演示 | 双击 `run_quick_demo.bat`，或 `streamlit run streamlit_app.py` |
 | 怎么复现历史数据 | `experiments/manifests/v4.yaml` + `experiments/manifests/archive_map.csv` |
 

@@ -7,3 +7,5 @@
 - `REVIEW_DEFECTS.md` / `REVIEW_RESPONSE.md`：两轮评审缺陷清单与答复。
 - `DEMO_GUIDE.md`：运行与演示指南。
 - `notes/`：过程记录（`改进.md`、`实验报告改进.md`），非正式文档。
+- 教学网站源文件：`site/`；从仓库根目录运行 `python tools/enrich_reports.py` 后，再在 `site/` 中运行 `npm install && npm run docs:build`。
+- GitHub Pages 发布由 `.github/workflows/pages.yml` 负责；网站按 00–12 篇显示逐步实验路线，主结论仍以 `docs/主报告.md` 和 B4 封存产物为准。
