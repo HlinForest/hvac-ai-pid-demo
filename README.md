@@ -25,20 +25,42 @@ npm run docs:dev
 
 命令结束后，打开终端打印的本地地址，通常是 `http://localhost:5173/hvac-ai-pid-demo/`。修改报告后重新运行前两个 Python 命令即可刷新网站内容。
 
-## GitHub Pages 怎么看效果
+## GitHub Pages 的会员限制
 
-仓库当前保持 private，Pages 的构建文件已经准备好，但 GitHub Pages 还需要在仓库设置中启用一次。需要对仓库有管理员权限的账号执行以下步骤：
+你看到的“需要开会员”是 GitHub 的方案限制，不是项目配置错误。GitHub Free 只能从公开仓库使用 Pages；私有仓库需要 Pro、Team 或 Enterprise。当前仓库的 Pages 工作流已经能成功构建，部署阶段会因为私有仓库没有 Pages 权限而失败。
 
-1. 打开 [仓库 Pages 设置](https://github.com/HlinForest/hvac-ai-pid-demo/settings/pages)。
-2. 在 **Build and deployment** 中把 **Source** 设为 **GitHub Actions**，保存设置。
-3. 打开 [Actions 工作流](https://github.com/HlinForest/hvac-ai-pid-demo/actions/workflows/pages.yml)，选择 **Publish teaching reports**。
-4. 选择分支 `codex/reconcile-experiments-v4-local`，点击 **Run workflow**；也可以打开最近一次失败的运行并点击 **Re-run failed jobs**。
-5. 等待 `build` 和 `deploy` 都变成绿色。完成后打开：
-   <https://hlinforest.github.io/hvac-ai-pid-demo/>
+不付费时有两种查看方式。
 
-工作流会自动完成以下步骤：重新生成报告、复制图表和下载文件、安装 VitePress、构建 `site/.vitepress/dist`，再发布到 Pages。当前工作流只监听 `codex/reconcile-experiments-v4-local` 分支；如果以后把内容合并到 `main`，需要同步调整 `.github/workflows/pages.yml` 的分支配置。
+### 方式一：本地查看，代码继续保持私有
 
-如果仓库仍为 private，页面是否能被匿名访问取决于 GitHub 账号方案和组织设置；没有公开权限时，请使用有仓库访问权限的 GitHub 账号登录。不要把仓库改成 public，除非你确实希望代码也公开。
+```powershell
+python tools/enrich_reports.py
+python tools/build_site.py
+Set-Location site
+npm install
+npm run docs:dev
+```
+
+打开终端打印的地址，通常是 `http://localhost:5173/hvac-ai-pid-demo/`。这是最完整的预览方式，不需要发布仓库。
+
+### 方式二：代码私有，网站单独放在公开仓库
+
+1. 在 GitHub 新建一个只放网站的公开仓库，例如 `hvac-ai-pid-demo-site`。
+2. 在本项目生成网站：
+
+   ```powershell
+   python tools/enrich_reports.py
+   python tools/build_site.py
+   Set-Location site
+   npm install
+   npm run docs:build
+   ```
+
+3. 将 `site/.vitepress/dist/` 内的文件复制到公开仓库根目录并推送。
+4. 在公开仓库的 **Settings → Pages** 中选择 **Deploy from a branch**，分支选 `main`，目录选 `/ (root)`。
+5. 页面地址会是：`https://hlinforest.github.io/hvac-ai-pid-demo-site/`。
+
+这样公开的是生成后的报告和图片，原始算法代码仍留在本私有仓库。若以后购买 Pro，也可以继续使用当前仓库的 [Pages 工作流](https://github.com/HlinForest/hvac-ai-pid-demo/actions/workflows/pages.yml)，无需改动网站源码。
 
 ## 第一次运行项目
 
