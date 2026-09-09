@@ -1,5 +1,9 @@
 import { defineConfig } from "vitepress";
-import markdownItKatex from "@vscode/markdown-it-katex";
+import markdownItKatexModule from "@vscode/markdown-it-katex";
+
+// The package is published as CommonJS but may be unwrapped by Vite's ESM
+// interop. Normalize both shapes before passing the plugin to MarkdownIt.
+const markdownItKatex = markdownItKatexModule.default ?? markdownItKatexModule;
 
 const chapters = [
   ["00", "我们要控制的，究竟是什么？"],
