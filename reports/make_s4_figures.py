@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""生成 07/08 的新配图：FNN 规则表热力图 与 RL Q 值演化图。
+"""生成 08/09 的新配图：FNN 规则表热力图、RL Q 值演化图 与 RL 贪心策略快照。
 
 - 只读封存 CSV/npy，不回写任何数据文件
 - 复用 make_figures.py 的配色常量
@@ -136,7 +136,7 @@ def fig_fnn_rule_table():
 
 
 # =====================================================================
-# 图 8-3：RL Q 值演化
+# RL Q 值演化（09 篇配图）
 # =====================================================================
 def fig_rl_q_evolution():
     rows = read_csv(V3 / "rl_training_transitions.csv")
@@ -246,7 +246,7 @@ def fig_rl_q_evolution():
              transform=ax2.transAxes, ha="right", fontsize=9, color=INK2,
              bbox=dict(fc="white", ec=BASE, lw=0.6, boxstyle="round,pad=0.5"))
 
-    fig.suptitle("图 8-3  RL Q 值演化：高频状态的 9 个动作 Q 值与全表更新覆盖（由 36000 条转移重建）",
+    fig.suptitle("RL Q 值演化：高频状态的 9 个动作 Q 值与全表更新覆盖（由 36000 条转移重建）",
                  fontsize=13, fontweight="bold", color=INK)
     FIG.mkdir(parents=True, exist_ok=True)
     out = FIG / "fig_rl_q_evolution.png"
@@ -257,10 +257,158 @@ def fig_rl_q_evolution():
     print(f"  学到的 argmax=a{best}, 部署表 argmax=a{dep_a}, 覆盖 {cover_curve[-1]}/675")
 
 
+# =====================================================================
+# RL 贪心策略快照（09 篇配图）：仿教学示例"价值表逐轮快照"
+# =====================================================================
+def fig_rl_policy_snapshots():
+    """5×5 热状态网格上的贪心策略快照（容量档 = 部分负荷 cmd_bin=1）。
+
+    由 36000 条封存转移重放 Q 表（与 fig_rl_q_evolution 同一重放逻辑），在
+    第 1 / 50 / 450 回合各拍一张"学到的贪心策略"，第 4 格是最终部署表。
+    单元格文字 = 该格 argmax 动作的 (Kp, Ki) 目标×IMC（文字承载身份），
+    颜色 = Kp 目标比例（单色三档渐变，冗余编码）；未到访格灰色、运行时回退 IMC。
+    argmax 只在安全屏蔽允许的动作子集内取（与 IncrementalRLController 一致）。
+    """
+    rows = read_csv(V3 / "rl_training_transitions.csv")
+    assert len(rows) == 36000
+    alpha = 0.12
+    ACTS = [(0.75, 0.75), (0.75, 1.00), (0.75, 1.30), (1.00, 0.75), (1.00, 1.00),
+            (1.00, 1.30), (1.30, 0.75), (1.30, 1.00), (1.30, 1.30)]
+    kp_scale = np.array([a[0] for a in ACTS])
+
+    def allowed(e_bin):
+        if e_bin <= 1:
+            return np.flatnonzero((kp_scale <= 1.0) & (np.array([a[1] for a in ACTS]) <= 1.0))
+        if e_bin == 2:
+            return np.flatnonzero(np.array([a[1] for a in ACTS]) <= 1.0)
+        return np.arange(9)
+
+    snap_eps = (1, 50, 450)
+    q = np.zeros((5, 5, 3, 9))
+    q[:, :, :, 4] = 1e-6
+    covered = np.zeros((5, 5, 3), dtype=bool)
+    snaps, covers = {}, {}
+    cur_ep = None
+    for r in rows:
+        ep = int(float(r["episode"]))
+        if ep != cur_ep:
+            if cur_ep is not None and cur_ep in snap_eps:
+                snaps[cur_ep] = q.copy()
+                covers[cur_ep] = covered.copy()
+            cur_ep = ep
+        s = (int(float(r["state_error_bin"])), int(float(r["state_delta_bin"])),
+             int(float(r["state_command_bin"])))
+        covered[s] = True
+        q[s + (int(float(r["action"])),)] += alpha * float(r["td_error"])
+    assert set(snaps) == set(snap_eps), snaps.keys()
+
+    dep = np.load(V3 / "rl_q_table.npy")
+    # 已验证：v3/v4 封存部署表均为策略族选择选中的保守 bootstrap（非学习检查点）
+    boot = np.zeros_like(dep)
+    boot[:, :, :, 4] = 1.0
+    boot[3:, :, :, 2] = 2.0
+    assert np.array_equal(dep, boot), "部署表不再是 baseline_bootstrap_hot_bin_3，请核对策略族选择记录"
+
+    # 单色三档（Kp 0.75/1.00/1.30）：C_AI_SELF 与 SURFACE 混合，浅→深
+    def mix(hex_color, t):
+        a = np.array([int(hex_color[i:i + 2], 16) for i in (1, 3, 5)], dtype=float)
+        b = np.array([int(SURFACE[i:i + 2], 16) for i in (1, 3, 5)], dtype=float)
+        return tuple((t * a + (1 - t) * b) / 255.0)
+
+    def luminance(rgb):
+        c = np.array(rgb)
+        lin = np.where(c <= 0.04045, c / 12.92, ((c + 0.055) / 1.055) ** 2.4)
+        return 0.2126 * lin[0] + 0.7152 * lin[1] + 0.0722 * lin[2]
+
+    step_colors = {0.75: mix(C_AI_SELF, 0.30), 1.00: mix(C_AI_SELF, 0.62), 1.30: mix(C_AI_SELF, 1.0)}
+    # 文本对比度自检（WCAG，较亮/较暗 + 0.05 之比，>=4.5:1）
+    def contrast(rgb1, rgb2):
+        l1, l2 = luminance(rgb1), luminance(rgb2)
+        lighter, darker = max(l1, l2), min(l1, l2)
+        return (lighter + 0.05) / (darker + 0.05)
+
+    for kp, col in step_colors.items():
+        c_ink = contrast(col, (0x0b / 255, 0x0b / 255, 0x0b / 255))
+        c_white = contrast(col, (1.0, 1.0, 1.0))
+        print(f"  cell {kp:.2f}x: ink contrast {c_ink:.1f}:1, white contrast {c_white:.1f}:1")
+    uncovered_color = mix(MUTED, 0.25)
+
+    cmd_bin = 1
+    e_ticks = ["0\n严重偏冷", "1\n偏冷", "2\n带内", "3\n偏热", "4\n严重偏热"]
+    d_ticks = ["0 快速变冷", "1 缓慢变冷", "2 平稳", "3 缓慢变热", "4 快速变热"]
+
+    panels = [
+        (snaps[1], covers[1], "第 1 回合（刚起步：多数格还未到访）"),
+        (snaps[50], covers[50], "第 50 回合"),
+        (snaps[450], covers[450], "第 450 回合 = 学到的最佳检查点（验证 32.77）"),
+        (dep, np.ones((5, 5, 3), dtype=bool), "最终部署表（策略族选择选中保守 bootstrap，验证 31.95）"),
+    ]
+
+    fig, axes = plt.subplots(2, 2, figsize=(12.4, 11.2),
+                             gridspec_kw={"hspace": 0.30, "wspace": 0.16})
+    for ax, (table, cov, title) in zip(axes.flat, panels):
+        rgb = np.zeros((5, 5, 3))
+        labels = [["" for _ in range(5)] for _ in range(5)]
+        for e in range(5):
+            for d in range(5):
+                if not cov[e, d, cmd_bin]:
+                    rgb[d, e] = uncovered_color
+                    labels[d][e] = "·"
+                    continue
+                a = int(allowed(e)[np.argmax(table[e, d, cmd_bin][allowed(e)])])
+                rgb[d, e] = step_colors[ACTS[a][0]]
+                labels[d][e] = f"{ACTS[a][0]:.2f}·{ACTS[a][1]:.2f}"
+        ax.imshow(rgb, aspect="equal", vmin=0, vmax=1)
+        for e in range(5):
+            for d in range(5):
+                white = luminance(rgb[d, e]) < 0.35
+                ax.text(e, d, labels[d][e], ha="center", va="center",
+                        fontsize=8.6, color="white" if white else INK,
+                        fontweight="bold" if labels[d][e] == "·" else "normal")
+        ax.set_xticks(range(5), e_ticks, fontsize=8.2, color=INK2)
+        ax.set_yticks(range(5), d_ticks, fontsize=8.2, color=INK2)
+        ax.set_xlabel("误差 e 档", fontsize=9.5, color=INK)
+        ax.set_ylabel("误差变化率 ė 档", fontsize=9.5, color=INK)
+        ax.set_title(title, fontsize=10.6, color=INK, loc="left", pad=7)
+        for s in ax.spines.values():
+            s.set_color(BASE)
+        ax.set_xticks(np.arange(-0.5, 5, 1), minor=True)
+        ax.set_yticks(np.arange(-0.5, 5, 1), minor=True)
+        ax.grid(which="minor", color=SURFACE, lw=1.6)
+        ax.tick_params(which="minor", length=0)
+        ax.tick_params(which="major", length=0)
+
+    # 图例：色块 + 文字（Kp 比例三档 + 未到访）
+    import matplotlib.patches as mpatches
+    handles = [mpatches.Patch(facecolor=step_colors[k], edgecolor=BASE,
+                              label=f"Kp 目标 {k:.2f}×IMC") for k in (0.75, 1.00, 1.30)]
+    handles.append(mpatches.Patch(facecolor=uncovered_color, edgecolor=BASE, label="未到访（回退 IMC）"))
+    fig.legend(handles=handles, loc="lower center", ncol=4, fontsize=9.2, frameon=False,
+               bbox_to_anchor=(0.5, 0.005))
+    fig.suptitle("RL 贪心策略快照：5×5 热状态网格（容量档 = 部分负荷）\n"
+                 "单元格 = 该格 argmax 动作的 (Kp, Ki) 目标×IMC，由 36000 条封存转移重放重建",
+                 fontsize=12.4, fontweight="bold", color=INK)
+    FIG.mkdir(parents=True, exist_ok=True)
+    out = FIG / "fig_rl_policy_snapshots.png"
+    fig.savefig(out, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print("saved", out)
+    # 自检输出：各快照在 cmd_bin=1 的 argmax 分布
+    import collections
+    for ep in snap_eps:
+        am = []
+        for e in range(5):
+            for d in range(5):
+                if covers[ep][e, d, cmd_bin]:
+                    subset = snaps[ep][e, d, cmd_bin][allowed(e)]
+                    am.append(int(allowed(e)[int(np.argmax(subset))]))
+        print(f"  ep{ep} argmax dist (cmd_bin=1): {dict(sorted(collections.Counter(am).items()))}")
+
+
 def main():
     fig_fnn_rule_table()
     fig_rl_q_evolution()
-
+    fig_rl_policy_snapshots()
 
 if __name__ == "__main__":
     main()
