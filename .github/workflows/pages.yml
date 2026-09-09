@@ -38,6 +38,8 @@ jobs:
       - name: Build VitePress site
         working-directory: site
         run: npm run docs:build
+      - name: Verify rendered site
+        run: python tools/check_site_render.py
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3
         with:

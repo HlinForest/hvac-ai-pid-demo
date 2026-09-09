@@ -10,3 +10,5 @@
 .vp-doc table { display: table; width: 100%; }
 .vp-doc img { border-radius: 8px; cursor: zoom-in; }
 .vp-doc blockquote { background: var(--vp-c-bg-soft); border-radius: 6px; padding: 8px 16px; }
+.vp-doc .katex-display { overflow-x: auto; overflow-y: hidden; padding: 0.35rem 0; }
+.vp-doc .katex { font-size: 1.05em; }

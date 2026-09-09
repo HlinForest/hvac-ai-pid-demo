@@ -1,4 +1,5 @@
 import { defineConfig } from "vitepress";
+import markdownItKatex from "@vscode/markdown-it-katex";
 
 const chapters = [
   ["00", "我们要控制的，究竟是什么？"],
@@ -23,6 +24,11 @@ export default defineConfig({
   base: "/hvac-ai-pid-demo/",
   cleanUrls: true,
   lastUpdated: true,
+  markdown: {
+    config: (md) => {
+      md.use(markdownItKatex, { throwOnError: false });
+    },
+  },
   // DOCX/ZIP files are copied into public/downloads by build_site.py. They
   // are static assets rather than VitePress routes, so skip route validation
   // for this generated download prefix.
