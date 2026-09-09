@@ -23,6 +23,10 @@ export default defineConfig({
   base: "/hvac-ai-pid-demo/",
   cleanUrls: true,
   lastUpdated: true,
+  // DOCX/ZIP files are copied into public/downloads by build_site.py. They
+  // are static assets rather than VitePress routes, so skip route validation
+  // for this generated download prefix.
+  ignoreDeadLinks: [/^\/downloads\//],
   themeConfig: {
     logo: "/figures/fig1_系统结构框图.png",
     nav: [
