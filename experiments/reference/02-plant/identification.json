@@ -1,0 +1,19 @@
+{
+  "scenario": {
+    "gain": 8.0,
+    "tau": 20.0,
+    "delay": 2.0,
+    "ambient": 30.0,
+    "initial": 28.0,
+    "setpoint": 24.0,
+    "dt": 0.1,
+    "duration": 120.0,
+    "disturbance_at": 60.0,
+    "disturbance": 1.0
+  },
+  "identified": {
+    "gain": 8.000000000000007,
+    "tau": 20.000000000000046,
+    "delay": 1.9999999999999403
+  }
+}

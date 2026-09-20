@@ -1,0 +1,17 @@
+{
+  "lambda = 2 min": {
+    "iae": 60.846677221426866,
+    "undershoot": 0.0,
+    "movement": 1.3999900728303356
+  },
+  "lambda = 7 min": {
+    "iae": 78.52816859087352,
+    "undershoot": 0.0,
+    "movement": 1.3749907736308025
+  },
+  "lambda = 20 min": {
+    "iae": 148.6361311060584,
+    "undershoot": 0.0,
+    "movement": 0.8682087189616289
+  }
+}

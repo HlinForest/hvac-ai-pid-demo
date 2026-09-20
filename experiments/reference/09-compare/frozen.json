@@ -1,0 +1,282 @@
+[
+  {
+    "case": "nominal",
+    "method": "ZN",
+    "mode": "fixed",
+    "iae": 49.34790278607127,
+    "undershoot": 0.017845804603393134,
+    "movement": 1.7473496822629424,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "nominal",
+    "method": "SIMC",
+    "mode": "fixed",
+    "iae": 77.9949859104928,
+    "undershoot": 0.0,
+    "movement": 1.3750302331251918,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "nominal",
+    "method": "BO",
+    "mode": "fixed",
+    "iae": 48.7412801020619,
+    "undershoot": 0.05767023219388179,
+    "movement": 2.337615713454918,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "nominal",
+    "method": "FNN",
+    "mode": "fixed",
+    "iae": 48.46761765422411,
+    "undershoot": 0.03360878583576721,
+    "movement": 1.811591213000899,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "nominal",
+    "method": "LLM",
+    "mode": "fixed",
+    "iae": 48.48649923821667,
+    "undershoot": 0.03368301056963219,
+    "movement": 1.8771968040561915,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "nominal",
+    "method": "Q-Learning",
+    "mode": "online",
+    "iae": 72.02928859562628,
+    "undershoot": 0.02969605150927279,
+    "movement": 5.166809765930536,
+    "inference_calls": 60,
+    "inference_seconds": 0.002686800027731806
+  },
+  {
+    "case": "nominal",
+    "method": "DQN",
+    "mode": "online",
+    "iae": 69.65649461350301,
+    "undershoot": 0.0,
+    "movement": 2.9924091045773147,
+    "inference_calls": 60,
+    "inference_seconds": 0.03777869965415448
+  },
+  {
+    "case": "slower",
+    "method": "ZN",
+    "mode": "fixed",
+    "iae": 66.15056307438603,
+    "undershoot": 0.00471100339276731,
+    "movement": 1.6400324503301564,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "slower",
+    "method": "SIMC",
+    "mode": "fixed",
+    "iae": 82.05141564388991,
+    "undershoot": 0.0,
+    "movement": 1.3551018993249997,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "slower",
+    "method": "BO",
+    "mode": "fixed",
+    "iae": 66.79325728564524,
+    "undershoot": 0.08086635495512695,
+    "movement": 2.343109983946831,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "slower",
+    "method": "FNN",
+    "mode": "fixed",
+    "iae": 67.30327850916827,
+    "undershoot": 0.09662059710725046,
+    "movement": 2.137684597058042,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "slower",
+    "method": "LLM",
+    "mode": "fixed",
+    "iae": 66.4006167165385,
+    "undershoot": 0.05063265550534979,
+    "movement": 1.9805091494495168,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "slower",
+    "method": "Q-Learning",
+    "mode": "online",
+    "iae": 82.06758478067721,
+    "undershoot": 0.06155971084618628,
+    "movement": 4.784513048002156,
+    "inference_calls": 60,
+    "inference_seconds": 0.0022551004076376557
+  },
+  {
+    "case": "slower",
+    "method": "DQN",
+    "mode": "online",
+    "iae": 81.46339444785914,
+    "undershoot": 0.0034188561222805447,
+    "movement": 2.892456200520125,
+    "inference_calls": 60,
+    "inference_seconds": 0.005868300097063184
+  },
+  {
+    "case": "long_delay",
+    "method": "ZN",
+    "mode": "fixed",
+    "iae": 84.29890787406086,
+    "undershoot": 0.2760855437847134,
+    "movement": 5.62290760035453,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "long_delay",
+    "method": "SIMC",
+    "mode": "fixed",
+    "iae": 94.49024236807003,
+    "undershoot": 0.0,
+    "movement": 1.461605283783089,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "long_delay",
+    "method": "BO",
+    "mode": "fixed",
+    "iae": 93.79277418943508,
+    "undershoot": 0.28747951232477575,
+    "movement": 5.992985502771803,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "long_delay",
+    "method": "FNN",
+    "mode": "fixed",
+    "iae": 86.40494314812997,
+    "undershoot": 0.3032620645512729,
+    "movement": 4.860540935609313,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "long_delay",
+    "method": "LLM",
+    "mode": "fixed",
+    "iae": 88.61505478906633,
+    "undershoot": 0.28592087812771894,
+    "movement": 5.414794649881905,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "long_delay",
+    "method": "Q-Learning",
+    "mode": "online",
+    "iae": 81.98995620707076,
+    "undershoot": 0.0,
+    "movement": 4.513138849975023,
+    "inference_calls": 60,
+    "inference_seconds": 0.0021416997769847512
+  },
+  {
+    "case": "long_delay",
+    "method": "DQN",
+    "mode": "online",
+    "iae": 85.78059957280117,
+    "undershoot": 0.0,
+    "movement": 3.7782347959995457,
+    "inference_calls": 60,
+    "inference_seconds": 0.006660499726422131
+  },
+  {
+    "case": "larger_load",
+    "method": "ZN",
+    "mode": "fixed",
+    "iae": 50.03787577175875,
+    "undershoot": 2.772078675761236e-05,
+    "movement": 1.6276757522776002,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "larger_load",
+    "method": "SIMC",
+    "mode": "fixed",
+    "iae": 82.00528273797511,
+    "undershoot": 0.0,
+    "movement": 1.4375185062977074,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "larger_load",
+    "method": "BO",
+    "mode": "fixed",
+    "iae": 48.94994089495253,
+    "undershoot": 0.038397638613254514,
+    "movement": 2.1088288532205617,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "larger_load",
+    "method": "FNN",
+    "mode": "fixed",
+    "iae": 49.04268874323122,
+    "undershoot": 0.03360878583576721,
+    "movement": 1.839098658382976,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "larger_load",
+    "method": "LLM",
+    "mode": "fixed",
+    "iae": 48.96339999790733,
+    "undershoot": 0.006370809623032159,
+    "movement": 1.7575686482148951,
+    "inference_calls": 0,
+    "inference_seconds": 0
+  },
+  {
+    "case": "larger_load",
+    "method": "Q-Learning",
+    "mode": "online",
+    "iae": 74.78192425550014,
+    "undershoot": 0.014741224416042087,
+    "movement": 5.395689803208983,
+    "inference_calls": 60,
+    "inference_seconds": 0.0019444999634288251
+  },
+  {
+    "case": "larger_load",
+    "method": "DQN",
+    "mode": "online",
+    "iae": 73.02578857374644,
+    "undershoot": 0.0,
+    "movement": 3.6713791178176844,
+    "inference_calls": 60,
+    "inference_seconds": 0.009053400077391416
+  }
+]

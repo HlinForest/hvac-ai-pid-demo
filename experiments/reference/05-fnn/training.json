@@ -1,0 +1,35 @@
+{
+  "seed": 0,
+  "ridge": 0.01,
+  "selection": [
+    {
+      "ridge": 0.0001,
+      "mean_validation_iae": 47.34492986653418
+    },
+    {
+      "ridge": 0.001,
+      "mean_validation_iae": 45.959607313199
+    },
+    {
+      "ridge": 0.01,
+      "mean_validation_iae": 45.63041167692642
+    }
+  ],
+  "nominal_gains": {
+    "kp": 0.7855128311508233,
+    "ki": 0.15042315237340553
+  },
+  "label_source": "BO",
+  "train_objects": 48,
+  "validation_objects": 12,
+  "cost": {
+    "label_simulations": 1200,
+    "label_plant_steps": 1440000,
+    "identification_steps": 288000,
+    "selection_simulations": 36,
+    "selection_plant_steps": 43200,
+    "label_seconds": 10.41778289998183,
+    "fit_and_selection_seconds": 1.3877862999797799,
+    "seconds": 11.805778599984478
+  }
+}

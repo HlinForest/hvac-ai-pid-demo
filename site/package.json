@@ -1,0 +1,21 @@
+{
+  "name": "hands-on-ai-pi",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "docs:prepare": "python -m hvac_pid site --output ../experiments/reference --destination .",
+    "docs:dev": "vitepress dev .",
+    "docs:build": "vitepress build .",
+    "docs:preview": "vitepress preview .",
+    "docs:check": "node ../tests/check_site.mjs"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4",
+    "@vscode/markdown-it-katex": "^1.1.2",
+    "katex": "^0.16.22",
+    "@playwright/test": "^1.51.0"
+  },
+  "overrides": {
+    "vite": "6.4.3"
+  }
+}

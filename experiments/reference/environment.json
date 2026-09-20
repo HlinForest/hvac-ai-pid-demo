@@ -1,0 +1,13 @@
+{
+  "python": "3.11.7",
+  "platform": "Windows-10-10.0.26200-SP0",
+  "packages": {
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "scikit-learn": "1.9.1",
+    "matplotlib": "3.11.2",
+    "torch": "2.14.0+cpu"
+  },
+  "commit": "00056dfe4c19ce7d8b4f317b15832cb85f7d67b8",
+  "dirty": true
+}
