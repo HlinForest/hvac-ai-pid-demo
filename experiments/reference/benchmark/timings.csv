@@ -1,0 +1,9 @@
+method,component,interval_minutes,learned_parameters,artifact_bytes,median_us,p95_us,samples,warmup_calls
+PI (all methods),control update,0.1,2,0,1.2,1.9,1000,100
+FNN,one-time commissioning prediction,,54,708,25.5,36.25999999999995,1000,100
+Q-Learning,frozen gain policy,2.0,6075,48856,26.7,56.049999999999955,1000,100
+DQN,frozen gain policy,2.0,1545,8829,68.5,130.35499999999996,1000,100
+PPO,frozen gain policy,2.0,4804,22397,153.05,302.61,1000,100
+TD3,frozen gain policy,2.0,4674,21885,129.7,261.91999999999996,1000,100
+SAC,frozen gain policy,2.0,4804,22333,361.4,645.62,1000,100
+CrossQ,frozen gain policy,2.0,4804,22397,153.1,283.9649999999999,1000,100

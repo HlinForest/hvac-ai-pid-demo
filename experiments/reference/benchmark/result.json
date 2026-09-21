@@ -1,0 +1,110 @@
+{
+  "environment": {
+    "python": "3.11.7",
+    "platform": "Windows-10-10.0.26200-SP0",
+    "processor": "AMD64 Family 25 Model 116 Stepping 1, AuthenticAMD",
+    "packages": {
+      "numpy": "2.4.6",
+      "scipy": "1.17.1",
+      "scikit-learn": "1.9.1",
+      "matplotlib": "3.11.2",
+      "torch": "2.14.0+cpu"
+    },
+    "commit": "686899e8e7400a4781e4ed954b4b41a12ef69b7b",
+    "dirty": true,
+    "source_sha256": "7ec4bbaa9d0d5af2b46250ba3b7b59ab1753ccd7c7b45a6fbaa26322eb173bee",
+    "torch_threads": 1
+  },
+  "protocol": "CPU, batch=1, 100 warm-up calls, wall time includes observation conversion; no gradients or exploration.",
+  "fixed_methods": "ZN/SIMC/BO/FNN/LLM/PG4PI-HVAC all execute only the shared PI online. FNN prediction above is one-time.",
+  "rows": [
+    {
+      "method": "PI (all methods)",
+      "component": "control update",
+      "interval_minutes": 0.1,
+      "learned_parameters": 2,
+      "artifact_bytes": 0,
+      "median_us": 1.2,
+      "p95_us": 1.9,
+      "samples": 1000,
+      "warmup_calls": 100
+    },
+    {
+      "method": "FNN",
+      "component": "one-time commissioning prediction",
+      "interval_minutes": null,
+      "learned_parameters": 54,
+      "artifact_bytes": 708,
+      "median_us": 25.5,
+      "p95_us": 36.25999999999995,
+      "samples": 1000,
+      "warmup_calls": 100
+    },
+    {
+      "method": "Q-Learning",
+      "component": "frozen gain policy",
+      "interval_minutes": 2.0,
+      "learned_parameters": 6075,
+      "artifact_bytes": 48856,
+      "median_us": 26.7,
+      "p95_us": 56.049999999999955,
+      "samples": 1000,
+      "warmup_calls": 100
+    },
+    {
+      "method": "DQN",
+      "component": "frozen gain policy",
+      "interval_minutes": 2.0,
+      "learned_parameters": 1545,
+      "artifact_bytes": 8829,
+      "median_us": 68.5,
+      "p95_us": 130.35499999999996,
+      "samples": 1000,
+      "warmup_calls": 100
+    },
+    {
+      "method": "PPO",
+      "component": "frozen gain policy",
+      "interval_minutes": 2.0,
+      "learned_parameters": 4804,
+      "artifact_bytes": 22397,
+      "median_us": 153.05,
+      "p95_us": 302.61,
+      "samples": 1000,
+      "warmup_calls": 100
+    },
+    {
+      "method": "TD3",
+      "component": "frozen gain policy",
+      "interval_minutes": 2.0,
+      "learned_parameters": 4674,
+      "artifact_bytes": 21885,
+      "median_us": 129.7,
+      "p95_us": 261.91999999999996,
+      "samples": 1000,
+      "warmup_calls": 100
+    },
+    {
+      "method": "SAC",
+      "component": "frozen gain policy",
+      "interval_minutes": 2.0,
+      "learned_parameters": 4804,
+      "artifact_bytes": 22333,
+      "median_us": 361.4,
+      "p95_us": 645.62,
+      "samples": 1000,
+      "warmup_calls": 100
+    },
+    {
+      "method": "CrossQ",
+      "component": "frozen gain policy",
+      "interval_minutes": 2.0,
+      "learned_parameters": 4804,
+      "artifact_bytes": 22397,
+      "median_us": 153.1,
+      "p95_us": 283.9649999999999,
+      "samples": 1000,
+      "warmup_calls": 100
+    }
+  ]
+}

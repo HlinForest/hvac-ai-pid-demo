@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { createServer } from 'node:http';
-import { readFile, stat, mkdir } from 'node:fs/promises';
+import { readFile, stat, mkdir, readdir } from 'node:fs/promises';
 import { resolve, extname, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from '../site/node_modules/playwright-core/index.mjs';
@@ -25,8 +25,8 @@ const server = createServer(async (req, res) => {
 });
 await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
 const origin = `http://127.0.0.1:${server.address().port}`;
-const slugs = ['01-temperature', '02-plant', '03-classical', '04-bo', '05-fnn',
-  '06-qlearning', '07-dqn', '08-llm', '09-comparison'];
+const chapterDir = fileURLToPath(new URL('../site/chapters/', import.meta.url));
+const slugs = (await readdir(chapterDir)).filter(name => name.endsWith('.md')).map(name => name.slice(0, -3));
 let browser;
 try {
   browser = await chromium.launch({ headless: true });
@@ -46,19 +46,36 @@ try {
       assert.ok(await page.locator('.katex').count() > 0, `${slug}: formulas missing`);
     }
     const links = await page.locator('a[href]').evaluateAll(elements => elements.map(a => a.href));
+    for (const href of links.filter(link => link.startsWith(origin + '/'))) {
+      assert.ok(href.startsWith(origin + base), `Internal link escaped the Pages base: ${href}`);
+    }
     for (const href of new Set(links.filter(link => link.startsWith(origin + base)))) {
       const check = await page.request.get(href.split('#')[0]);
       assert.equal(check.status(), 200, `Broken internal link: ${href}`);
+      const fragment = decodeURIComponent(new URL(href).hash.slice(1));
+      if (fragment && (check.headers()['content-type'] || '').includes('text/html')) {
+        const html = await check.text();
+        assert.ok(html.includes(`id="${fragment}"`) || html.includes(`id='${fragment}'`),
+          `Broken internal fragment: ${href}`);
+      }
     }
     await page.screenshot({ path: resolve(output, (slug.split('/').pop() || 'index') + '.png'), fullPage: true });
+    if (slug === 'chapters/14-pg4pi') {
+      await page.screenshot({ path: resolve(output, 'desktop-pg4pi-intro.png') });
+    }
   }
   await page.goto(origin + base + 'chapters/06-qlearning');
   assert.ok((await page.locator('.vp-doc').innerText()).includes('update_q'));
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto(origin + base + 'chapters/04-bo', { waitUntil: 'networkidle' });
-  const dimensions = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
-  assert.ok(dimensions.document <= dimensions.viewport + 1, 'Mobile page overflows horizontally');
-  await page.screenshot({ path: resolve(output, 'mobile-bo.png'), fullPage: true });
+  for (const slug of slugs) {
+    await page.goto(origin + base + 'chapters/' + slug, { waitUntil: 'networkidle' });
+    const dimensions = await page.evaluate(() => ({ viewport: innerWidth, document: document.documentElement.scrollWidth }));
+    assert.ok(dimensions.document <= dimensions.viewport + 1, `${slug}: mobile page overflows horizontally`);
+    await page.screenshot({ path: resolve(output, 'mobile-' + slug + '.png'), fullPage: true });
+    if (slug === '13-crossq') {
+      await page.screenshot({ path: resolve(output, 'mobile-crossq-intro.png') });
+    }
+  }
   assert.deepEqual(errors, []);
   console.log(`Checked ${slugs.length + 1} pages: formulas, images, source snippets, links, mobile layout.`);
 } finally {

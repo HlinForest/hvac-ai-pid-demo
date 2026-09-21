@@ -2528,7 +2528,7 @@
     "transitions": 30000,
     "plant_steps": 600000,
     "commissioning_steps": 115200,
-    "seconds": 5.878445099981036,
+    "seconds": 5.8869205999944825,
     "validation_simulations": 12,
     "validation_plant_steps": 14400,
     "validation_identification_steps": 28800

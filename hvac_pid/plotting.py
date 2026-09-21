@@ -41,8 +41,8 @@ def responses(results, path, gains=False):
     axes[1].set_ylabel("Cooling command")
     axes[1].set_ylim(-0.03, 1.05)
     if gains:
-        axes[2].set_ylabel("Kp")
-        axes[3].set_ylabel("Ki (/min)")
+        axes[2].set_ylabel("Kp (1/°C)")
+        axes[3].set_ylabel("Ki (1/(°C min))")
     axes[-1].set_xlabel("Time (min)")
     for ax in axes:
         ax.grid(alpha=0.15)
@@ -66,7 +66,7 @@ def search(trials, path):
     points = axes[0].scatter([t["kp"] for t in valid], [t["ki"] for t in valid], c=values, cmap="viridis_r")
     for i, t in enumerate(valid):
         axes[0].annotate(str(i + 1), (t["kp"], t["ki"]), xytext=(4, 4), textcoords="offset points", fontsize=8)
-    axes[0].set(xscale="log", yscale="log", xlabel="Kp", ylabel="Ki (/min)")
+    axes[0].set(xscale="log", yscale="log", xlabel="Kp (1/°C)", ylabel="Ki (1/(°C min))")
     fig.colorbar(points, ax=axes[0], label="IAE (°C min)")
     axes[1].plot(np.arange(1, len(valid) + 1), values, "o", alpha=0.5, label="Trial")
     axes[1].plot(np.arange(1, len(valid) + 1), np.minimum.accumulate(values), label="Best so far")
@@ -105,11 +105,35 @@ def learning(history, path, label):
     axes[0].legend(frameon=False, fontsize=8)
     if any(h.get("loss") is not None for h in history):
         axes[1].plot(episode, [h.get("loss", np.nan) for h in history])
-        axes[1].set(ylabel="Mean Huber loss")
+        axes[1].set(ylabel="Training loss (algorithm-specific)")
     else:
-        axes[1].plot(episode, [h["epsilon"] for h in history])
-        axes[1].set(ylabel="Exploration probability")
+        axes[1].plot(episode, [h.get("epsilon", np.nan) for h in history])
+        axes[1].set(ylabel="Exploration probability (where applicable)")
     axes[1].set_xlabel("Episode")
+    finish(fig, path)
+
+
+def pg_learning(trials, path):
+    fig, axes = plt.subplots(1, 2, figsize=(10, 3.8))
+    episodes = np.arange(1, len(trials) + 1)
+    axes[0].plot(episodes, [r["return"] for r in trials], alpha=0.7)
+    axes[0].set(xlabel="Training trajectory", ylabel="Exploratory return = -IAE")
+    for key in ("kp", "ki"):
+        axes[1].plot(episodes, [r[key] for r in trials], label=key)
+    axes[1].set(xlabel="Training trajectory", ylabel="Fixed gains within a trajectory", yscale="log")
+    axes[1].legend(frameon=False)
+    finish(fig, path)
+
+
+def distributions(rows, path, key="method", value="iae", title="Held-out objects"):
+    names = list(dict.fromkeys(r[key] for r in rows))
+    fig, ax = plt.subplots(figsize=(11, 4.6))
+    data = [[r[value] for r in rows if r[key] == name] for name in names]
+    ax.boxplot(data, tick_labels=names, showfliers=False)
+    for i, values in enumerate(data, 1):
+        ax.scatter(np.full(len(values), i), values, s=12, alpha=0.5)
+    ax.set(ylabel="IAE (°C min)", title=title)
+    ax.tick_params(axis="x", labelrotation=35)
     finish(fig, path)
 
 

@@ -1,0 +1,57 @@
+{
+  "first_update": {
+    "episode": 0,
+    "return": -72.53059508953301,
+    "action": [
+      [
+        -0.013663858212678737
+      ]
+    ],
+    "mean": [
+      [
+        -0.0033419730333229514
+      ]
+    ],
+    "score_p": [
+      [
+        3.0425653507799626
+      ]
+    ],
+    "score_i": [
+      [
+        -0.0
+      ]
+    ],
+    "K_p_before": 0.001,
+    "K_i_before": 0.001,
+    "alpha": 0.01
+  },
+  "last_update": {
+    "episode": 9,
+    "return": -0.01108908149494828,
+    "action": [
+      [
+        -0.09004909355958793
+      ]
+    ],
+    "mean": [
+      [
+        -0.062405809058004205
+      ]
+    ],
+    "score_p": [
+      [
+        -0.006867487556599293
+      ]
+    ],
+    "score_i": [
+      [
+        2.6340580994321257
+      ]
+    ],
+    "K_p_before": -0.02117596788908014,
+    "K_i_before": 0.02328709555707419,
+    "alpha": 0.01
+  },
+  "note": "Trace records are captured immediately before the upstream K_p assignment; one-update.json contains the first gain update summary."
+}

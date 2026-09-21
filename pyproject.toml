@@ -4,13 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "hvac-ai-pid-demo"
-version = "5.0.0"
-description = "Hands-on PI tuning: classical rules, BO, fuzzy learning, Q-learning, DQN and LLM"
+version = "6.0.0"
+description = "Twelve hands-on PI tuning methods, from classical rules to policy gradients"
 requires-python = ">=3.10"
 dependencies = ["numpy>=1.26,<3", "scipy>=1.12,<2", "scikit-learn>=1.4,<2", "matplotlib>=3.8,<4"]
 
 [project.optional-dependencies]
 dqn = ["torch>=2.2,<3"]
+rl = ["torch>=2.2,<3"]
 test = ["pytest>=8,<10"]
 
 [tool.setuptools.packages.find]

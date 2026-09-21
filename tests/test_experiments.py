@@ -5,7 +5,7 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from experiments.site import export, summarize_repeats
+from experiments.site import export, summarize_repeats, publishable
 from hvac_pid.artifacts import read_json, write_json
 from hvac_pid.core import Gains, Scenario, evaluate
 from hvac_pid.fnn import FNN
@@ -49,11 +49,30 @@ def test_site_export_preserves_handwritten_prose(tmp_path):
     chapter = tmp_path / "chapters/01.md"
     chapter.parent.mkdir()
     chapter.write_text("A human-written explanation.", encoding="utf-8")
+    stale = tmp_path / "public/results/old-credentials.json"
+    stale.parent.mkdir(parents=True)
+    stale.write_text("private stale artifact", encoding="utf-8")
     export(REFERENCE, tmp_path)
+    assert not stale.exists()
     assert chapter.read_text(encoding="utf-8") == "A human-written explanation."
     assert (tmp_path / "generated/bo-trials.md").exists()
     status = read_json(REFERENCE / "08-llm/result.json")["status"]
     assert status in (tmp_path / "generated/llm-status.md").read_text(encoding="utf-8")
+    manifest = read_json(tmp_path / "public/results/manifest.json")
+    assert "08-llm/result.json" in manifest["assets"]
+    assert "05-fnn/model.npz" in manifest["assets"]
+    assert (tmp_path / "public/results/03-classical/ZN.csv").exists()
+
+
+def test_public_artifacts_use_allowlist_and_reject_credentials(tmp_path):
+    assert not publishable(Path(".env"))
+    assert not publishable(Path("08-llm/credentials.json"))
+    assert not publishable(Path("private/result.json"))
+    assert publishable(Path("explain/sac.json"))
+    source = tmp_path / "source"
+    write_json(source / "08-llm/result.json", {"accidental_secret": "sk-" + "a" * 32})
+    with pytest.raises(ValueError, match="Credential-like"):
+        export(source, tmp_path / "site")
 
 
 def test_repeats_summary_uses_independent_runs(tmp_path):

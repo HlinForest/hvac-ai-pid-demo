@@ -1,0 +1,144 @@
+{
+  "source": "14-pg4pi/result.json",
+  "first_trajectory": {
+    "episode": 0,
+    "return": -79.08364732686586,
+    "iae": 79.08364732686586,
+    "kp": 0.28846153846154043,
+    "ki": 0.01442307692307698,
+    "gradient": [
+      -7577.758273919086,
+      233077.23857928847
+    ],
+    "gradient_kp": -7577.758273919086,
+    "gradient_ki": 233077.23857928847,
+    "gradient_logits": [
+      -3017.249903040521,
+      6957.494684083313
+    ],
+    "logits": [
+      0.36160675141523163,
+      0.33794665143474223
+    ],
+    "noise": {
+      "std": 0.1,
+      "mean": -0.0032019938571554397,
+      "sample_std": 0.09778154429411474,
+      "l2": 3.3890676893570335,
+      "first": 0.01257302210933933,
+      "last": -0.11733269767074715,
+      "samples": 1200
+    },
+    "noise_std": 0.1,
+    "noise_mean": -0.0032019938571554397,
+    "noise_l2": 3.3890676893570335,
+    "steps": 1200,
+    "status": "updated"
+  },
+  "cost": {
+    "algorithm": "PG4PI-HVAC",
+    "seed": 0,
+    "episodes": 500,
+    "simulations": 500,
+    "identification_steps": 2400,
+    "plant_steps": 600000,
+    "proposal_rounds": 0,
+    "noise_std": 0.1,
+    "noise": {
+      "distribution": "normal",
+      "std": 0.1,
+      "samples_per_episode": 1200
+    },
+    "learning_rate": 1e-05,
+    "return_to_go": true,
+    "initial_gains": {
+      "kp": 0.2884615384615404,
+      "ki": 0.014423076923076986
+    },
+    "final_gains": {
+      "kp": 0.634256712216447,
+      "ki": 0.037467601201599775
+    },
+    "first_update": {
+      "episode": 0,
+      "return": -79.08364732686586,
+      "iae": 79.08364732686586,
+      "gains_before": {
+        "kp": 0.28846153846154043,
+        "ki": 0.01442307692307698
+      },
+      "gains_after": {
+        "kp": 0.2766641398039315,
+        "ki": 0.01664206758920262
+      },
+      "logits_before": [
+        0.36160675141523163,
+        0.33794665143474223
+      ],
+      "logits_after": [
+        0.33143425238482643,
+        0.4075215982755754
+      ],
+      "gradient_kp_ki": [
+        -7577.758273919086,
+        233077.23857928847
+      ],
+      "gradient_logits": [
+        -3017.249903040521,
+        6957.494684083313
+      ],
+      "learning_rate": 1e-05,
+      "noise": {
+        "std": 0.1,
+        "mean": -0.0032019938571554397,
+        "sample_std": 0.09778154429411474,
+        "l2": 3.3890676893570335,
+        "first": 0.01257302210933933,
+        "last": -0.11733269767074715,
+        "samples": 1200
+      },
+      "first_nonzero_sensitivity_step": {
+        "index": 47,
+        "time": 4.7,
+        "temperature": 27.446717927217193,
+        "error": 3.4467179272171933,
+        "mean": 0.9992167837076835,
+        "latent": 1.19524261535268,
+        "command": 1.0,
+        "mean_sensitivity": [
+          3.4467179272171933,
+          0.34467179272171933
+        ],
+        "score": 19.60258316449965,
+        "reward_to_go": -60.5759192044499,
+        "score_weight": -60.5759192044499,
+        "weighted_score_contribution": [
+          -4092.7862249460236,
+          -409.27862249460236
+        ],
+        "score_sum": [
+          -10.603826216535289,
+          -21663.172646810093
+        ]
+      },
+      "first_step": {
+        "time": 0.0,
+        "temperature": 28.0,
+        "error": 4.0,
+        "mean": 1.0,
+        "latent": 1.0125730221093394,
+        "command": 1.0,
+        "mean_sensitivity": [
+          0.0,
+          0.0
+        ],
+        "integral": 0.0,
+        "integral_sensitivity": [
+          0.0,
+          0.0
+        ]
+      }
+    },
+    "seconds": 7.457390600000508
+  }
+}

@@ -879,7 +879,7 @@ L 633.106562 300.754407
      </g>
     </g>
     <g id="text_21">
-     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="27.523438" y="335.913899" transform="rotate(-90 27.523438 335.913899)">Kp</text>
+     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="27.523438" y="335.913899" transform="rotate(-90 27.523438 335.913899)">Kp (1/°C)</text>
     </g>
    </g>
    <g id="line2d_81">
@@ -1117,7 +1117,7 @@ L 633.106562 444.803719
      </g>
     </g>
     <g id="text_33">
-     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="14.798438" y="470.264041" transform="rotate(-90 14.798438 470.264041)">Ki (/min)</text>
+     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="14.798438" y="470.264041" transform="rotate(-90 14.798438 470.264041)">Ki (1/(°C min))</text>
     </g>
    </g>
    <g id="line2d_103">

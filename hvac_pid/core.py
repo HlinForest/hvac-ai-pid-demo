@@ -115,7 +115,9 @@ def score(trace: Trace) -> Evaluation:
 
 
 class GainPolicy(Protocol):
-    def choose(self, observation: np.ndarray) -> int: ...
+    action_mode: str
+
+    def choose(self, observation: np.ndarray) -> int | np.ndarray: ...
 
 
 ACTION_SCALES = np.asarray([(p, i) for p in (0.5, 1.0, 2.0) for i in (0.5, 1.0, 2.0)])
@@ -177,6 +179,19 @@ class TuningEnv:
             raise ValueError("action must be an integer from 0 to 8")
         scales = ACTION_SCALES[action]
         gains = Gains(self.anchor.kp * scales[0], self.anchor.ki * scales[1])
+        return self._step_gains(gains)
+
+    def step_continuous(self, action):
+        """Absolute log2 gain multipliers; bounds are part of the action space."""
+        action = np.asarray(action, dtype=float)
+        if action.shape != (2,) or not np.all(np.isfinite(action)) or np.any(np.abs(action) > 1):
+            raise ValueError("continuous action must contain two finite values in [-1, 1]")
+        scales = np.exp2(action)
+        return self._step_gains(Gains(self.anchor.kp * scales[0], self.anchor.ki * scales[1]))
+
+    def _step_gains(self, gains):
+        if self.index >= self.scenario.steps:
+            raise RuntimeError("Episode finished; call reset before stepping again")
         start = self.index
         reward = -self.advance(gains, self.interval_steps)
         error = self.plant.temperature - self.scenario.setpoint
@@ -197,10 +212,13 @@ def simulate(scenario: Scenario, gains: Gains, policy: GainPolicy | None = None)
     if policy is None:
         env.advance(gains, scenario.steps)
     else:
+        if policy.action_mode not in {"discrete", "continuous"}:
+            raise ValueError("Unknown policy action mode")
+        step = env.step_continuous if policy.action_mode == "continuous" else env.step
         observation = env.observation()
         done = False
         while not done:
-            observation, _, done = env.step(policy.choose(observation))
+            observation, _, done = step(policy.choose(observation))
     return env.trace()
 
 

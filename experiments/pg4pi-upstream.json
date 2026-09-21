@@ -1,0 +1,37 @@
+{
+  "repository": "https://github.com/sharma1256/RL-optimal-pid.git",
+  "commit": "37c8882d3828a2811120f9467a9e88b4bd95449f",
+  "commit_date": "2025-12-13T16:01:08+05:30",
+  "entrypoint": "PG4PI.py",
+  "environment": "controlgym rea linear-control benchmark",
+  "reference_scope": "The upstream script is executed as a separately checked-out reference. Its REA state-space experiment is not the HVAC simulator and its implementation is not copied into hvac_pid.",
+  "optional_dependencies": [
+    "numpy>=1.23.5",
+    "scipy>=1.11.1",
+    "matplotlib>=3.7.1",
+    "torch>=2.0.1",
+    "gymnasium==0.29.1",
+    "gym==0.26.2"
+  ],
+  "execution": {
+    "source_dir": "upstream",
+    "dependency_dir": "deps",
+    "install_dependencies": false,
+    "dependency_install_policy": "When requested, install only the gym/gymnasium adapter packages and their small notifications packages under output/deps; inherit base NumPy, SciPy, matplotlib and CPU torch.",
+    "matplotlib_backend": "Agg",
+    "seed": 0,
+    "recorded_files": [
+      "config.json",
+      "one-update.json",
+      "update-trace.json",
+      "results.json",
+      "stdout.txt",
+      "stderr.txt"
+    ]
+  },
+  "known_upstream_limitations": [
+    "PG4PI.py has module-level experiment flags and runs on import.",
+    "The script does not seed NumPy itself; the isolated runner seeds it before runpy execution.",
+    "The reference runner reports execution status and captured artifacts independently; it does not claim numerical replication of the HVAC implementation."
+  ]
+}

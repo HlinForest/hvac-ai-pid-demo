@@ -1260,7 +1260,7 @@ z
      </g>
     </g>
     <g id="text_29">
-     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="375.002891" y="125.097422" transform="rotate(-90 375.002891 125.097422)">Mean Huber loss</text>
+     <text style="font-size: 10px; font-family: 'DejaVu Sans'; text-anchor: middle" x="375.002891" y="125.097422" transform="rotate(-90 375.002891 125.097422)">Training loss (algorithm-specific)</text>
     </g>
    </g>
    <g id="line2d_27">

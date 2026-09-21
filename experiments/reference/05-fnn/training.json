@@ -28,8 +28,8 @@
     "identification_steps": 288000,
     "selection_simulations": 36,
     "selection_plant_steps": 43200,
-    "label_seconds": 10.41778289998183,
-    "fit_and_selection_seconds": 1.3877862999797799,
-    "seconds": 11.805778599984478
+    "label_seconds": 10.696612899992033,
+    "fit_and_selection_seconds": 1.155608500004746,
+    "seconds": 11.852418700000271
   }
 }

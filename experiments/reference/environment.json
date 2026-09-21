@@ -1,6 +1,7 @@
 {
   "python": "3.11.7",
   "platform": "Windows-10-10.0.26200-SP0",
+  "processor": "AMD64 Family 25 Model 116 Stepping 1, AuthenticAMD",
   "packages": {
     "numpy": "2.4.6",
     "scipy": "1.17.1",
@@ -8,6 +9,7 @@
     "matplotlib": "3.11.2",
     "torch": "2.14.0+cpu"
   },
-  "commit": "00056dfe4c19ce7d8b4f317b15832cb85f7d67b8",
-  "dirty": true
+  "commit": "686899e8e7400a4781e4ed954b4b41a12ef69b7b",
+  "dirty": true,
+  "source_sha256": "d3352825abec15bf18cda9ae2d23c6aa6cccc71bd2b1d6c2760dac0a32a76a4e"
 }

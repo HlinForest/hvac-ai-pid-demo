@@ -63,12 +63,13 @@
     }
   },
   "frozen": "All initial gains/anchors come from nominal commissioning. No retuning on shifts.",
-  "holdout": "Each new object is commissioned. FNN/Q/DQN remain frozen; BO tunes the new object.",
+  "holdout": "Each new object is commissioned. FNN and online policies stay frozen; BO and PG4PI tune the new object. No hyperparameters are selected from test scores.",
   "llm_status": "complete",
   "llm_holdout": "Not run; no implicit API calls during comparison.",
   "environment": {
     "python": "3.11.7",
     "platform": "Windows-10-10.0.26200-SP0",
+    "processor": "AMD64 Family 25 Model 116 Stepping 1, AuthenticAMD",
     "packages": {
       "numpy": "2.4.6",
       "scipy": "1.17.1",
@@ -76,7 +77,8 @@
       "matplotlib": "3.11.2",
       "torch": "2.14.0+cpu"
     },
-    "commit": "15c30eb814324cad821f496a461cd87d22974239",
-    "dirty": true
+    "commit": "686899e8e7400a4781e4ed954b4b41a12ef69b7b",
+    "dirty": true,
+    "source_sha256": "8750319e7030c0120d3f59bbaf53b9c5b57d8ae8f92bcb1b62a36076b8373f47"
   }
 }

@@ -12,6 +12,7 @@ from hvac_pid.fnn import FNN
 from hvac_pid.rl import QPolicy, validate
 from hvac_pid.tuning import Identified, identify, initial_samples, simc, step_experiment, tune, zn
 from .data import load_splits
+from .methods import ONLINE, implementation, load_policies
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -133,35 +134,59 @@ def fnn(output, seed=0, rounds=15, progress=print):
 
 
 def rl_experiment(output, method, seed=0, episodes=500, progress=print):
-    from hvac_pid import rl
-    if method == "dqn":
-        from hvac_pid import dqn as learner
-    else:
-        learner = rl
-    path = directory(output, "07-dqn" if method == "dqn" else "06-qlearning")
+    learner = implementation(method)
+    name, chapter, _, _, model_file = ONLINE[method]
+    path = directory(output, chapter)
     split = load_splits(SPLITS)
     write_json(path / "splits.json", read_json(SPLITS))
-    policy, report = learner.train(split["train"], episodes, seed, progress)
+    try:
+        policy, report = learner.train(split["train"], episodes, seed, progress)
+    except Exception as error:
+        write_json(path / "failure.json", {"method": name, "seed": seed, "requested_episodes": episodes,
+                                          "status": "failed", "error": str(error), "environment": metadata()})
+        raise
     snapshots = report.pop("snapshots", None)
     if snapshots:
         np.savez(path / "snapshots.npz", **{f"snapshot_{i}": q for i, q in enumerate(snapshots)})
         plotting.q_snapshots(snapshots, path / "qtable.svg")
     report["seed"] = seed
+    if hasattr(policy, "config"):
+        report["config"] = policy.config
     report["validation_iae"] = validate(policy, split["validation"])
     report["cost"]["validation_simulations"] = len(split["validation"])
     report["cost"]["validation_plant_steps"] = sum(s.steps for s in split["validation"])
     report["cost"]["validation_identification_steps"] = sum(round(240 / s.dt) for s in split["validation"])
-    policy.save(path / ("model.pt" if method == "dqn" else "model.npz"))
+    policy.save(path / model_file)
     write_json(path / "training.json", report)
     write_csv(path / "history.csv", report["history"])
-    plotting.learning(report["history"], path / "learning.svg", "DQN" if method == "dqn" else "Q-Learning")
+    plotting.learning(report["history"], path / "learning.svg", name)
     s = Scenario()
     anchor = simc(identify(s)[0])
-    name = "DQN" if method == "dqn" else "Q-Learning"
     results = {"SIMC": evaluate(s, anchor), name: evaluate(s, anchor, policy)}
     save_evaluations(path, results)
     plotting.responses(results, path / "response.svg", gains=True)
     return policy
+
+
+def pg4pi(output, seed=0, episodes=500):
+    from hvac_pid.pg4pi import tune as tune_pi
+    path = directory(output, "14-pg4pi")
+    s = Scenario()
+    try:
+        result = tune_pi(s, seed=seed, episodes=episodes)
+    except Exception as error:
+        write_json(path / "failure.json", {"method": "PG4PI-HVAC", "seed": seed, "requested_episodes": episodes,
+                                          "status": "failed", "error": str(error), "environment": metadata()})
+        raise
+    write_json(path / "result.json", {**result.to_dict(), "scenario": asdict(s), "seed": seed})
+    write_csv(path / "trials.csv", result.trials)
+    if result.best is None:
+        raise RuntimeError("PG4PI did not return a fixed PI controller: " + result.stop_reason)
+    results = {"SIMC": evaluate(s, simc(identify(s)[0])), "PG4PI-HVAC": evaluate(s, result.best)}
+    save_evaluations(path, results)
+    plotting.responses(results, path / "response.svg")
+    plotting.pg_learning(result.trials, path / "learning.svg")
+    return result
 
 
 def llm(output, seed=0, rounds=15, live=False, **connection):
@@ -189,6 +214,7 @@ def llm(output, seed=0, rounds=15, live=False, **connection):
 class TimedPolicy:
     def __init__(self, policy):
         self.policy, self.seconds, self.calls = policy, 0.0, 0
+        self.action_mode = policy.action_mode
 
     def choose(self, observation):
         start = perf_counter()
@@ -198,7 +224,7 @@ class TimedPolicy:
         return result
 
 
-def compare(output, seed=0, rounds=15, include_dqn=True):
+def compare(output, seed=0, rounds=15, include_dqn=True, episodes=500):
     """New-object test: commission each object once; never refit learned policies.
 
     Frozen-parameter tests reuse the nominal commissioning gains for shifted
@@ -208,16 +234,21 @@ def compare(output, seed=0, rounds=15, include_dqn=True):
     s = Scenario()
     model = identify(s)[0]
     fnn_model = FNN.load(Path(output) / "05-fnn/model.npz")
-    q_policy = QPolicy.load(Path(output) / "06-qlearning/model.npz")
-    policies = {"Q-Learning": q_policy}
-    if include_dqn:
-        from hvac_pid.dqn import DQNPolicy
-        policies["DQN"] = DQNPolicy.load(Path(output) / "07-dqn/model.pt")
+    policies = load_policies(Path(output), include_dqn)
+    for method, (name, chapter, *_) in ONLINE.items():
+        if name in policies:
+            training = read_json(Path(output) / chapter / "training.json")
+            if training["seed"] != seed or training["cost"]["episodes"] != episodes:
+                raise ValueError(f"{name} model must match the requested seed and training budget")
     bo_data = read_json(Path(output) / "04-bo/result.json")
     if bo_data["scenario"] != asdict(s) or bo_data["seed"] != seed or bo_data["cost"]["proposal_rounds"] != rounds:
         raise ValueError("BO record must match nominal scenario, seed and proposal budget")
     fixed = {"ZN": zn(model), "SIMC": simc(model), "BO": Gains(**bo_data["best"]),
              "FNN": fnn_model.predict(model)}
+    pg_data = read_json(Path(output) / "14-pg4pi/result.json")
+    if pg_data["scenario"] != asdict(s) or pg_data["seed"] != seed or pg_data["cost"]["episodes"] != episodes:
+        raise ValueError("PG4PI record must match nominal scenario, seed and trajectory budget")
+    fixed["PG4PI-HVAC"] = Gains(**pg_data["best"])
     llm_data = read_json(Path(output) / "08-llm/result.json")
     if llm_data["status"] == "complete" and llm_data["best"] and llm_data["cost"]["calls"]:
         if (llm_data.get("scenario") != asdict(s) or llm_data.get("seed") != seed
@@ -236,6 +267,7 @@ def compare(output, seed=0, rounds=15, include_dqn=True):
             inference[name] = {"inference_calls": timed.calls, "inference_seconds": timed.seconds}
         save_evaluations(path / case, results)
         plotting.responses(results, path / case / "response.svg")
+        plotting.responses({n: results[n] for n in fixed}, path / case / "fixed.svg")
         plotting.responses({n: results[n] for n in ["SIMC", *policies]}, path / case / "online.svg", gains=True)
         for name, result in results.items():
             rows.append({"case": case, "method": name,
@@ -246,32 +278,42 @@ def compare(output, seed=0, rounds=15, include_dqn=True):
     # Test split: fixed hyperparameters, new commissioning data, no model learning.
     holdout = []
     for index, obj in enumerate(load_splits(SPLITS)["test"]):
+        from hvac_pid.pg4pi import tune as tune_pi
         identified = identify(obj)[0]
         tuned = tune(obj, seed, rounds)
+        pg_tuned = tune_pi(obj, seed=seed, episodes=episodes)
+        write_json(path / "pg4pi-holdout" / f"object-{index}.json", {
+            **pg_tuned.to_dict(), "scenario": asdict(obj), "seed": seed})
         settings = {"ZN": zn(identified), "SIMC": simc(identified), "BO": tuned.best,
-                    "FNN": fnn_model.predict(identified)}
+                    "FNN": fnn_model.predict(identified), "PG4PI-HVAC": pg_tuned.best}
         for name in [*settings, *policies]:
             gains = settings["SIMC"] if name in policies else settings[name]
             result = evaluate(obj, gains, policies.get(name))
             holdout.append({"object": index, "scenario": asdict(obj), "method": name,
                             "mode": "online" if name in policies else "fixed", **result.metrics(),
                             "commissioning_steps": round(240 / obj.dt),
-                            "tuning_simulations": len(tuned.trials) if name == "BO" else 0})
+                            "tuning_simulations": tuned.cost["simulations"] if name == "BO" else
+                                pg_tuned.cost["simulations"] if name == "PG4PI-HVAC" else 0})
         if index == 0:
             write_json(path / "holdout-example-bo.json", tuned.to_dict())
     write_json(path / "holdout.json", holdout)
+    plotting.distributions(holdout, path / "holdout.svg")
     costs = {
+        "ZN": {"simulations": 0, "shared_classical_identification_steps": round(240 / s.dt)},
+        "SIMC": {"simulations": 0, "shared_classical_identification_steps": round(240 / s.dt)},
         "BO": bo_data["cost"], "FNN": read_json(Path(output) / "05-fnn/training.json")["cost"],
         "Q-Learning": read_json(Path(output) / "06-qlearning/training.json")["cost"],
         "LLM": {"status": llm_data["status"], **llm_data["cost"]},
+        "PG4PI-HVAC": pg_data["cost"],
     }
-    if include_dqn:
-        costs["DQN"] = read_json(Path(output) / "07-dqn/training.json")["cost"]
+    for method, (name, chapter, *_) in ONLINE.items():
+        if include_dqn or method == "qlearning":
+            costs[name] = read_json(Path(output) / chapter / "training.json")["cost"]
     write_json(path / "costs.json", costs)
     write_json(path / "protocol.json", {
         "seed": seed, "scenario": asdict(s), "frozen_cases": {k: asdict(v) for k, v in cases.items()},
         "frozen": "All initial gains/anchors come from nominal commissioning. No retuning on shifts.",
-        "holdout": "Each new object is commissioned. FNN/Q/DQN remain frozen; BO tunes the new object.",
+        "holdout": "Each new object is commissioned. FNN and online policies stay frozen; BO and PG4PI tune the new object. No hyperparameters are selected from test scores.",
         "llm_status": llm_data["status"], "llm_holdout": "Not run; no implicit API calls during comparison.",
         "environment": metadata(),
     })
@@ -284,10 +326,17 @@ def all_experiments(output, seed=0, rounds=15, episodes=500, include_dqn=True):
     classical(output)
     bo(output, seed, rounds)
     fnn(output, seed, rounds)
-    rl_experiment(output, "qlearning", seed, episodes)
-    if include_dqn:
-        rl_experiment(output, "dqn", seed, episodes)
+    for method in ONLINE:
+        if include_dqn or method == "qlearning":
+            rl_experiment(output, method, seed, episodes)
+    pg4pi(output, seed, episodes)
     # Preserve an explicit live experiment; never replace it with a placeholder.
     if not (Path(output) / "08-llm/result.json").exists():
         llm(output)
-    compare(output, seed, rounds, include_dqn)
+    compare(output, seed, rounds, include_dqn, episodes)
+    from .benchmark import benchmark
+    benchmark(output, include_dqn=include_dqn)
+    if episodes >= 5:
+        from .explain import explain
+        for method in ["classical", "bo", "fnn", "qlearning", "pg4pi", "llm", *(["dqn", "ppo", "td3", "sac", "crossq"] if include_dqn else [])]:
+            explain(output, method, seed)

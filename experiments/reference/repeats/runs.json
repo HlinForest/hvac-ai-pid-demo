@@ -1,0 +1,1737 @@
+[
+  {
+    "seed": 0,
+    "protocol": {
+      "seed": 0,
+      "scenario": {
+        "gain": 8.0,
+        "tau": 20.0,
+        "delay": 2.0,
+        "ambient": 30.0,
+        "initial": 28.0,
+        "setpoint": 24.0,
+        "dt": 0.1,
+        "duration": 120.0,
+        "disturbance_at": 60.0,
+        "disturbance": 1.0
+      },
+      "frozen_cases": {
+        "nominal": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "slower": {
+          "gain": 8.0,
+          "tau": 30,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "long_delay": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 5,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "larger_load": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.5
+        }
+      },
+      "frozen": "All initial gains/anchors come from nominal commissioning. No retuning on shifts.",
+      "holdout": "Each new object is commissioned. FNN and online policies stay frozen; BO and PG4PI tune the new object. No hyperparameters are selected from test scores.",
+      "llm_status": "complete",
+      "llm_holdout": "Not run; no implicit API calls during comparison.",
+      "environment": {
+        "python": "3.11.7",
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 25 Model 116 Stepping 1, AuthenticAMD",
+        "packages": {
+          "numpy": "2.4.6",
+          "scipy": "1.17.1",
+          "scikit-learn": "1.9.1",
+          "matplotlib": "3.11.2",
+          "torch": "2.14.0+cpu"
+        },
+        "commit": "686899e8e7400a4781e4ed954b4b41a12ef69b7b",
+        "dirty": true,
+        "source_sha256": "8750319e7030c0120d3f59bbaf53b9c5b57d8ae8f92bcb1b62a36076b8373f47"
+      }
+    },
+    "costs": {
+      "ZN": {
+        "simulations": 0,
+        "shared_classical_identification_steps": 2400
+      },
+      "SIMC": {
+        "simulations": 0,
+        "shared_classical_identification_steps": 2400
+      },
+      "BO": {
+        "simulations": 20,
+        "identification_steps": 2400,
+        "plant_steps": 24000,
+        "proposal_rounds": 15,
+        "seconds": 0.14948339998954907
+      },
+      "FNN": {
+        "label_simulations": 1200,
+        "label_plant_steps": 1440000,
+        "identification_steps": 288000,
+        "selection_simulations": 36,
+        "selection_plant_steps": 43200,
+        "label_seconds": 10.696612899992033,
+        "fit_and_selection_seconds": 1.155608500004746,
+        "seconds": 11.852418700000271
+      },
+      "Q-Learning": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "seconds": 5.8869205999944825,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "PG4PI-HVAC": {
+        "algorithm": "PG4PI-HVAC",
+        "seed": 0,
+        "episodes": 500,
+        "simulations": 500,
+        "identification_steps": 2400,
+        "plant_steps": 600000,
+        "proposal_rounds": 0,
+        "noise_std": 0.1,
+        "noise": {
+          "distribution": "normal",
+          "std": 0.1,
+          "samples_per_episode": 1200
+        },
+        "learning_rate": 1e-05,
+        "return_to_go": true,
+        "initial_gains": {
+          "kp": 0.2884615384615404,
+          "ki": 0.014423076923076986
+        },
+        "final_gains": {
+          "kp": 0.634256712216447,
+          "ki": 0.037467601201599775
+        },
+        "first_update": {
+          "episode": 0,
+          "return": -79.08364732686586,
+          "iae": 79.08364732686586,
+          "gains_before": {
+            "kp": 0.28846153846154043,
+            "ki": 0.01442307692307698
+          },
+          "gains_after": {
+            "kp": 0.2766641398039315,
+            "ki": 0.01664206758920262
+          },
+          "logits_before": [
+            0.36160675141523163,
+            0.33794665143474223
+          ],
+          "logits_after": [
+            0.33143425238482643,
+            0.4075215982755754
+          ],
+          "gradient_kp_ki": [
+            -7577.758273919086,
+            233077.23857928847
+          ],
+          "gradient_logits": [
+            -3017.249903040521,
+            6957.494684083313
+          ],
+          "learning_rate": 1e-05,
+          "noise": {
+            "std": 0.1,
+            "mean": -0.0032019938571554397,
+            "sample_std": 0.09778154429411474,
+            "l2": 3.3890676893570335,
+            "first": 0.01257302210933933,
+            "last": -0.11733269767074715,
+            "samples": 1200
+          },
+          "first_nonzero_sensitivity_step": {
+            "index": 47,
+            "time": 4.7,
+            "temperature": 27.446717927217193,
+            "error": 3.4467179272171933,
+            "mean": 0.9992167837076835,
+            "latent": 1.19524261535268,
+            "command": 1.0,
+            "mean_sensitivity": [
+              3.4467179272171933,
+              0.34467179272171933
+            ],
+            "score": 19.60258316449965,
+            "reward_to_go": -60.5759192044499,
+            "score_weight": -60.5759192044499,
+            "weighted_score_contribution": [
+              -4092.7862249460236,
+              -409.27862249460236
+            ],
+            "score_sum": [
+              -10.603826216535289,
+              -21663.172646810093
+            ]
+          },
+          "first_step": {
+            "time": 0.0,
+            "temperature": 28.0,
+            "error": 4.0,
+            "mean": 1.0,
+            "latent": 1.0125730221093394,
+            "command": 1.0,
+            "mean_sensitivity": [
+              0.0,
+              0.0
+            ],
+            "integral": 0.0,
+            "integral_sensitivity": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "seconds": 7.457390600000508
+      },
+      "DQN": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 58.55136660000426,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "PPO": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 2000,
+        "seconds": 33.51781449999544,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "TD3": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 123.35981180000817,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "SAC": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 223.57923350000056,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "CrossQ": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 343.0830113999982,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      }
+    },
+    "training_configs": {
+      "Q-Learning": {},
+      "DQN": {},
+      "PPO": {
+        "gamma": 0.99,
+        "gae_lambda": 0.95,
+        "clip_epsilon": 0.2,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "batch_size": 64,
+        "update_epochs": 4,
+        "value_coef": 0.5,
+        "entropy_coef": 0.01,
+        "rollout": "one complete episode",
+        "seed": 0,
+        "episodes": 500
+      },
+      "TD3": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 0,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "policy_delay": 2,
+        "target_tau": 0.005,
+        "target_policy_noise": 0.2,
+        "target_noise_clip": 0.5,
+        "exploration_noise": 0.1
+      },
+      "SAC": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 0,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "target_tau": 0.005,
+        "target_entropy": -2.0,
+        "alpha": 0.05484071001410484
+      },
+      "CrossQ": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 0,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "policy_delay": 2,
+        "target_entropy": -2.0,
+        "alpha": 0.02876923233270645,
+        "utd_ratio": 1,
+        "batch_renorm": true,
+        "target_critics": false
+      }
+    }
+  },
+  {
+    "seed": 1,
+    "protocol": {
+      "seed": 1,
+      "scenario": {
+        "gain": 8.0,
+        "tau": 20.0,
+        "delay": 2.0,
+        "ambient": 30.0,
+        "initial": 28.0,
+        "setpoint": 24.0,
+        "dt": 0.1,
+        "duration": 120.0,
+        "disturbance_at": 60.0,
+        "disturbance": 1.0
+      },
+      "frozen_cases": {
+        "nominal": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "slower": {
+          "gain": 8.0,
+          "tau": 30,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "long_delay": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 5,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "larger_load": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.5
+        }
+      },
+      "frozen": "All initial gains/anchors come from nominal commissioning. No retuning on shifts.",
+      "holdout": "Each new object is commissioned. FNN and online policies stay frozen; BO and PG4PI tune the new object. No hyperparameters are selected from test scores.",
+      "llm_status": "not_run",
+      "llm_holdout": "Not run; no implicit API calls during comparison.",
+      "environment": {
+        "python": "3.11.7",
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 25 Model 116 Stepping 1, AuthenticAMD",
+        "packages": {
+          "numpy": "2.4.6",
+          "scipy": "1.17.1",
+          "scikit-learn": "1.9.1",
+          "matplotlib": "3.11.2",
+          "torch": "2.14.0+cpu"
+        },
+        "commit": "686899e8e7400a4781e4ed954b4b41a12ef69b7b",
+        "dirty": true,
+        "source_sha256": "551cdfd797f792d583ef19c4fc8bb7ead2a25ba32157ca60cc4b8800f02b1cc6"
+      }
+    },
+    "costs": {
+      "ZN": {
+        "simulations": 0,
+        "shared_classical_identification_steps": 2400
+      },
+      "SIMC": {
+        "simulations": 0,
+        "shared_classical_identification_steps": 2400
+      },
+      "BO": {
+        "simulations": 20,
+        "identification_steps": 2400,
+        "plant_steps": 24000,
+        "proposal_rounds": 15,
+        "seconds": 0.17279929999494925
+      },
+      "FNN": {
+        "label_simulations": 1200,
+        "label_plant_steps": 1440000,
+        "identification_steps": 288000,
+        "selection_simulations": 36,
+        "selection_plant_steps": 43200,
+        "label_seconds": 11.83375759999035,
+        "fit_and_selection_seconds": 1.1414207000052556,
+        "seconds": 12.975953599991044
+      },
+      "Q-Learning": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "seconds": 5.631523499992909,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "PG4PI-HVAC": {
+        "algorithm": "PG4PI-HVAC",
+        "seed": 1,
+        "episodes": 500,
+        "simulations": 500,
+        "identification_steps": 2400,
+        "plant_steps": 600000,
+        "proposal_rounds": 0,
+        "noise_std": 0.1,
+        "noise": {
+          "distribution": "normal",
+          "std": 0.1,
+          "samples_per_episode": 1200
+        },
+        "learning_rate": 1e-05,
+        "return_to_go": true,
+        "initial_gains": {
+          "kp": 0.2884615384615404,
+          "ki": 0.014423076923076986
+        },
+        "final_gains": {
+          "kp": 0.6967497957810033,
+          "ki": 0.06846402766967727
+        },
+        "first_update": {
+          "episode": 0,
+          "return": -79.02764204371434,
+          "iae": 79.02764204371434,
+          "gains_before": {
+            "kp": 0.28846153846154043,
+            "ki": 0.01442307692307698
+          },
+          "gains_after": {
+            "kp": 0.31239910206053695,
+            "ki": 0.01754344264727723
+          },
+          "logits_before": [
+            0.36160675141523163,
+            0.33794665143474223
+          ],
+          "logits_after": [
+            0.4196770970416096,
+            0.4334047895068387
+          ],
+          "gradient_kp_ki": [
+            14584.242478430102,
+            319786.3632244531
+          ],
+          "gradient_logits": [
+            5807.034562637798,
+            9545.813807209643
+          ],
+          "learning_rate": 1e-05,
+          "noise": {
+            "std": 0.1,
+            "mean": -0.005179505755030969,
+            "sample_std": 0.09943290796066666,
+            "l2": 3.449126926985577,
+            "first": 0.034558419206478605,
+            "last": 0.10532152643097333,
+            "samples": 1200
+          },
+          "first_nonzero_sensitivity_step": {
+            "index": 47,
+            "time": 4.7,
+            "temperature": 27.445402846091987,
+            "error": 3.445402846091987,
+            "mean": 0.998835536631482,
+            "latent": 0.9482063708000504,
+            "command": 0.9482063708000504,
+            "mean_sensitivity": [
+              3.445402846091987,
+              0.3445402846091987
+            ],
+            "score": -5.06291658314315,
+            "reward_to_go": -60.53964984038421,
+            "score_weight": -60.53964984038421,
+            "weighted_score_contribution": [
+              1056.0407692861854,
+              105.60407692861854
+            ],
+            "score_sum": [
+              -481.1286187202151,
+              -25449.302679715172
+            ]
+          },
+          "first_step": {
+            "time": 0.0,
+            "temperature": 28.0,
+            "error": 4.0,
+            "mean": 1.0,
+            "latent": 1.0345584192064785,
+            "command": 1.0,
+            "mean_sensitivity": [
+              0.0,
+              0.0
+            ],
+            "integral": 0.0,
+            "integral_sensitivity": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "seconds": 7.578898400010075
+      },
+      "DQN": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 61.05686750001041,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "PPO": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 2000,
+        "seconds": 43.75287799999933,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "TD3": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 155.20486519999395,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "SAC": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 272.8713391999918,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "CrossQ": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 301.56250090000685,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      }
+    },
+    "training_configs": {
+      "Q-Learning": {},
+      "DQN": {},
+      "PPO": {
+        "gamma": 0.99,
+        "gae_lambda": 0.95,
+        "clip_epsilon": 0.2,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "batch_size": 64,
+        "update_epochs": 4,
+        "value_coef": 0.5,
+        "entropy_coef": 0.01,
+        "rollout": "one complete episode",
+        "seed": 1,
+        "episodes": 500
+      },
+      "TD3": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 1,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "policy_delay": 2,
+        "target_tau": 0.005,
+        "target_policy_noise": 0.2,
+        "target_noise_clip": 0.5,
+        "exploration_noise": 0.1
+      },
+      "SAC": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 1,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "target_tau": 0.005,
+        "target_entropy": -2.0,
+        "alpha": 0.04382748529314995
+      },
+      "CrossQ": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 1,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "policy_delay": 2,
+        "target_entropy": -2.0,
+        "alpha": 0.023184562101960182,
+        "utd_ratio": 1,
+        "batch_renorm": true,
+        "target_critics": false
+      }
+    }
+  },
+  {
+    "seed": 2,
+    "protocol": {
+      "seed": 2,
+      "scenario": {
+        "gain": 8.0,
+        "tau": 20.0,
+        "delay": 2.0,
+        "ambient": 30.0,
+        "initial": 28.0,
+        "setpoint": 24.0,
+        "dt": 0.1,
+        "duration": 120.0,
+        "disturbance_at": 60.0,
+        "disturbance": 1.0
+      },
+      "frozen_cases": {
+        "nominal": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "slower": {
+          "gain": 8.0,
+          "tau": 30,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "long_delay": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 5,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "larger_load": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.5
+        }
+      },
+      "frozen": "All initial gains/anchors come from nominal commissioning. No retuning on shifts.",
+      "holdout": "Each new object is commissioned. FNN and online policies stay frozen; BO and PG4PI tune the new object. No hyperparameters are selected from test scores.",
+      "llm_status": "not_run",
+      "llm_holdout": "Not run; no implicit API calls during comparison.",
+      "environment": {
+        "python": "3.11.7",
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 25 Model 116 Stepping 1, AuthenticAMD",
+        "packages": {
+          "numpy": "2.4.6",
+          "scipy": "1.17.1",
+          "scikit-learn": "1.9.1",
+          "matplotlib": "3.11.2",
+          "torch": "2.14.0+cpu"
+        },
+        "commit": "686899e8e7400a4781e4ed954b4b41a12ef69b7b",
+        "dirty": true,
+        "source_sha256": "7ec4bbaa9d0d5af2b46250ba3b7b59ab1753ccd7c7b45a6fbaa26322eb173bee"
+      }
+    },
+    "costs": {
+      "ZN": {
+        "simulations": 0,
+        "shared_classical_identification_steps": 2400
+      },
+      "SIMC": {
+        "simulations": 0,
+        "shared_classical_identification_steps": 2400
+      },
+      "BO": {
+        "simulations": 20,
+        "identification_steps": 2400,
+        "plant_steps": 24000,
+        "proposal_rounds": 15,
+        "seconds": 0.12921410000126343
+      },
+      "FNN": {
+        "label_simulations": 1200,
+        "label_plant_steps": 1440000,
+        "identification_steps": 288000,
+        "selection_simulations": 36,
+        "selection_plant_steps": 43200,
+        "label_seconds": 10.204017800002475,
+        "fit_and_selection_seconds": 1.2730182999948738,
+        "seconds": 11.477463400005945
+      },
+      "Q-Learning": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "seconds": 5.745412200005376,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "PG4PI-HVAC": {
+        "algorithm": "PG4PI-HVAC",
+        "seed": 2,
+        "episodes": 500,
+        "simulations": 500,
+        "identification_steps": 2400,
+        "plant_steps": 600000,
+        "proposal_rounds": 0,
+        "noise_std": 0.1,
+        "noise": {
+          "distribution": "normal",
+          "std": 0.1,
+          "samples_per_episode": 1200
+        },
+        "learning_rate": 1e-05,
+        "return_to_go": true,
+        "initial_gains": {
+          "kp": 0.2884615384615404,
+          "ki": 0.014423076923076986
+        },
+        "final_gains": {
+          "kp": 0.23696561894589732,
+          "ki": 0.008128196093439928
+        },
+        "first_update": {
+          "episode": 0,
+          "return": -78.97368938068462,
+          "iae": 78.97368938068462,
+          "gains_before": {
+            "kp": 0.28846153846154043,
+            "ki": 0.01442307692307698
+          },
+          "gains_after": {
+            "kp": 0.2905214296690436,
+            "ki": 0.016879474493450817
+          },
+          "logits_before": [
+            0.36160675141523163,
+            0.33794665143474223
+          ],
+          "logits_after": [
+            0.3667641289728122,
+            0.4144587682712818
+          ],
+          "gradient_kp_ki": [
+            1295.2642874989492,
+            256316.87439034178
+          ],
+          "gradient_logits": [
+            515.737755758054,
+            7651.211683653958
+          ],
+          "learning_rate": 1e-05,
+          "noise": {
+            "std": 0.1,
+            "mean": -0.004686076282064832,
+            "sample_std": 0.10071298872706844,
+            "l2": 3.492574765285911,
+            "first": 0.018905338179353307,
+            "last": -0.16195661910344625,
+            "samples": 1200
+          },
+          "first_nonzero_sensitivity_step": {
+            "index": 46,
+            "time": 4.6000000000000005,
+            "temperature": 27.46649603828136,
+            "error": 3.4664960382813597,
+            "mean": 0.999950780273476,
+            "latent": 0.9764502295842934,
+            "command": 0.9764502295842934,
+            "mean_sensitivity": [
+              3.4664960382813597,
+              0.0
+            ],
+            "score": -2.350055068918255,
+            "reward_to_go": -60.81311531553932,
+            "score_weight": -60.81311531553932,
+            "weighted_score_contribution": [
+              495.41140378646276,
+              0.0
+            ],
+            "score_sum": [
+              -150.6424406422234,
+              -28847.595438100783
+            ]
+          },
+          "first_step": {
+            "time": 0.0,
+            "temperature": 28.0,
+            "error": 4.0,
+            "mean": 1.0,
+            "latent": 1.0189053381793534,
+            "command": 1.0,
+            "mean_sensitivity": [
+              0.0,
+              0.0
+            ],
+            "integral": 0.0,
+            "integral_sensitivity": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "seconds": 7.36323459999403
+      },
+      "DQN": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 63.13949560000037,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "PPO": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 2000,
+        "seconds": 43.75925109999662,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "TD3": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 159.91517049999675,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "SAC": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 268.55900109998765,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "CrossQ": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 301.3738241999963,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      }
+    },
+    "training_configs": {
+      "Q-Learning": {},
+      "DQN": {},
+      "PPO": {
+        "gamma": 0.99,
+        "gae_lambda": 0.95,
+        "clip_epsilon": 0.2,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "batch_size": 64,
+        "update_epochs": 4,
+        "value_coef": 0.5,
+        "entropy_coef": 0.01,
+        "rollout": "one complete episode",
+        "seed": 2,
+        "episodes": 500
+      },
+      "TD3": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 2,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "policy_delay": 2,
+        "target_tau": 0.005,
+        "target_policy_noise": 0.2,
+        "target_noise_clip": 0.5,
+        "exploration_noise": 0.1
+      },
+      "SAC": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 2,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "target_tau": 0.005,
+        "target_entropy": -2.0,
+        "alpha": 0.06509960442781448
+      },
+      "CrossQ": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 2,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "policy_delay": 2,
+        "target_entropy": -2.0,
+        "alpha": 0.018751444295048714,
+        "utd_ratio": 1,
+        "batch_renorm": true,
+        "target_critics": false
+      }
+    }
+  },
+  {
+    "seed": 3,
+    "protocol": {
+      "seed": 3,
+      "scenario": {
+        "gain": 8.0,
+        "tau": 20.0,
+        "delay": 2.0,
+        "ambient": 30.0,
+        "initial": 28.0,
+        "setpoint": 24.0,
+        "dt": 0.1,
+        "duration": 120.0,
+        "disturbance_at": 60.0,
+        "disturbance": 1.0
+      },
+      "frozen_cases": {
+        "nominal": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "slower": {
+          "gain": 8.0,
+          "tau": 30,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "long_delay": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 5,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "larger_load": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.5
+        }
+      },
+      "frozen": "All initial gains/anchors come from nominal commissioning. No retuning on shifts.",
+      "holdout": "Each new object is commissioned. FNN and online policies stay frozen; BO and PG4PI tune the new object. No hyperparameters are selected from test scores.",
+      "llm_status": "not_run",
+      "llm_holdout": "Not run; no implicit API calls during comparison.",
+      "environment": {
+        "python": "3.11.7",
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 25 Model 116 Stepping 1, AuthenticAMD",
+        "packages": {
+          "numpy": "2.4.6",
+          "scipy": "1.17.1",
+          "scikit-learn": "1.9.1",
+          "matplotlib": "3.11.2",
+          "torch": "2.14.0+cpu"
+        },
+        "commit": "686899e8e7400a4781e4ed954b4b41a12ef69b7b",
+        "dirty": true,
+        "source_sha256": "7ec4bbaa9d0d5af2b46250ba3b7b59ab1753ccd7c7b45a6fbaa26322eb173bee"
+      }
+    },
+    "costs": {
+      "ZN": {
+        "simulations": 0,
+        "shared_classical_identification_steps": 2400
+      },
+      "SIMC": {
+        "simulations": 0,
+        "shared_classical_identification_steps": 2400
+      },
+      "BO": {
+        "simulations": 20,
+        "identification_steps": 2400,
+        "plant_steps": 24000,
+        "proposal_rounds": 15,
+        "seconds": 0.1810239000042202
+      },
+      "FNN": {
+        "label_simulations": 1200,
+        "label_plant_steps": 1440000,
+        "identification_steps": 288000,
+        "selection_simulations": 36,
+        "selection_plant_steps": 43200,
+        "label_seconds": 12.044646599999396,
+        "fit_and_selection_seconds": 1.3195713000022806,
+        "seconds": 13.364443699989351
+      },
+      "Q-Learning": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "seconds": 6.673059100008686,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "PG4PI-HVAC": {
+        "algorithm": "PG4PI-HVAC",
+        "seed": 3,
+        "episodes": 500,
+        "simulations": 500,
+        "identification_steps": 2400,
+        "plant_steps": 600000,
+        "proposal_rounds": 0,
+        "noise_std": 0.1,
+        "noise": {
+          "distribution": "normal",
+          "std": 0.1,
+          "samples_per_episode": 1200
+        },
+        "learning_rate": 1e-05,
+        "return_to_go": true,
+        "initial_gains": {
+          "kp": 0.2884615384615404,
+          "ki": 0.014423076923076986
+        },
+        "final_gains": {
+          "kp": 0.05414119432012843,
+          "ki": 0.005309876977567315
+        },
+        "first_update": {
+          "episode": 0,
+          "return": -78.56778775400178,
+          "iae": 78.56778775400178,
+          "gains_before": {
+            "kp": 0.28846153846154043,
+            "ki": 0.01442307692307698
+          },
+          "gains_after": {
+            "kp": 0.2861071136963884,
+            "ki": 0.012089071092726646
+          },
+          "logits_before": [
+            0.36160675141523163,
+            0.33794665143474223
+          ],
+          "logits_after": [
+            0.35567253427252227,
+            0.2532066844804683
+          ],
+          "gradient_kp_ki": [
+            -1490.3658794415257,
+            -283880.3102528655
+          ],
+          "gradient_logits": [
+            -593.4217142709375,
+            -8473.996695427395
+          ],
+          "learning_rate": 1e-05,
+          "noise": {
+            "std": 0.1,
+            "mean": 0.0032206743526797597,
+            "sample_std": 0.0995039921696064,
+            "l2": 3.4487244948198055,
+            "first": 0.20409191213851827,
+            "last": 0.18206182627550907,
+            "samples": 1200
+          },
+          "first_nonzero_sensitivity_step": {
+            "index": 47,
+            "time": 4.7,
+            "temperature": 27.447963908135996,
+            "error": 3.4479639081359963,
+            "mean": 0.9995779983682788,
+            "latent": 1.0743187971162138,
+            "command": 1.0,
+            "mean_sensitivity": [
+              3.4479639081359963,
+              0.34479639081359964
+            ],
+            "score": 7.474079874793503,
+            "reward_to_go": -60.036788933946035,
+            "score_weight": -60.036788933946035,
+            "weighted_score_contribution": [
+              -1547.169523274345,
+              -154.7169523274345
+            ],
+            "score_sum": [
+              142.52150367683222,
+              17331.116294626307
+            ]
+          },
+          "first_step": {
+            "time": 0.0,
+            "temperature": 28.0,
+            "error": 4.0,
+            "mean": 1.0,
+            "latent": 1.2040919121385183,
+            "command": 1.0,
+            "mean_sensitivity": [
+              0.0,
+              0.0
+            ],
+            "integral": 0.0,
+            "integral_sensitivity": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "seconds": 7.682331299991347
+      },
+      "DQN": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 64.99650789999578,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "PPO": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 2000,
+        "seconds": 40.13570400000026,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "TD3": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 167.35334479999437,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "SAC": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 246.32063650000782,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "CrossQ": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 307.1383729000081,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      }
+    },
+    "training_configs": {
+      "Q-Learning": {},
+      "DQN": {},
+      "PPO": {
+        "gamma": 0.99,
+        "gae_lambda": 0.95,
+        "clip_epsilon": 0.2,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "batch_size": 64,
+        "update_epochs": 4,
+        "value_coef": 0.5,
+        "entropy_coef": 0.01,
+        "rollout": "one complete episode",
+        "seed": 3,
+        "episodes": 500
+      },
+      "TD3": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 3,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "policy_delay": 2,
+        "target_tau": 0.005,
+        "target_policy_noise": 0.2,
+        "target_noise_clip": 0.5,
+        "exploration_noise": 0.1
+      },
+      "SAC": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 3,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "target_tau": 0.005,
+        "target_entropy": -2.0,
+        "alpha": 0.05317354202270508
+      },
+      "CrossQ": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 3,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "policy_delay": 2,
+        "target_entropy": -2.0,
+        "alpha": 0.017201151698827744,
+        "utd_ratio": 1,
+        "batch_renorm": true,
+        "target_critics": false
+      }
+    }
+  },
+  {
+    "seed": 4,
+    "protocol": {
+      "seed": 4,
+      "scenario": {
+        "gain": 8.0,
+        "tau": 20.0,
+        "delay": 2.0,
+        "ambient": 30.0,
+        "initial": 28.0,
+        "setpoint": 24.0,
+        "dt": 0.1,
+        "duration": 120.0,
+        "disturbance_at": 60.0,
+        "disturbance": 1.0
+      },
+      "frozen_cases": {
+        "nominal": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "slower": {
+          "gain": 8.0,
+          "tau": 30,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "long_delay": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 5,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.0
+        },
+        "larger_load": {
+          "gain": 8.0,
+          "tau": 20.0,
+          "delay": 2.0,
+          "ambient": 30.0,
+          "initial": 28.0,
+          "setpoint": 24.0,
+          "dt": 0.1,
+          "duration": 120.0,
+          "disturbance_at": 60.0,
+          "disturbance": 1.5
+        }
+      },
+      "frozen": "All initial gains/anchors come from nominal commissioning. No retuning on shifts.",
+      "holdout": "Each new object is commissioned. FNN and online policies stay frozen; BO and PG4PI tune the new object. No hyperparameters are selected from test scores.",
+      "llm_status": "not_run",
+      "llm_holdout": "Not run; no implicit API calls during comparison.",
+      "environment": {
+        "python": "3.11.7",
+        "platform": "Windows-10-10.0.26200-SP0",
+        "processor": "AMD64 Family 25 Model 116 Stepping 1, AuthenticAMD",
+        "packages": {
+          "numpy": "2.4.6",
+          "scipy": "1.17.1",
+          "scikit-learn": "1.9.1",
+          "matplotlib": "3.11.2",
+          "torch": "2.14.0+cpu"
+        },
+        "commit": "686899e8e7400a4781e4ed954b4b41a12ef69b7b",
+        "dirty": true,
+        "source_sha256": "7ec4bbaa9d0d5af2b46250ba3b7b59ab1753ccd7c7b45a6fbaa26322eb173bee"
+      }
+    },
+    "costs": {
+      "ZN": {
+        "simulations": 0,
+        "shared_classical_identification_steps": 2400
+      },
+      "SIMC": {
+        "simulations": 0,
+        "shared_classical_identification_steps": 2400
+      },
+      "BO": {
+        "simulations": 20,
+        "identification_steps": 2400,
+        "plant_steps": 24000,
+        "proposal_rounds": 15,
+        "seconds": 0.174590900001931
+      },
+      "FNN": {
+        "label_simulations": 1200,
+        "label_plant_steps": 1440000,
+        "identification_steps": 288000,
+        "selection_simulations": 36,
+        "selection_plant_steps": 43200,
+        "label_seconds": 11.400464300008025,
+        "fit_and_selection_seconds": 1.514162400009809,
+        "seconds": 12.91493569999875
+      },
+      "Q-Learning": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "seconds": 6.67373100000259,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "PG4PI-HVAC": {
+        "algorithm": "PG4PI-HVAC",
+        "seed": 4,
+        "episodes": 500,
+        "simulations": 500,
+        "identification_steps": 2400,
+        "plant_steps": 600000,
+        "proposal_rounds": 0,
+        "noise_std": 0.1,
+        "noise": {
+          "distribution": "normal",
+          "std": 0.1,
+          "samples_per_episode": 1200
+        },
+        "learning_rate": 1e-05,
+        "return_to_go": true,
+        "initial_gains": {
+          "kp": 0.2884615384615404,
+          "ki": 0.014423076923076986
+        },
+        "final_gains": {
+          "kp": 1.8496129302664075,
+          "ki": 0.005781569930647287
+        },
+        "first_update": {
+          "episode": 0,
+          "return": -79.27170640276074,
+          "iae": 79.27170640276074,
+          "gains_before": {
+            "kp": 0.28846153846154043,
+            "ki": 0.01442307692307698
+          },
+          "gains_after": {
+            "kp": 0.26585498506380223,
+            "ki": 0.013764113502176952
+          },
+          "logits_before": [
+            0.36160675141523163,
+            0.33794665143474223
+          ],
+          "logits_after": [
+            0.30277661754367147,
+            0.31539276136022837
+          ],
+          "gradient_kp_ki": [
+            -14775.061662997929,
+            -75555.90994290671
+          ],
+          "gradient_logits": [
+            -5883.013387156013,
+            -2255.3890074513843
+          ],
+          "learning_rate": 1e-05,
+          "noise": {
+            "std": 0.1,
+            "mean": -0.0009907837558786588,
+            "sample_std": 0.1026254791249506,
+            "l2": 3.5552165534172318,
+            "first": -0.06517911526116897,
+            "last": -0.16149319041657817,
+            "samples": 1200
+          },
+          "first_nonzero_sensitivity_step": {
+            "index": 47,
+            "time": 4.7,
+            "temperature": 27.455889366160335,
+            "error": 3.455889366160335,
+            "mean": 0.996891163315488,
+            "latent": 0.9837096585464615,
+            "command": 0.9837096585464615,
+            "mean_sensitivity": [
+              3.455889366160335,
+              0.0
+            ],
+            "score": -1.3181504769026462,
+            "reward_to_go": -60.754656183923,
+            "score_weight": -60.754656183923,
+            "weighted_score_contribution": [
+              276.7606803271549,
+              0.0
+            ],
+            "score_sum": [
+              320.37864739009615,
+              -9835.911649812808
+            ]
+          },
+          "first_step": {
+            "time": 0.0,
+            "temperature": 28.0,
+            "error": 4.0,
+            "mean": 1.0,
+            "latent": 0.9348208847388311,
+            "command": 0.9348208847388311,
+            "mean_sensitivity": [
+              0.0,
+              0.0
+            ],
+            "integral": 0.0,
+            "integral_sensitivity": [
+              0.0,
+              0.0
+            ]
+          }
+        },
+        "seconds": 7.600151400009054
+      },
+      "DQN": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 64.83387940000102,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "PPO": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 2000,
+        "seconds": 41.749395499995444,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "TD3": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 167.4810553999996,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "SAC": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 245.28202440000314,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      },
+      "CrossQ": {
+        "episodes": 500,
+        "transitions": 30000,
+        "plant_steps": 600000,
+        "commissioning_steps": 115200,
+        "updates": 29745,
+        "seconds": 309.10796920000575,
+        "validation_simulations": 12,
+        "validation_plant_steps": 14400,
+        "validation_identification_steps": 28800
+      }
+    },
+    "training_configs": {
+      "Q-Learning": {},
+      "DQN": {},
+      "PPO": {
+        "gamma": 0.99,
+        "gae_lambda": 0.95,
+        "clip_epsilon": 0.2,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "batch_size": 64,
+        "update_epochs": 4,
+        "value_coef": 0.5,
+        "entropy_coef": 0.01,
+        "rollout": "one complete episode",
+        "seed": 4,
+        "episodes": 500
+      },
+      "TD3": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 4,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "policy_delay": 2,
+        "target_tau": 0.005,
+        "target_policy_noise": 0.2,
+        "target_noise_clip": 0.5,
+        "exploration_noise": 0.1
+      },
+      "SAC": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 4,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "target_tau": 0.005,
+        "target_entropy": -2.0,
+        "alpha": 0.05455641448497772
+      },
+      "CrossQ": {
+        "gamma": 0.99,
+        "learning_rate": 0.0003,
+        "hidden_dim": 64,
+        "seed": 4,
+        "episodes": 500,
+        "batch_size": 64,
+        "warmup": 256,
+        "replay_capacity": 10000,
+        "policy_delay": 2,
+        "target_entropy": -2.0,
+        "alpha": 0.026809774339199066,
+        "utd_ratio": 1,
+        "batch_renorm": true,
+        "target_critics": false
+      }
+    }
+  }
+]

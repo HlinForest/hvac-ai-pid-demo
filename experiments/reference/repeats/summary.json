@@ -1,0 +1,407 @@
+{
+  "seeds": [
+    0,
+    1,
+    2,
+    3,
+    4
+  ],
+  "rows": [
+    {
+      "case": "nominal",
+      "method": "ZN",
+      "runs": 5,
+      "mean_iae": 49.34790278607127,
+      "std_iae": 0.0,
+      "min_iae": 49.34790278607127,
+      "max_iae": 49.34790278607127
+    },
+    {
+      "case": "nominal",
+      "method": "SIMC",
+      "runs": 5,
+      "mean_iae": 77.9949859104928,
+      "std_iae": 0.0,
+      "min_iae": 77.9949859104928,
+      "max_iae": 77.9949859104928
+    },
+    {
+      "case": "nominal",
+      "method": "BO",
+      "runs": 5,
+      "mean_iae": 48.84465838577266,
+      "std_iae": 0.4304339959475679,
+      "min_iae": 48.41473961539351,
+      "max_iae": 49.34790278607127
+    },
+    {
+      "case": "nominal",
+      "method": "FNN",
+      "runs": 5,
+      "mean_iae": 48.79363712103045,
+      "std_iae": 0.31527159890525697,
+      "min_iae": 48.46761765422411,
+      "max_iae": 49.217447593765286
+    },
+    {
+      "case": "nominal",
+      "method": "PG4PI-HVAC",
+      "runs": 5,
+      "mean_iae": 93.85516568645669,
+      "std_iae": 44.73752309553096,
+      "min_iae": 52.82131823064861,
+      "max_iae": 164.4984263923766
+    },
+    {
+      "case": "nominal",
+      "method": "Q-Learning",
+      "runs": 5,
+      "mean_iae": 74.99763180086504,
+      "std_iae": 3.085074713309819,
+      "min_iae": 72.02928859562628,
+      "max_iae": 79.97114725244847
+    },
+    {
+      "case": "nominal",
+      "method": "DQN",
+      "runs": 5,
+      "mean_iae": 69.39935280854198,
+      "std_iae": 2.421297253441869,
+      "min_iae": 66.29042622416594,
+      "max_iae": 72.54584655503166
+    },
+    {
+      "case": "nominal",
+      "method": "PPO",
+      "runs": 5,
+      "mean_iae": 72.54943662142185,
+      "std_iae": 7.496640491133177,
+      "min_iae": 61.657666684532046,
+      "max_iae": 80.45731354824623
+    },
+    {
+      "case": "nominal",
+      "method": "TD3",
+      "runs": 5,
+      "mean_iae": 68.63695541280285,
+      "std_iae": 6.772079598605361,
+      "min_iae": 58.85678869437629,
+      "max_iae": 77.78755964844146
+    },
+    {
+      "case": "nominal",
+      "method": "SAC",
+      "runs": 5,
+      "mean_iae": 71.07051391431646,
+      "std_iae": 2.2967388975426806,
+      "min_iae": 68.90374869229586,
+      "max_iae": 74.584461133976
+    },
+    {
+      "case": "nominal",
+      "method": "CrossQ",
+      "runs": 5,
+      "mean_iae": 67.11254273540692,
+      "std_iae": 20.689568059510517,
+      "min_iae": 56.12957265657451,
+      "max_iae": 104.01293006111335
+    },
+    {
+      "case": "slower",
+      "method": "ZN",
+      "runs": 5,
+      "mean_iae": 66.15056307438603,
+      "std_iae": 0.0,
+      "min_iae": 66.15056307438603,
+      "max_iae": 66.15056307438603
+    },
+    {
+      "case": "slower",
+      "method": "SIMC",
+      "runs": 5,
+      "mean_iae": 82.05141564388991,
+      "std_iae": 0.0,
+      "min_iae": 82.05141564388991,
+      "max_iae": 82.05141564388991
+    },
+    {
+      "case": "slower",
+      "method": "BO",
+      "runs": 5,
+      "mean_iae": 67.12247106613793,
+      "std_iae": 0.7381355867458776,
+      "min_iae": 66.15056307438603,
+      "max_iae": 68.16220767723848
+    },
+    {
+      "case": "slower",
+      "method": "FNN",
+      "runs": 5,
+      "mean_iae": 66.42491019628203,
+      "std_iae": 0.5136134602726924,
+      "min_iae": 66.09081258953007,
+      "max_iae": 67.30327850916827
+    },
+    {
+      "case": "slower",
+      "method": "PG4PI-HVAC",
+      "runs": 5,
+      "mean_iae": 103.90440622611166,
+      "std_iae": 40.20262033576186,
+      "min_iae": 67.9721397356002,
+      "max_iae": 169.71447734037915
+    },
+    {
+      "case": "slower",
+      "method": "Q-Learning",
+      "runs": 5,
+      "mean_iae": 91.14770802303715,
+      "std_iae": 10.1590607884073,
+      "min_iae": 81.52228174312363,
+      "max_iae": 104.82043409160163
+    },
+    {
+      "case": "slower",
+      "method": "DQN",
+      "runs": 5,
+      "mean_iae": 82.17206893845673,
+      "std_iae": 1.7802701541057668,
+      "min_iae": 80.12147844321676,
+      "max_iae": 84.7708724606767
+    },
+    {
+      "case": "slower",
+      "method": "PPO",
+      "runs": 5,
+      "mean_iae": 83.61405833600942,
+      "std_iae": 8.879614504003039,
+      "min_iae": 72.11830138634338,
+      "max_iae": 93.62100288394817
+    },
+    {
+      "case": "slower",
+      "method": "TD3",
+      "runs": 5,
+      "mean_iae": 81.73645533900165,
+      "std_iae": 6.116534036795952,
+      "min_iae": 72.63975877287382,
+      "max_iae": 89.72173672714956
+    },
+    {
+      "case": "slower",
+      "method": "SAC",
+      "runs": 5,
+      "mean_iae": 84.84538495206083,
+      "std_iae": 2.8570378913313847,
+      "min_iae": 82.00702320198866,
+      "max_iae": 87.902691124581
+    },
+    {
+      "case": "slower",
+      "method": "CrossQ",
+      "runs": 5,
+      "mean_iae": 79.96046234170674,
+      "std_iae": 15.961009943824564,
+      "min_iae": 71.39638867839288,
+      "max_iae": 108.37331502110754
+    },
+    {
+      "case": "long_delay",
+      "method": "ZN",
+      "runs": 5,
+      "mean_iae": 84.29890787406086,
+      "std_iae": 0.0,
+      "min_iae": 84.29890787406086,
+      "max_iae": 84.29890787406086
+    },
+    {
+      "case": "long_delay",
+      "method": "SIMC",
+      "runs": 5,
+      "mean_iae": 94.49024236807003,
+      "std_iae": 0.0,
+      "min_iae": 94.49024236807003,
+      "max_iae": 94.49024236807003
+    },
+    {
+      "case": "long_delay",
+      "method": "BO",
+      "runs": 5,
+      "mean_iae": 87.35332713905349,
+      "std_iae": 3.8572766969317835,
+      "min_iae": 84.29890787406086,
+      "max_iae": 93.79277418943508
+    },
+    {
+      "case": "long_delay",
+      "method": "FNN",
+      "runs": 5,
+      "mean_iae": 85.8295607682783,
+      "std_iae": 1.37483273729464,
+      "min_iae": 83.7854154096995,
+      "max_iae": 87.56356534536707
+    },
+    {
+      "case": "long_delay",
+      "method": "PG4PI-HVAC",
+      "runs": 5,
+      "mean_iae": 112.22146936344389,
+      "std_iae": 36.45789052167115,
+      "min_iae": 77.09908984772994,
+      "max_iae": 165.12246150604858
+    },
+    {
+      "case": "long_delay",
+      "method": "Q-Learning",
+      "runs": 5,
+      "mean_iae": 89.25858290073428,
+      "std_iae": 5.619841368040065,
+      "min_iae": 81.98995620707076,
+      "max_iae": 96.01398808754783
+    },
+    {
+      "case": "long_delay",
+      "method": "DQN",
+      "runs": 5,
+      "mean_iae": 85.83275398276245,
+      "std_iae": 2.1299861239368587,
+      "min_iae": 82.92149507233535,
+      "max_iae": 88.01821887548489
+    },
+    {
+      "case": "long_delay",
+      "method": "PPO",
+      "runs": 5,
+      "mean_iae": 89.02982926930035,
+      "std_iae": 7.547049796198048,
+      "min_iae": 77.91009963162045,
+      "max_iae": 96.82057422890509
+    },
+    {
+      "case": "long_delay",
+      "method": "TD3",
+      "runs": 5,
+      "mean_iae": 84.07204348723923,
+      "std_iae": 4.532892748390069,
+      "min_iae": 76.4077130994051,
+      "max_iae": 87.5000519432269
+    },
+    {
+      "case": "long_delay",
+      "method": "SAC",
+      "runs": 5,
+      "mean_iae": 87.24151228745013,
+      "std_iae": 2.1560946498056373,
+      "min_iae": 85.19823907233268,
+      "max_iae": 90.27977554635571
+    },
+    {
+      "case": "long_delay",
+      "method": "CrossQ",
+      "runs": 5,
+      "mean_iae": 82.43264555334204,
+      "std_iae": 18.139743994507604,
+      "min_iae": 73.0607519851459,
+      "max_iae": 114.83680223840231
+    },
+    {
+      "case": "larger_load",
+      "method": "ZN",
+      "runs": 5,
+      "mean_iae": 50.03787577175875,
+      "std_iae": 0.0,
+      "min_iae": 50.03787577175875,
+      "max_iae": 50.03787577175875
+    },
+    {
+      "case": "larger_load",
+      "method": "SIMC",
+      "runs": 5,
+      "mean_iae": 82.00528273797511,
+      "std_iae": 0.0,
+      "min_iae": 82.00528273797511,
+      "max_iae": 82.00528273797511
+    },
+    {
+      "case": "larger_load",
+      "method": "BO",
+      "runs": 5,
+      "mean_iae": 49.38758747067872,
+      "std_iae": 0.5162868347132322,
+      "min_iae": 48.94994089495253,
+      "max_iae": 50.03787577175875
+    },
+    {
+      "case": "larger_load",
+      "method": "FNN",
+      "runs": 5,
+      "mean_iae": 49.39972340234739,
+      "std_iae": 0.3887113508052089,
+      "min_iae": 49.005984490908844,
+      "max_iae": 49.941182073242935
+    },
+    {
+      "case": "larger_load",
+      "method": "PG4PI-HVAC",
+      "runs": 5,
+      "mean_iae": 98.03327865840333,
+      "std_iae": 48.79974580912156,
+      "min_iae": 53.73348188033131,
+      "max_iae": 175.17039730699415
+    },
+    {
+      "case": "larger_load",
+      "method": "Q-Learning",
+      "runs": 5,
+      "mean_iae": 79.97526324931692,
+      "std_iae": 5.657974506130737,
+      "min_iae": 74.78192425550014,
+      "max_iae": 89.34573345440991
+    },
+    {
+      "case": "larger_load",
+      "method": "DQN",
+      "runs": 5,
+      "mean_iae": 72.24331820804203,
+      "std_iae": 2.323492163371151,
+      "min_iae": 68.75731433482031,
+      "max_iae": 74.72884954250185
+    },
+    {
+      "case": "larger_load",
+      "method": "PPO",
+      "runs": 5,
+      "mean_iae": 75.21409902764665,
+      "std_iae": 7.616442376256465,
+      "min_iae": 64.01763352542608,
+      "max_iae": 83.16322321182405
+    },
+    {
+      "case": "larger_load",
+      "method": "TD3",
+      "runs": 5,
+      "mean_iae": 70.35238159738633,
+      "std_iae": 5.906903096082793,
+      "min_iae": 61.18815235911093,
+      "max_iae": 77.3494155080913
+    },
+    {
+      "case": "larger_load",
+      "method": "SAC",
+      "runs": 5,
+      "mean_iae": 73.39771883435158,
+      "std_iae": 2.6213168766530694,
+      "min_iae": 70.8578921421857,
+      "max_iae": 77.20165281830155
+    },
+    {
+      "case": "larger_load",
+      "method": "CrossQ",
+      "runs": 5,
+      "mean_iae": 70.05127888205455,
+      "std_iae": 21.227285959738328,
+      "min_iae": 58.671792087268024,
+      "max_iae": 107.88256875758107
+    }
+  ]
+}

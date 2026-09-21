@@ -29,6 +29,7 @@ def epsilon_at(episode, episodes):
 
 @dataclass
 class QPolicy:
+    action_mode = "discrete"
     q: np.ndarray
 
     def choose(self, observation):

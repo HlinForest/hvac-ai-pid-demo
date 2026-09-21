@@ -1,6 +1,7 @@
 """Small, explicit result files. No report prose is generated here."""
 from dataclasses import asdict
 import csv
+import hashlib
 import importlib.metadata
 import json
 from pathlib import Path
@@ -42,5 +43,11 @@ def metadata():
             packages[name] = None
     commit = subprocess.run(["git", "rev-parse", "HEAD"], capture_output=True, text=True)
     dirty = subprocess.run(["git", "status", "--porcelain"], capture_output=True, text=True)
-    return {"python": platform.python_version(), "platform": platform.platform(),
-            "packages": packages, "commit": commit.stdout.strip(), "dirty": bool(dirty.stdout)}
+    root = Path(__file__).resolve().parents[1]
+    source = hashlib.sha256()
+    for file in sorted([*root.glob("hvac_pid/*.py"), *root.glob("experiments/*.py"), root / "experiments/splits.json"]):
+        source.update(file.relative_to(root).as_posix().encode())
+        source.update(file.read_bytes())
+    return {"python": platform.python_version(), "platform": platform.platform(), "processor": platform.processor(),
+            "packages": packages, "commit": commit.stdout.strip(), "dirty": bool(dirty.stdout),
+            "source_sha256": source.hexdigest()}

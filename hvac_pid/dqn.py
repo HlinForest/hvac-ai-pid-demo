@@ -16,6 +16,7 @@ def network():
 
 
 class DQNPolicy:
+    action_mode = "discrete"
     def __init__(self, net):
         self.net = net.eval()
 
@@ -35,7 +36,7 @@ class DQNPolicy:
 
 
 # region dqn_update
-def learn_batch(net, target, optimizer, batch, gamma=0.99):
+def learn_batch(net, target, optimizer, batch, gamma=0.99, details=None):
     states, actions, rewards, next_states, done = zip(*batch)
     states = torch.tensor(np.asarray(states), dtype=torch.float32)
     next_states = torch.tensor(np.asarray(next_states), dtype=torch.float32)
@@ -47,6 +48,11 @@ def learn_batch(net, target, optimizer, batch, gamma=0.99):
         future = target(next_states).max(dim=1).values
         expected = rewards + gamma * (~done).float() * future
     loss = nn.functional.smooth_l1_loss(predicted, expected)
+    if details is not None:
+        details.update({"states": states.tolist(), "actions": actions.tolist(),
+                        "rewards": rewards.tolist(), "done": done.tolist(),
+                        "predicted": predicted.detach().tolist(), "future": future.tolist(),
+                        "targets": expected.tolist(), "loss": float(loss.item()), "gamma": gamma})
     optimizer.zero_grad()
     loss.backward()
     optimizer.step()
@@ -71,6 +77,7 @@ def train(scenarios, episodes=500, seed=0, progress=None):
     memory = deque(maxlen=10_000)
     anchors = commissioning(scenarios)
     history, transitions, updates, plant_steps = [], 0, 0, 0
+    first_update = {}
     for episode in range(episodes):
         index = int(rng.integers(len(scenarios)))
         env = TuningEnv(scenarios[index], anchors[index])
@@ -85,7 +92,8 @@ def train(scenarios, episodes=500, seed=0, progress=None):
             if len(memory) >= 256:
                 indices = rng.choice(len(memory), 64, replace=False)
                 batch = [memory[int(i)] for i in indices]
-                losses.append(learn_batch(net, target, optimizer, batch))
+                losses.append(learn_batch(net, target, optimizer, batch,
+                                          details=first_update if updates == 0 else None))
                 updates += 1
                 if updates % 200 == 0:
                     target.load_state_dict(net.state_dict())
@@ -97,7 +105,7 @@ def train(scenarios, episodes=500, seed=0, progress=None):
                         "loss": float(np.mean(losses)) if losses else None})
         if progress and (episode + 1) % 50 == 0:
             progress(f"DQN {episode + 1}/{episodes}")
-    return policy, {"history": history, "cost": {
+    return policy, {"history": history, "first_update": first_update, "cost": {
         "episodes": episodes, "transitions": transitions, "plant_steps": plant_steps,
         "commissioning_steps": sum(round(240 / s.dt) for s in scenarios),
         "updates": updates, "seconds": perf_counter() - start,
