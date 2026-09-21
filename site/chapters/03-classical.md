@@ -2,30 +2,6 @@
 
 现在已经有一阶加纯延迟的辨识结果。本章把 $(K,\tau,L)$ 直接代入两条经典 PI 规则：Ziegler–Nichols 反应曲线规则和 SIMC 规则。它们只在闭环开始前给出一组固定的 $(K_p,K_i)$，不搜索，也不训练。后面的 AI 方法要回答的是“在相同对象和预算下，是否值得承担额外成本”。
 
-## 跑一次并查看输入输出
-
-```bash
-python -m hvac_pid classical
-```
-
-默认产物位于 `outputs/tutorial/03-classical/`：
-
-| 文件 | 内容 |
-|---|---|
-| `gains.json` | 辨识值和 Z-N、SIMC 的 Kp/Ki |
-| `ZN.csv`, `SIMC.csv` | 各自 120 分钟的温度、输出和固定增益 |
-| `metrics.json` | 两组参数的 IAE、过冷、movement |
-| `lambda.json` | λ=2、7、20 min 的扫描结果 |
-| `response.svg`, `lambda.svg` | 对照曲线 |
-
-也可以生成解释用的单次计算记录：
-
-```bash
-python -m hvac_pid explain --method classical --output outputs/tutorial
-```
-
-它写入 `outputs/tutorial/explain/classical.json`，包含辨识输入、公式中间量和最终增益。命令的 JSON 是核对手算的入口；本章的图表仍来自 `03-classical/`。
-
 ## Z-N：从三个对象参数得到两个增益
 
 项目使用反应曲线 PI 公式
@@ -122,24 +98,44 @@ SIMC 的 Kp 和 Ki 都明显小于 Z-N，因此第一步同样会受输出上限
 python -m hvac_pid classical --delay 5 --output outputs/classical-delay5
 ```
 
-这条命令先重新做阶跃辨识，再用新 $L$ 算 Z-N/SIMC。若你拿默认 `gains.json` 的参数直接放到 `temperature --delay 5`，回答的是“旧参数遇到变长延迟会怎样”；若运行 `classical --delay 5`，回答的是“重新测量后经典规则会怎样”。两条实验都合理，但不能把它们的数字混成同一结论。
+这条命令先重新做阶跃辨识，再用新 $L$ 算 Z-N/SIMC。若将默认 `gains.json` 的参数直接放到 `temperature --delay 5`，回答的是“旧参数遇到变长延迟会怎样”；若运行 `classical --delay 5`，回答的是“重新测量后经典规则会怎样”。两条实验都合理，但不能把它们的数字混成同一结论。
 
-还可以直接观察 Z-N 公式的边界：当 $L$ 接近 0 时，$K_p$ 和 $K_i$ 会迅速变大；实现会拒绝 `delay<=1e-8` 的 Z-N 计算。SIMC 仍需要正 λ，但它不使用 $1/L$ 的同样奇异项。代码的异常和边界是方法行为的一部分，不能在教程里悄悄加一个裁剪值。
+还可以直接观察 Z-N 公式的边界：当 $L$ 接近 0 时，$K_p$ 和 $K_i$ 会迅速变大；实现会拒绝 `delay<=1e-8` 的 Z-N 计算。SIMC 仍需要正 λ，但它不使用 $1/L$ 的同样奇异项。该边界会显式报错，整定接口不会将 Z-N 自动替换成另一条公式。
 
-## 动手：只改 λ，并验证中间量
+## λ 的数值含义与成本边界
 
-经典命令的 λ 扫描已固定为 2、7、20。练习是用 `explain` 的 JSON 验证 λ=2 的一个手算中间量：
+λ 是期望闭环响应速度的设计输入，不是从测试成绩中自动挑选出的参数。默认值为 τ/3，即 6.6667 分钟；固定扫描另外计算 λ=2、7、20 分钟。以 λ=2 为例，Kp=20/[8×(2+2)]=0.625，积分时间取 min(20,16)=16 分钟，得到 Ki=0.0390625。
 
-```bash
-python -m hvac_pid explain --method classical --output outputs/classical-explain
-```
+减小 λ 同时提高比例增益并可能缩短积分时间，所以不是只改变某一项系数。当前对象下 λ=2 的 IAE 低于默认值，说明默认 SIMC 基线不是经过当前工况性能搜索的最优参数。后续 AI 方法相对默认 SIMC 的改善，也不能自动解释为超越所有经典整定配置。
 
-读取 `outputs/classical-explain/explain/classical.json`，找到默认辨识值和 SIMC 的 `lambda`。先计算 $K_p=20/[8(2+2)]=0.625$，再与你用项目 API 或临时脚本计算的 λ=2 参数比较；不要把命令默认产生的 λ=6.6667 结果误当成 λ=2。曲线和 `lambda.json` 则验证它确实使用了 λ=2、7、20 三个输入。
-
-如果你要改变扫描集合，需要改实验代码；本章的最小练习只要求用现有输出核对公式和单位。下一章让每次完整仿真反过来影响下一次参数提案。
+经典规则从辨识结果到增益只需标量运算；主要试验成本来自获得 K、τ、L 的阶跃数据。`gains.json`、`lambda.json` 和 `explain/classical.json` 分别保留增益、响应指标和默认公式中间量，避免将 λ 扫描结果与默认增益混用。
 
 ## 放到在线控制前后
 
 经典规则的在线部分只有两项：上线前做一次 240 分钟阶跃辨识，再做一次几次乘除法得到固定 $(K_p,K_i)$。闭环在线阶段每 0.1 分钟只运行 PI，输入形状是一个标量温度，输出形状是一个标量指令；没有每周期 BO 或模型推理。参考机的整定计算不到秒级，真正的成本是受控阶跃占用的物理时间和扰动风险。
 
-经典参数适合作为后面方法的锚点和 sanity check。它没有从历史案例泛化，也没有观察过程中改变参数；下一章用相同评分函数、相同 0 到 1 边界和相同对象，试试有限预算的贝叶斯优化。
+经典参数适合作为后面方法的锚点和 sanity check。它没有从历史案例泛化，也没有观察过程中改变参数；下一章用相同评分函数、相同 0 到 1 边界和相同对象，分析有限预算的贝叶斯优化。
+
+## 结果复现入口
+
+```bash
+python -m hvac_pid classical
+```
+
+默认产物位于 `outputs/tutorial/03-classical/`：
+
+| 文件 | 内容 |
+|---|---|
+| `gains.json` | 辨识值和 Z-N、SIMC 的 Kp/Ki |
+| `ZN.csv`, `SIMC.csv` | 各自 120 分钟的温度、输出和固定增益 |
+| `metrics.json` | 两组参数的 IAE、过冷、movement |
+| `lambda.json` | λ=2、7、20 min 的扫描结果 |
+| `response.svg`, `lambda.svg` | 对照曲线 |
+
+也可以生成解释用的单次计算记录：
+
+```bash
+python -m hvac_pid explain --method classical --output outputs/tutorial
+```
+
+它写入 `outputs/tutorial/explain/classical.json`，包含辨识输入、公式中间量和最终增益。命令的 JSON 是核对手算的入口；本章的图表仍来自 `03-classical/`。

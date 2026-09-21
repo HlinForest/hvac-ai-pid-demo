@@ -1,119 +1,77 @@
-# 动手做 AI 自动整定
+# AI 自动整定：从 PI 控制到学习算法
 
-这是一套可以反复运行的小型温控实验。对象只有一个温度状态，却保留了三件会让整定变难的事：20 分钟惯性、2 分钟输入延迟，以及第 60 分钟开始的等效热负荷。所有方法最终都把 Kp、Ki 交给同一个条件积分 PI，输出都在 0 到 1 之间；因此你可以把一条曲线追溯到参数、观测、动作和实际仿真结果。
+本项目探索 AI 如何参与 PI 参数整定。对象采用一阶惯性加延迟的温控模型，所有方法共用同一套 PI、输出限幅和条件积分抗饱和。算法之间的差别在于 **Kp、Ki 从哪里来、何时更新、需要付出多少试验与计算成本**。
 
-![同一对象上的方法响应总览](/results/09-compare/nominal/response.svg)
+本文按控制程序的数据流展开：先明确对象和 PI 的执行过程，再解释搜索、模糊网络与强化学习怎样更新参数，最后用相同工况下的实际数据比较收益与代价。公式、代码片段和中间值相互对应，可从图表追溯到一次具体更新。
 
-图中的总览适合看差异，章节中的 fixed/online 分组更适合读温度和输出细节。IAE 的单位是 ℃·min，movement 是输出变化量，不是电耗。模型里的温度、负荷和指令也不对应某个真实建筑的标定值。
+## AI 接在控制系统的哪个位置
 
-## 你会做什么
+本项目有两个不同的运行周期。PI 每 0.1 分钟根据温度误差计算一次输出；在线增益策略每 2 分钟选择一次 Kp、Ki。在两个增益决策点之间，PI 连续执行 20 次。这里的时间单位是仿真分钟，不能直接当作某块控制板的任务周期配置。
 
-从左到右，实验把“调两个数”拆成几个不同的问题：
+| 方法类别 | 参数如何产生 | 闭环运行期间保留什么 |
+|---|---|---|
+| Z-N、SIMC | 根据阶跃辨识结果计算增益 | 固定 Kp、Ki 和 PI 积分贡献 |
+| BO、LLM | 多次仿真比较候选参数 | 最优已测 Kp、Ki 和 PI 积分贡献 |
+| FNN | 从历史整定案例学习对象参数到增益的映射 | 预测后的固定 Kp、Ki；FNN 不逐周期运行 |
+| PG4PI-HVAC | 用带噪声的 PI 轨迹估计增益梯度 | 最后一次更新的固定 Kp、Ki |
+| Q-Learning、DQN、PPO、TD3、SAC、CrossQ | 离线训练一个根据观测选择增益的策略 | 冻结的 Q 表或网络、当前增益及 PI 积分贡献 |
 
-| 问题 | 章节 |
+“在线调整参数”与“在线继续训练”是两件事。最后一类方法在评估时仍会调整增益，但权重和 Q 表不再更新，不采样探索动作。所有方法最终都通过同一个 PI 产生制冷指令，AI 没有绕过输出限制。
+
+这里还需要区分三组经常都被称为“参数”的量：Kp、Ki 是实际执行的控制增益；神经网络权重或 Q 表是决定增益的策略状态；学习率、折扣因子、回放容量等是训练配置。冻结网络权重，并不要求冻结它对不同观测输出的 Kp、Ki；反过来，固定增益整定结束后，闭环也无需携带整定过程的优化器状态。
+
+## 当前结果揭示的取舍
+
+以下名义工况结果来自五个独立种子；IAE 越小，表示 120 分钟内累计温度误差越小。它不是能耗指标，也不单独衡量输出平滑程度或过冷风险。
+
+| 方法 | 五种子平均 IAE | 样本标准差 | 结果含义 |
+|---|---:|---:|---|
+| Z-N | 49.35 | 0.00 | 简单公式在当前对象上已提供较强基线 |
+| SIMC | 77.99 | 0.00 | 当前 λ 设置偏保守，仍需结合响应速度解释 |
+| BO | 48.84 | 0.43 | 有限搜索得到较低 IAE，但单次额外提案也可能无改善 |
+| FNN | 48.79 | 0.32 | 本次分布内能学到 BO 教师的增益推荐规律 |
+| DQN | 69.40 | 2.42 | 离散在线增益策略有一定改善，包含离线训练成本 |
+| CrossQ | 67.11 | 20.69 | 均值改善伴随较大的种子差异 |
+| PG4PI-HVAC | 93.86 | 44.74 | 单次成功不能代表重复结果，部分训练明显退化 |
+
+完整十二种方法的单次结果、十一种本地方法的五种子统计，以及 12 个未见对象的测试，见[结果与成本](./chapters/09-comparison)。LLM 保留既有真实调用记录，未混入五种子统计。经典方法没有随机训练，所以重复值相同，不代表完成过五次带噪声的物理辨识。
+
+![固定增益方法的名义工况响应](/results/09-compare/nominal/fixed.svg)
+
+固定方法的优势是运行路径短：整定结束后只需执行 PI。在线方法增加了观测处理和策略计算，也获得了在控制过程中调整增益的能力。是否值得增加这部分复杂度，应同时看对象变化后的效果、输出变化量和实测计算成本。
+
+## 各章的技术主线
+
+| 章节 | 重点解释 |
 |---|---|
-| PI 的第一步输出和饱和怎样算？ | [01 跑通温控](./chapters/01-temperature) |
-| 对象的增益、惯性、延迟怎样测？ | [02 看懂对象](./chapters/02-plant) |
-| Z-N 和 SIMC 怎样从辨识值给出基线？ | [03 经典整定](./chapters/03-classical) |
-| 有限仿真预算怎样选择下一点？ | [04 BO](./chapters/04-bo) |
-| 许多整定案例能否一次预测增益？ | [05 FNN](./chapters/05-fnn) |
-| 每两分钟改变一次离散增益会怎样？ | [06 Q-Learning](./chapters/06-qlearning) |
-| 用网络估计九个离散动作会怎样？ | [07 DQN](./chapters/07-dqn) |
-| 连续动作的 clipped policy gradient 如何处理延迟？ | [10 PPO](./chapters/10-ppo) |
-| 双 critic 和延迟 actor 更新如何工作？ | [11 TD3](./chapters/11-td3) |
-| 熵正则怎样让连续增益保持探索？ | [12 SAC](./chapters/12-sac) |
-| 没有 target critic 时如何用联合 Batch Renorm？ | [13 CrossQ](./chapters/13-crossq) |
-| PI 本身作为两个策略参数如何更新？ | [14 PG4PI-HVAC](./chapters/14-pg4pi) |
-| 模型读完反馈会提出什么下一次试验？ | [08 LLM](./chapters/08-llm) |
-| 工况变化、新对象和 CPU 成本怎样比较？ | [09 统一比较](./chapters/09-comparison) |
+| [01 PI 控制执行](./chapters/01-temperature) | 制冷方向、积分输出贡献、饱和分支与离散时序 |
+| [02 对象与辨识](./chapters/02-plant) | 延迟队列、解析响应、最小二乘拟合 |
+| [03 经典整定](./chapters/03-classical) | Z-N、SIMC 公式代入及 λ 对响应的影响 |
+| [04 BO](./chapters/04-bo) | GP 后验、预测不确定性、EI 与搜索循环 |
+| [05 FNN](./chapters/05-fnn) | 隶属度、27 条规则、后件求解与固定参数预测 |
+| [06 Q-Learning](./chapters/06-qlearning) | 观测分箱、Q 表、TD 更新与动作执行 |
+| [07 DQN](./chapters/07-dqn) | 回放批次、目标网络、梯度与冻结推理 |
+| [08 PPO](./chapters/10-ppo) | 连续动作概率、GAE、概率比与裁剪目标 |
+| [09 TD3](./chapters/11-td3) | 双 Critic、目标动作平滑与延迟策略更新 |
+| [10 SAC](./chapters/12-sac) | 重参数化、熵正则与自动温度系数 |
+| [11 CrossQ](./chapters/13-crossq) | 联合前向、Batch Renormalization 与无目标 Critic |
+| [12 PG4PI](./chapters/14-pg4pi) | PI 参数作为策略、条件积分敏感度与轨迹梯度 |
+| [13 LLM](./chapters/08-llm) | 结构化提案、仿真反馈、错误处理与调用边界 |
+| [14 结果与成本](./chapters/09-comparison) | 冻结工况、新对象重新整定、重复性与 CPU 成本 |
 
-网站导航会把新连续 RL 章节放在 LLM 与统一比较之前；文件名保留已有 01–09 URL，所以旧链接仍可打开。
+## 面向嵌入式实现的阅读边界
 
-## 先跑一行 PI
+训练使用的回放池、目标网络、优化器和反向传播，并不等于运行时必须保留的组件。各方法章节分别说明训练状态和冻结后的执行路径；成本章节记录模型文件字节数、参数量、CPU 单次推理中位数与 P95。
 
-在仓库根目录准备环境：
+这些测量来自当前 Python/NumPy/PyTorch CPU 实现。权重文件大小不等于运行时 RAM，CPU 平均耗时也不等于嵌入式最坏执行时间。当前结果用于判断算法机制及进一步工程验证的重点，尚不包含控制板移植、定点误差、实时调度或实际设备验证。
 
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install -e ".[test]"
-python -m hvac_pid temperature
-```
+对象只有一个温度状态，默认惯性为 20 分钟、延迟为 2 分钟，在第 60 分钟加入热扰动。这种简化使每个算法的变化都能解释清楚；它同时限定了结果的适用范围，不能据此推断真实建筑的节能比例或跨设备稳定性。
 
-打开 `outputs/tutorial/01-temperature/response.svg`。不安装 torch、不配置模型服务，也能完成前七章中的 BO、FNN、Q-Learning 和经典方法。第一章会从 `Manual.csv` 的真实第一行核对：$e_0=4\,^{\circ}\mathrm{C}$、$K_p=0.15$、$K_i=0.005$、$\Delta t=0.1$ min 时，输出是 `0.602`。
+## 源码与结果复现
 
-## 方法怎样接在同一个控制循环上
+[项目仓库](https://github.com/HlinForest/hvac-ai-pid-demo) 包含算法实现、已完成的参考数据和构建说明。各章末尾给出对应复现入口；参考结果已经随网站提供，无需先训练即可阅读公式、曲线和更新记录。
 
-内层物理循环永远以 0.1 分钟为步长：
-
-```text
-温度 T(k) → e(k)=T(k)-24 → PI(Kp,Ki) → clip 到 [0,1] → 延迟对象 → T(k+1)
-```
-
-固定参数方法在循环开始前只推荐一次 `(Kp,Ki)`。Q-Learning、DQN、PPO、TD3、SAC、CrossQ 每 2 分钟从观测
-
-$$
-(e,\dot e,u,s_p,s_i)\in\mathbb R^5
-$$
-
-选择下一组相对 SIMC 锚点的增益；PI 仍每 0.1 分钟执行。PG4PI 在整条轨迹内固定两个参数，结束后才更新。LLM 在仿真循环外通过工具提案，每次提案也保持一组固定增益。
-
-## 每章都可以核对一件真实中间量
-
-```bash
-python -m hvac_pid explain --method classical --output outputs/tutorial
-python -m hvac_pid explain --method bo --output outputs/tutorial
-python -m hvac_pid explain --method qlearning --output outputs/tutorial
-python -m hvac_pid explain --method dqn --output outputs/tutorial
-```
-
-对已经完成训练的连续方法：
-
-```bash
-python -m hvac_pid explain --method ppo --output outputs/tutorial
-python -m hvac_pid explain --method td3 --output outputs/tutorial
-python -m hvac_pid explain --method sac --output outputs/tutorial
-python -m hvac_pid explain --method crossq --output outputs/tutorial
-python -m hvac_pid explain --method pg4pi --output outputs/tutorial
-```
-
-这些 JSON 来自和训练/整定共用的函数：BO 的第一个 EI 候选、Q 的一次 TD 更新、DQN 的首个 batch、连续 RL 的首个 critic/actor 或 PPO loss，以及 PG4PI 的首条轨迹。它们是查公式和张量形状的入口，不是另一个评分体系。
-
-## 需要 torch 时再安装
-
-连续 RL 和 DQN 使用 CPU 版 PyTorch：
-
-```bash
-python -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-python -m hvac_pid all --episodes 500 --rounds 15 --output outputs/tutorial
-python -m hvac_pid site --output outputs/tutorial --destination site
-```
-
-如果只想跑 NumPy 方法：
-
-```bash
-python -m hvac_pid all --without-torch --output outputs/tutorial-numpy
-```
-
-这会明确跳过所有神经 RL，不会把缺失的结果写成 0 分或用 SIMC 冒充。
-
-## 先看哪些图
-
-完成整套实验后，打开：
-
-- `/results/09-compare/nominal/fixed.svg`：Z-N、SIMC、BO、FNN、LLM、PG4PI-HVAC；
-- `/results/09-compare/nominal/online.svg`：SIMC 锚点和六种在线策略；
-- `/results/09-compare/nominal/response.svg`：12 种方法总览；
-- `/results/09-compare/holdout.svg`：12 个未见对象的 IAE 分布。
-
-不要只看一条下降的训练曲线。固定方法要查看实际响应 CSV；在线方法要把动作记录和温度响应对齐；RL 的训练 target 带折扣；history.return 是探索下的不折扣负 IAE，critic loss、entropy 和最终冻结 IAE 也应分别阅读。比较章节把这些量分开。
-
-## 运行 CPU 推理基准
-
-```bash
-python -m hvac_pid benchmark --output outputs/tutorial --samples 1000
-```
-
-基准使用 batch=1、100 次 warm-up，报告控制更新、FNN 一次推荐和冻结策略的 CPU 中位数/P95、参数量和 checkpoint 文件大小。文件大小不等于 Python/PyTorch 运行时内存，也不包含线程库、解释器或安全联锁；教程不据此承诺某个 MCU 可以部署。
-
-最后阅读 [统一比较](./chapters/09-comparison)，再决定要给某个方法更多试验、更多回合，还是换一个延迟和负荷。每次只改一个预算或对象参数，保留原产物作对照。
+- [五种子原始结果](/results/repeats/observations.json)
+- [未见对象逐项结果](/results/repeats/holdout.json)
+- [训练与整定成本配置](/results/repeats/runs.json)
+- [CPU 推理测量](/results/benchmark/result.json)

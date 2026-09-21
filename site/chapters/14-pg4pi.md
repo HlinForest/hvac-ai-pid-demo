@@ -4,14 +4,9 @@
 
 这一章来自 [RL-optimal-pid](https://github.com/sharma1256/RL-optimal-pid) 对应的 [NeurIPS 2025 论文](https://papers.nips.cc/paper_files/paper/2025/hash/e40e65df08fc9b925c1da59fc25a2bd6-Abstract-Conference.html)。仓库提供 model-based PG4PID 和 model-free PG4PI。本项目采用后一条路线，并将温控适配命名为 **PG4PI-HVAC**。原方法的线性系统设定、目标函数和理论条件，与这里的延迟、输出限幅、条件积分和有限时间 IAE 有区别；温控曲线不能用来证明原论文的全局最优性结论。
 
-## 先跑一次参数学习
+## 产物和评价口径
 
-```bash
-python -m hvac_pid pg4pi --episodes 500 --seed 0
-python -m hvac_pid explain --method pg4pi
-```
-
-命令只在本地仿真，不调用模型接口，也不需要 PyTorch。输出在 `outputs/tutorial/14-pg4pi/`：
+整定只在本地仿真运行，不调用模型接口，也不需要 PyTorch。输出在 outputs/tutorial/14-pg4pi/：
 
 | 文件 | 先看什么 |
 |---|---|
@@ -223,10 +218,6 @@ print(result.best, evaluation.metrics())
 
 仓库提供 `pg4pi-reference` 独立入口，固定上游提交，在隔离的依赖环境运行原设定。其结果与 `14-pg4pi` 分开保存，记录实际成功或失败状态。基础安装与 CI 不自动拉取和运行上游项目。
 
-```bash
-python -m hvac_pid pg4pi-reference --install-deps --seed 0 --output outputs/pg4pi-reference
-```
-
 首次运行需要联网获取固定提交和独立依赖；该入口需要前面神经网络章节安装的 CPU PyTorch。适配包安装在输出目录的 `deps`，NumPy、SciPy、Matplotlib 和 PyTorch 继承当前环境。之后查看该目录的 `config.json`、`one-update.json` 和 `results.json`。命令返回失败时先读保存的错误信息，不能将“已下载源码”当作“已完成实验”。
 
 阅读 [上游源码](https://github.com/sharma1256/RL-optimal-pid/blob/37c8882d3828a2811120f9467a9e88b4bd95449f/PG4PI.py) 时，先找到四件事：策略输出、轨迹采集、回报累计、PI 参数更新；再对照本章的限幅、积分状态和 IAE 修改。固定提交信息见仓库的 `experiments/pg4pi-upstream.json`，不要把会变化的 `main` 当作实验版本。
@@ -253,13 +244,21 @@ PG4PI 的轨迹采样、梯度、随机数和参数更新都在整定阶段运�
 
 它的主要成本是为当前对象采集训练轨迹。默认 500 条、每条 1200 个物理步，共 600,000 步；这些都是仿真交互，不能把仿真完成时间解释为真实温控对象的整定时间。换一个对象重新整定时，成本重新计算，不能记成一次免费的参数预测。
 
-## 动手：只改变训练预算
+## 结果复现入口
+
+默认预算为 500 条训练轨迹，冻结评估关闭探索：
 
 ```bash
-python -m hvac_pid pg4pi --episodes 50 --seed 0 --output outputs/pg-short
-python -m hvac_pid pg4pi --episodes 500 --seed 0 --output outputs/pg-long
+python -m hvac_pid pg4pi --episodes 500 --seed 0 --output outputs/tutorial
+python -m hvac_pid explain --method pg4pi --output outputs/tutorial
 ```
 
-先比较两份 `trials.csv` 的前 50 条记录：配置和种子相同时，它们应该一致。再比较最终固定参数、无噪声 IAE 和总交互量。训练更久是否继续变化？是否已经接近参数边界？用具体记录回答，不预设 500 回合一定更好。
+`trials.csv` 保存每条轨迹的参数、回报和梯度，`result.json` 保存最终增益及交互成本。预算增加意味着更多当前对象试验，不保证最终 IAE 单调下降；本章五种子结果已展示参数更新的不稳定性。
+
+原设定核对使用独立入口：
+
+```bash
+python -m hvac_pid pg4pi-reference --install-deps --seed 0 --output outputs/pg4pi-reference
+```
 
 本章数据：[逐轨迹记录](/results/14-pg4pi/trials.csv)、[配置与梯度](/results/14-pg4pi/result.json)、[最终响应 CSV](/results/14-pg4pi/PG4PI-HVAC.csv)。

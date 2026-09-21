@@ -1,12 +1,12 @@
-# 动手做 AI 自动整定
+# AI 自动整定技术解析
 
-这个仓库用同一个温控对象比较 12 种 PI 整定方式：Z-N、SIMC、BO、FNN、Q-Learning、DQN、PPO、TD3、SAC、CrossQ、PG4PI-HVAC 和 LLM。每种方法都把结果接到同一个条件积分 PI 和同一个一阶加延迟对象上，因此可以从 CSV、JSON 和源码逐项核对曲线。
+本文面向熟悉嵌入式控制的技术读者，从原理、更新过程和运行状态解释 AI 如何调整 PI 参数。这个仓库用同一个温控对象比较 12 种 PI 整定方式：Z-N、SIMC、BO、FNN、Q-Learning、DQN、PPO、TD3、SAC、CrossQ、PG4PI-HVAC 和 LLM。每种方法都把结果接到同一个条件积分 PI 和同一个一阶加延迟对象上，因此可以从 CSV、JSON 和源码逐项核对曲线。
 
-网站入口是 [动手做 AI 自动整定](https://hlinforest.github.io/hvac-ai-pid-demo/)。旧章节 URL `/chapters/01-temperature` 到 `/chapters/09-comparison` 继续保留；新增连续 RL 与 PG4PI 章节使用 `10-ppo`、`11-td3`、`12-sac`、`13-crossq`、`14-pg4pi`。阅读顺序由 VitePress 配置维护，正文在 `site/chapters/`。
+网站入口是 [AI 自动整定技术解析](https://hlinforest.github.io/hvac-ai-pid-demo/)。旧章节 URL `/chapters/01-temperature` 到 `/chapters/09-comparison` 继续保留；新增连续 RL 与 PG4PI 章节使用 `10-ppo`、`11-td3`、`12-sac`、`13-crossq`、`14-pg4pi`。阅读顺序由 VitePress 配置维护，正文在 `site/chapters/`。
 
 对象只追踪一个温度状态。默认参数是环境 30℃、初始温度 28℃、目标 24℃、对象增益 8℃、时间常数 20 min、输入延迟 2 min、采样间隔 0.1 min、仿真时长 120 min；第 60 分钟开始加入 1℃ 等效扰动。时间单位统一为分钟，控制指令是 `[0,1]` 的无量纲值。IAE 单位为 ℃·min，movement 只表示输出变化量，不能直接解释为真实电耗。
 
-## 先跑一条曲线
+## 环境准备与基础运行
 
 需要 Python 3.10 或更高版本。在仓库根目录执行：
 
@@ -173,6 +173,6 @@ npm run docs:check
 
 ## 代码和数据边界
 
-`hvac_pid/` 是控制器、对象和学习算法；`experiments/` 编排运行、写出记录和生成站点数值表；`site/chapters/` 是手工维护的教程。`experiments/reference/` 保存一次附带参考运行，包括配置、CSV、曲线、模型和训练记录；它不继承旧报告中的数字。
+`hvac_pid/` 是控制器、对象和学习算法；`experiments/` 编排运行、写出记录和生成站点数值表；`site/chapters/` 是手工维护的技术正文。`experiments/reference/` 保存一次附带参考运行，包括配置、CSV、曲线、模型和训练记录；它不继承旧报告中的数字。
 
-参考实验使用单一温度状态和等效扰动，没有把指令换算成真实空调功率，也没有设备驱动、网络服务部署或硬件安全逻辑。教程中的“在线”只表示在每个仿真决策区间内调用冻结策略；它不承诺已通过真实设备验收。
+参考实验使用单一温度状态和等效扰动，没有把指令换算成真实空调功率，也没有设备驱动、网络服务部署或硬件安全逻辑。正文中的“在线”只表示在每个仿真决策区间内调用冻结策略；它不承诺已通过真实设备验收。

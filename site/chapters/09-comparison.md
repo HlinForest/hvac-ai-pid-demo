@@ -1,58 +1,8 @@
 # 14 统一比较：把收益、失败和成本放在同一张表
 
-前面的章节让不同方法各自完成了一个实验。本章规定比较协议，再把 12 种方法放在同一对象、同一 120 分钟窗口、同一 IAE 计算下：
+前面的章节分别说明了各算法如何产生或调整 PI 增益。本章把 12 种方法放在同一对象、同一 120 分钟窗口、同一 IAE 计算下，区分标称收益、对象变化后的响应与整定成本。
 
-1. Z-N；
-2. SIMC；
-3. BO；
-4. FNN；
-5. Q-Learning；
-6. DQN；
-7. PPO；
-8. TD3；
-9. SAC；
-10. CrossQ；
-11. PG4PI-HVAC；
-12. LLM。
-
-这里的“12 种”是整定方法的数量，不是声称它们都在真实设备上部署过。现代 RL 方法使用 64×64 量级的小型 CPU 网络，目标是让读者看清动作、更新和失败方式，不是论文级 SOTA 排名。
-
-## 先生成同一批产物
-
-完整本地实验（包含新方法）使用：
-
-```bash
-python -m hvac_pid all --output outputs/tutorial
-python -m hvac_pid site --output outputs/tutorial --destination site
-```
-
-这会训练 Q-Learning、DQN、PPO、TD3、SAC、CrossQ，各 500 回合；运行 PG4PI-HVAC 的 500 条轨迹；生成 BO/FNN/LLM 记录并执行比较。LLM 没有合法 live 记录时，`all` 只保留 `not_run` 状态，不会发起隐式请求。缺少 CPU torch 时可明确跳过所有神经 RL：
-
-```bash
-python -m hvac_pid all --without-torch --output outputs/tutorial-numpy
-```
-
-这个别名等价于旧的 `--without-dqn`，会跳过 DQN、PPO、TD3、SAC、CrossQ；Q-Learning、BO、FNN、PG4PI 等不依赖 torch 的方法仍可运行。每种方法也可以单独运行，例如：
-
-```bash
-python -m hvac_pid ppo --episodes 500 --output outputs/tutorial
-python -m hvac_pid td3 --episodes 500 --output outputs/tutorial
-python -m hvac_pid sac --episodes 500 --output outputs/tutorial
-python -m hvac_pid crossq --episodes 500 --output outputs/tutorial
-python -m hvac_pid pg4pi --episodes 500 --output outputs/tutorial
-```
-
-每个命令的章节目录、`training.json`/`result.json`、曲线和解释记录由对应章节说明。统一的单步核对入口是：
-
-```bash
-python -m hvac_pid explain --method ppo --output outputs/tutorial
-python -m hvac_pid explain --method td3 --output outputs/tutorial
-python -m hvac_pid explain --method sac --output outputs/tutorial
-python -m hvac_pid explain --method crossq --output outputs/tutorial
-python -m hvac_pid explain --method pg4pi --output outputs/tutorial
-```
-
-`explain/<method>.json` 保存实际 helper 的中间量和一个单步/单批计算；它不是重新训练，也不会替换已保存的模型结果。
+这里的“12 种”是整定方法的数量，不是声称它们都在真实设备上部署过。新增连续 RL 方法使用 64×64 量级的小型 CPU 网络，用于解释动作、参数更新和失败机制，结果不构成跨任务算法排名。
 
 ## 两个问题，两个协议
 
@@ -95,21 +45,17 @@ Z-N、SIMC、BO、FNN、LLM、PG4PI-HVAC 使用标称 commissioning 得到的固
 
 看图时先找控制输出离开 1 的时刻，再看温度是否在扰动后回到目标附近，最后对照 IAE、过冷和 movement。一个在线策略在长延迟下 IAE 更低，可能同时带来更大输出变化；固定策略在标称对象上更好，也不表示它对负荷变化更稳。
 
-## 附带旧七方法的实际数字
+## 名义工况中，改善来自什么
 
-仓库已有参考运行（旧代码提交）对前七种方法给出这些标称指标；新五种方法的完整参考记录要等对应训练产物生成后由表格导入，教程不预先写训练数字：
+单个参考种子下，BO、FNN、LLM 的 IAE 分别为 48.7413、48.4676、48.4865，已经接近 Z-N 的 49.3479。它们都在闭环之前确定固定增益，因此这组结果说明当前对象的固定 PI 参数仍有调整空间，并不需要在线网络参与每个控制周期。
 
-| 方法 | 模式 | IAE / ℃·min | 最大过冷 / ℃ | movement |
-|---|---|---:|---:|---:|
-| Z-N | 固定 | 49.3479 | 0.0178 | 1.7473 |
-| SIMC | 固定 | 77.9950 | 0 | 1.3750 |
-| BO | 固定 | 48.7413 | 0.0577 | 2.3376 |
-| FNN | 固定 | 48.4676 | 0.0336 | 1.8116 |
-| LLM | 固定 | 48.4865 | 0.0337 | 1.8772 |
-| Q-Learning | 在线 | 72.0293 | 0.0297 | 5.1668 |
-| DQN | 在线 | 69.6565 | 0 | 2.9924 |
+默认 SIMC 的 IAE 为 77.9950，与其 λ=τ/3 的响应速度设定有关。TD3 的 68.6893、SAC 的 71.5726、CrossQ 的 59.9434 均低于这个基线，但不能据此推出所有在线方法都优于经典控制：同一参考种子的 PPO 为 78.5673，且上述网络方法仍未达到 Z-N 的 IAE。
 
-这些数来自 `experiments/reference/` 的实际 CSV/JSON，运行环境为 Python 3.11.7、NumPy 2.4.6、SciPy 1.17.1、scikit-learn 1.9.1、CPU torch 2.14.0。它们只是一个种子和一个简单对象上的记录；新的 PPO、TD3、SAC、CrossQ、PG4PI-HVAC 需要阅读各自 `training.json`/`result.json` 后再解释，不把预期结果写成事实。
+评价也不能止于误差积分。SAC 的输出总变化量为 4.7631，SIMC 为 1.3750；CrossQ 有 0.1560℃ 最大过冷。当前 reward 只包含负 IAE，并没有让网络同时最小化输出变化或过冷，所以这些副作用必须在独立指标中显示。
+
+各类方法的参数范围也不同。BO、LLM 和 PG4PI 的 Kp 搜索范围为 `[0.01,3]`，Ki 为 `[0.0001,0.5]`；在线 RL 被限定为 SIMC 锚点的 0.5 到 2 倍。名义对象下，在线 Kp 只能在约 `[0.1442,0.5769]` 内变化，Ki 在 `[0.00721,0.02885]` 内变化，而 Z-N 为 `(1.125,0.1689)`，已经在这个动作范围之外。因此当前比较同时包含算法结构、动作约束和训练预算的影响，不能仅凭 IAE 排序断言某种学习算法的能力上限。
+
+这些数值来自同一批 `experiments/reference/` CSV/JSON，运行环境为 Python 3.11.7、NumPy 2.4.6、SciPy 1.17.1、scikit-learn 1.9.1 和 CPU PyTorch 2.14.0。单种子用于解释具体轨迹，后面的五种子结果用于观察训练波动，两者回答的问题不同。
 
 ## 协议 B：十二个未见对象
 
@@ -158,28 +104,15 @@ RL 训练中的 reward 通常是两分钟区间 IAE 的负值，并使用 $\gamm
 python -m hvac_pid benchmark --output outputs/tutorial --samples 1000
 ```
 
-`benchmark` 在当前机器上实际计时固定策略和已保存的在线模型，写入 `outputs/tutorial/benchmark/result.json`、`timings.csv`；随后 `site` 命令读取这些数据生成表；它不把训练秒数、网络服务延迟或物理传感器时间混在一起。没有 torch 时使用 `--without-torch` 只测可用的 NumPy 方法。参考 CPU 数字会随线程、Python 和模型版本变化，因此应报告自己的 benchmark 文件，而不是复制别人的毫秒数。
+`benchmark` 在当前机器上实际计时固定策略和已保存的在线模型，写入 `outputs/tutorial/benchmark/result.json`、`timings.csv`；随后 `site` 命令读取这些数据生成表；它不把训练秒数、网络服务延迟或物理传感器时间混在一起。没有 torch 时使用 `--without-torch` 只测可用的 NumPy 方法。参考 CPU 数字会随线程、Python 和模型版本变化，具体测量环境和逐组件结果均保存在 benchmark 文件中。
 
 <!--@include: ../generated/benchmark.md-->
 
 这些是当前 CPU、batch=1、单 PyTorch 线程、100 次预热后 1000 次调用的实测值。基准在五种子训练结束后单独运行；训练耗时则保留实际运行期间的墙钟时间，部分种子曾并行运行，会受机器负载影响。模型文件大小不包含解释器、PyTorch 和临时张量。
 
-## 练习：改变一个预算，再做重复运行
+## 五种子重复结果与稳定性
 
-先只改变 RL/PG4PI 轨迹预算，保持种子和对象协议：
-
-```bash
-python -m hvac_pid all --episodes 100 --rounds 15 --output outputs/tutorial-budget100
-python -m hvac_pid explain --method all --output outputs/tutorial-budget100
-```
-
-这里只改变 `episodes`，BO/LLM 的 proposal rounds 保持 15。验证 `training.json`/`result.json` 中的 episodes、proposal rounds、仿真次数与命令一致，再检查 frozen/holdout 的图是否重新生成。不要用新预算得到的测试结果去改训练超参数描述。
-
-若要看随机性，运行五个种子：
-
-```bash
-python -m hvac_pid repeat --seeds 0 1 2 3 4 --output outputs/repeated
-```
+每个种子独立生成 BO 教师标签并训练策略，统一采用 500 回合或轨迹预算、15 次 BO 提案。重复比较用于量化初始化、探索和采样造成的差异，没有根据测试结果重新选择超参数。
 
 <!--@include: ../generated/repeats.md-->
 
@@ -193,7 +126,7 @@ python -m hvac_pid repeat --seeds 0 1 2 3 4 --output outputs/repeated
 
 复算数据：[逐种子冻结结果](/results/repeats/observations.json)、[逐对象测试结果](/results/repeats/holdout.json)、[各种子成本与配置](/results/repeats/runs.json)、[未见对象汇总](/results/repeats/holdout-summary.json)。经典方法没有随机训练，因此五次相同值的标准差为 0，不代表做过五次有噪声的物理辨识。
 
-这个命令会为每个种子重建训练和 BO 标签，报告均值、样本标准差和范围；它不是把同一个模型评估五遍。生成的 `downloads.md` 列出每章 JSON、CSV 和 SVG 的可下载路径：
+重复比较为每个种子重建训练和 BO 标签，报告均值、样本标准差和范围；它不是把同一个模型评估五遍。生成的 `downloads.md` 列出每章 JSON、CSV 和 SVG 的可下载路径：
 
 <details>
 <summary>展开全部实验数据、模型与图表下载</summary>
@@ -205,3 +138,15 @@ python -m hvac_pid repeat --seeds 0 1 2 3 4 --output outputs/repeated
 ## 解释边界
 
 这套比较能验证代码路径、预算、单位和对象变化下的行为。它不能把一维温度模型的结果直接换算成电费，也不能证明某个方法在真实建筑、其他传感器采样率或更长延迟下稳定。图中出现的优势和失败应回到对应 `trace`、动作记录和实际产物解释；没有生成的训练结果就留在“待运行”，不补一个好看的数字。
+
+## 结果复现入口
+
+完整本地计算与网站数据导出：
+
+```bash
+python -m hvac_pid all --episodes 500 --rounds 15 --output outputs/tutorial
+python -m hvac_pid site --output outputs/tutorial --destination site
+python -m hvac_pid repeat --seeds 0 1 2 3 4 --episodes 500 --rounds 15 --output outputs/repeated
+```
+
+`all` 会执行训练与比较，但不会隐式请求 LLM 服务。已有真实调用记录会被保留；没有记录时状态为 `not_run`。`--without-torch` 可明确省略 DQN 与四种连续神经策略，保留 NumPy 方法。各算法的 `explain` 命令导出实际更新的中间量，不替代完整训练。

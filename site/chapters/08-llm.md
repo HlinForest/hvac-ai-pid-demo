@@ -1,66 +1,173 @@
-# 13 LLM：读反馈，再试一组固定参数
+# 13 LLM：用工具调用提出下一组固定 PI 增益
 
-本章把整定器换成一个兼容 Chat Completions 工具调用的语言模型。模型每一轮读取已完成试验，调用一次 `evaluate_gains` 提出下一组固定 Kp、Ki；工具用项目自己的仿真器评分，再把结果放回下一轮消息。LLM 不在 0.1 分钟循环里控制制冷，也不直接写温度或执行器。
+本章的语言模型只负责提出候选。
+它读取已经完成的整定试验，通过兼容 Chat Completions 的工具调用提交 Kp、Ki 和一段理由。
+项目自己的 evaluate_gains 工具运行完整冷却仿真并返回指标，实验循环再把真实结果放回下一轮消息。
 
-## 先用无调用模式检查流程
+这条链路和 PI 的控制时钟分开。
+LLM 不在 0.1 min 温度循环里运行，不直接写温度或执行器，也没有权限跳过项目的参数校验。
+一次 live 运行结束后，只把实际已测的最佳增益交给固定 PI。
 
-下面的命令不会发起模型请求，只创建明确的 `not_run` 记录：
+仓库中的参考结果是一次已经保存的 15 轮记录。
+本地默认入口只生成明确的 not_run 状态，不需要外部服务。
+本文不发起任何 API 调用；外部服务的命令只作为接口边界和结果复现入口保留。
 
-```bash
-python -m hvac_pid llm --output outputs/tutorial
-```
+## LLM 改变的仍是两个 PI 增益
 
-要进行真实调用，必须显式加 `--live`，并把密钥放在环境变量中：
+模型提出的工具参数是 Kp、Ki 两个正数。
+Kp 的单位是 ℃⁻¹，Ki 的单位是 (℃·min)⁻¹。
+固定到控制器后，每个物理步仍执行：
 
-```powershell
-$env:LLM_BASE_URL = "https://api.deepseek.com"
-$env:LLM_MODEL = "deepseek-flash"
-$env:DEEPSEEK_API_KEY = "你的密钥"
-python -m hvac_pid llm --live --key-env DEEPSEEK_API_KEY --reasoning-effort none
-```
+$$
+I^\prime=I+K_i e\Delta t,\qquad
+u=\operatorname{clip}_{[0,1]}(K_p e+I).
+$$
 
-这里的占位符只说明变量位置；不要把真实密钥写进命令历史、Markdown、`result.json` 或截图。程序只保存请求消息、响应、仿真结果和接口返回的 usage，不保存 Authorization 请求头。也可以用 `--base-url`、`--model`、`--key-env` 接入兼容接口；项目不会自动从 `.env` 读取密钥。
+PI 的条件积分规则、对象的一个温度状态、2 min 输入延迟和 1200 步评价窗口都不由模型修改。
+模型只看完成一轮试验后的标量反馈，不能在试验内部干预温度轨迹。
 
-真实运行和解释命令：
+每轮模型提案的边界为：
 
-```bash
-python -m hvac_pid explain --method llm --output outputs/tutorial
-```
+$$
+0.01\le K_p\le3,\qquad
+0.0001\le K_i\le0.5.
+$$
 
-`--live` 最多默认 15 轮模型提案；不加 `--live` 不会用规则或 SIMC 假装完成。
+边界在 system 消息中说明一次，并在 Python 侧用 in_bounds() 再检查一次。
+越界候选不会被静默裁剪到最近边界。
 
-## 一轮请求的输入和输出
+## 第一条请求的消息结构
 
-模型看到的是一个消息列表，不是张量。第一轮消息包含：
+ChatClient.__call__ 构造一个 JSON 请求。
+它包含 model、messages、一个工具定义、强制的 tool_choice，以及 temperature=0。
+若调用参数带 reasoning_effort，代码也把它写入请求。
+URL 是 base_url 去掉末尾斜杠后拼接 /chat/completions。
 
-| 字段 | 形状/类型 | 单位或含义 |
-|---|---|---|
-| `identified_model` | 对象 3 个标量 | gain/℃、tau/min、delay/min |
-| `experiment` | 对象 7 个标量 | 环境、目标、采样和扰动配置 |
-| `initial_trials` | 长度 5 的数组 | Z-N、SIMC 和 3 个随机样本的完整指标 |
-| `proposal_budget` | 标量整数 | 剩余模型提案数 |
+第一轮 messages 有两条：
 
-工具参数是一个对象 `{kp: number, ki: number, reason: string}`，Kp 单位是 ℃^-1，Ki 是 (℃·min)^-1。参数边界为 Kp `[0.01,3]`、Ki `[0.0001,0.5]`。工具返回一个 trial 对象，包含标量 IAE（℃·min）、过冷、movement、状态和试验编号。
+| 消息 | 内容 | 形状或单位 |
+| --- | --- | --- |
+| system | 控制方向、目标、单位、边界、每轮一个工具调用的约束 | 字符串 |
+| user | identified_model、experiment、initial_trials、proposal_budget | JSON 对象 |
 
-消息历史会逐轮增长：模型的 tool call 和工具反馈被追加到列表中。如果接口没有返回带 id 的标准 tool call，代码会退回把反馈作为 user 消息继续；它不会把失败提案改写成成功提案。每轮只允许一个 `evaluate_gains` 调用。
+identified_model 有 gain、tau、delay 三个标量。
+默认参考值是 K=8 ℃、tau=20 min、delay=2 min。
+experiment 从 Scenario 中排除 gain、tau、delay，留下 ambient、initial、setpoint、dt、duration、disturbance_at、disturbance 七个标量。
 
-## 实际参考运行的前三轮
+initial_trials 是长度 5 的数组。
+每一项包含 trial、source、kp、ki、iae、undershoot、movement 和 status 等字段。
+proposal_budget 是剩余模型提案轮数，默认是 15。
+模型看见的是辨识值和已完成的整段试验摘要，不是实时温度张量。
 
-附带 `experiments/reference/08-llm/result.json` 是一次 15 轮真实记录。前五次初始仿真与 BO 完全相同。模型的前三个建议和工具返回是：
+工具定义名为 evaluate_gains：
 
-| 轮次 | Kp | Ki | IAE / ℃·min | 发生了什么 |
-|---:|---:|---:|---:|---|
-| 1 | 1.08 | 0.20 | 48.6172 | 在当前最好点 1.034/0.238 和 Z-N 附近取中间值 |
-| 2 | 1.15 | 0.22 | 48.7495 | 更大增益反而变差 |
+$$
+\{\mathrm{kp}:\mathrm{number},\
+\mathrm{ki}:\mathrm{number},\
+\mathrm{reason}:\mathrm{string}\}.
+$$
+
+三个字段都是 required，additionalProperties=false。
+tool_choice 要求接口调用这个函数，代码随后仍会验证响应中是否真的只有一个同名工具调用。
+reason 只是追踪信息，不是评价函数，也不会覆盖仿真返回的 IAE。
+
+## 一轮请求怎样形成闭环反馈
+
+live tune() 先做一次 identify()，再运行五个初始样本：
+ZN、SIMC 和三个 seed 控制的 log 空间随机点。
+这五次完整仿真先写入 result 状态和 messages。
+
+每轮开始时，代码复制当前 messages 作为 sent_messages。
+调用计数 calls 先加一，随后把 sent_messages 交给 ChatClient 或注入的测试 client。
+响应原文和本轮耗时都会进入 exchanges，usage 也从响应体保存到 cost.usage。
+
+如果响应带有带 id 的标准 tool call，下一轮消息追加：
+
+1. assistant 消息，其中保留模型的 tool_calls；
+2. tool 消息，其中 tool_call_id 对应该 id，content 是 JSON 编码的 trial 和剩余轮数。
+
+如果工具调用没有 id，代码走一个兼容分支，把同一反馈作为 user 消息追加。
+这不是把模型的响应改写成成功结果，只是改变下一轮上下文的消息角色。
+每轮最多允许一个 evaluate_gains 调用。
+
+## 参数解析和试验生命周期
+
+解析阶段先要求 calls 的长度为 1，函数名必须是 evaluate_gains。
+arguments 通过 JSON 解析，键集合必须恰好是 kp、ki、reason。
+reason 必须是非空字符串，kp 和 ki 的类型必须严格是 int 或 float。
+布尔值不会因为在 Python 中属于 int 子类而被接受，因为代码检查的是精确类型。
+
+随后构造 Gains。
+Gains 先拒绝非有限或负数，in_bounds() 再检查 BO/LLM 共用的上下界。
+实现没有自动取绝对值、补缺省字段或截断数值。
+
+参数全部通过后，run_trial() 调用 evaluate(scenario, candidate)。
+这次仿真返回 IAE、undershoot、movement、seconds 和 status=evaluated。
+trial 的 source 为 LLM，并附上 round 和模型给出的 reason。
+cost.simulations 加一，cost.plant_steps 增加一个 Scenario.steps，即 1200。
+
+如果 JSON 解析、字段、类型、Gains 或边界检查失败，内层异常捕获会生成：
+
+| 字段 | 值 |
+| --- | --- |
+| trial | 当前列表长度 |
+| round | 当前模型轮次 |
+| source | LLM |
+| status | invalid |
+| error | 校验错误文本 |
+
+invalid trial 会进入 trials，也会带着 remaining_rounds 反馈给下一轮。
+它消耗一次模型调用和一轮提案预算，但不增加仿真次数。
+best_gains() 只从 status=evaluated 的行选择，因此 invalid 不可能伪装成一个增益结果。
+
+## 网络失败和解析失败是两条不同路径
+
+如果 url 请求抛出异常，或者响应没有 choices、message 或合法的 tool_calls 列表，外层 catch 会将运行标为 incomplete。
+exchanges 保存本轮 request、错误类型和耗时。
+当前请求不会生成 trial，已经完成的初始仿真和前面有效 trial 保留在 result.json。
+
+这条路径没有重试，没有供应商切换，也没有用 SIMC 或 ZN 填补缺失轮次。
+调用次数已经增加，所以 cost.calls 能显示“尝试过一次请求”，而 cost.simulations 不会假装增加。
+
+如果响应结构通过外层检查，但 arguments 不满足字段、类型或边界条件，则走 invalid trial 路径。
+这种差别让保存的 result 可以区分网络不可用和模型给出不合法候选。
+两种失败都不会把一个未运行的仿真写成 evaluated。
+
+当所有提案轮次完成时，代码从 evaluated 行取实际 IAE 最小者。
+初始五个 trial 总是先于模型调用完成，所以即使所有模型调用都 invalid，仍有可追踪的初始结果。
+停止原因按最终最佳是否低于初始五次最佳记录为 budget exhausted; improved initial samples 或 no improvement over initial samples。
+
+## 参考运行的真实记录
+
+附带记录的默认对象仍是 K=8、tau=20、delay=2，采样 0.1 min，时长 120 min。
+初始五次与 BO 章节完全相同：
+
+| 来源 | Kp | Ki | IAE / ℃·min |
+| --- | ---: | ---: | ---: |
+| ZN | 1.125000 | 0.168919 | 49.3479 |
+| SIMC | 0.288462 | 0.014423 | 77.9950 |
+| random | 0.378296 | 0.000995 | 195.8128 |
+| random | 0.012633 | 0.000115 | 645.4688 |
+| random | 1.034115 | 0.237824 | 48.7413 |
+
+前三轮模型提案分别是：
+
+| 轮次 | Kp | Ki | IAE / ℃·min | 上下文变化 |
+| ---: | ---: | ---: | ---: | --- |
+| 1 | 1.08 | 0.20 | 48.6172 | 在初始最好点和 ZN 附近取中间值 |
+| 2 | 1.15 | 0.22 | 48.7495 | 更大的两个增益反而变差 |
 | 3 | 1.05 | 0.19 | 48.5851 | 读到变差后向较小增益移动 |
 
-这些数字来自工具实际运行的 120 分钟仿真，不是模型自己写进理由的分数。第二轮的 IAE 比第一轮高，程序没有替换成 SIMC，也没有隐藏这条记录；它把 `48.7495373970` 反馈给下一轮。
+第二轮的 48.7495373970 来自仿真工具。
+它没有被模型理由中的“趋势”替换，仍然作为下一轮 user/tool feedback 的结果出现。
 
-## 历史最佳和曲线
+第 15 轮提出 Kp=1.02、Ki=0.192，实际 IAE 为 48.4864992382。
+相对初始最佳 48.7412801021，下降约 0.52%。
+该最佳响应的最大过冷是 0.0336830 ℃，movement 是 1.8771968。
 
 ![DeepSeek Flash 十五轮真实提案及历史最佳值](/results/08-llm/search.svg)
 
-初始五次的最佳 IAE 是 `48.7412801021`。第 15 轮建议 `Kp=1.02, Ki=0.192`，实际 IAE 是 `48.4864992382`，相对初始最佳约降低 0.52%。附带最佳响应的最大过冷是 `0.0336830℃`，movement 是 `1.8771968`。
+<!--@include: ../generated/llm-trials.md-->
 
 ![DeepSeek 最佳参数对应的温度与输出](/results/08-llm/response.svg)
 
@@ -68,57 +175,82 @@ python -m hvac_pid explain --method llm --output outputs/tutorial
 
 <!--@include: ../generated/llm-status.md-->
 
-这次 15 次调用的记录用量合计为输入 47,059 tokens、输出 1,730 tokens，其中缓存命中字段合计 42,880；这些是接口返回的统计，不在教程里据此推算费用。附带运行耗时约 `89.1399 s`，机器、网络和模型服务变化后不能复用这个时间。
+参考记录的 15 次调用共保存输入 47,059 tokens、输出 1,730 tokens，其中缓存命中合计 42,880。
+usage 是接口返回的统计，不从 token 数推算费用。
+该记录的 base_url 是 api.deepseek.com，模型为 deepseek-flash，reasoning_effort 为 none。
+结果中还保存 calls=15、simulations=20、plant_steps=24,000、identification_steps=2,400。
 
-## 实验循环的代码边界
+参考机器的总墙钟约 89.1399 s。
+它包含网络服务耗时和本地仿真，不能作为其他网络、模型或设备的延迟保证。
+Authorization 请求头不写入 result.json；保存的是 messages、响应、工具结果和 usage。
 
-LLM 只负责提案，三个角色各有清晰边界：
+## 为什么模型理由不等于控制指标
 
-| 角色 | 责任 |
-|---|---|
-| LLM | 从历史和约束中提出 Kp、Ki，并给出理由 |
-| `evaluate_gains` | 用固定参数跑完整仿真，返回统一指标 |
-| 实验循环 | 校验参数、保存 exchanges、计数预算、选实际已测最佳 |
+reason 字段允许记录模型怎样解释一次提案，但评价函数只读温度轨迹。
+参考第二轮的理由认为增益继续增大可能有益，真实 IAE 却比第一轮更高。
+实验循环不接受模型自报的分数，也不因为理由听起来合理而跳过 evaluate_gains。
 
-代码先通过 `Gains` 检查有限且非负，再通过 proposal bounds 检查范围。它不会静默裁剪越界值。模型返回两个 tool call、错误函数名、缺少 reason、非数字参数或越界参数时，本轮标记为 `invalid`，消耗提案轮数，但不增加仿真次数。
+历史最佳曲线只记录目前已经测到的最小 IAE。
+后续 trial 变差不会让历史最佳上升，也不会从 trials 中删除。
+因此一条下降曲线只能说明“曾经测到的最好值”，不能说明每一轮都改善。
 
-若网络请求抛出异常，状态变为 `incomplete`，已经完成的初始和前几轮 trial 保留，当前请求及错误类型写进 `exchanges`。没有自动重试、供应商切换或用经典规则填补缺失轮次。完成 15 轮后，程序从所有 `status=evaluated` 的 trial 中选择实际 IAE 最低的一项；最佳项可以是初始样本。
+LLM 也没有看到真实的 K、tau、delay，只看到阶跃辨识结果。
+辨识偏差、固定场景、扰动配置和单对象预算都会限制它的搜索。
+它没有从多对象历史中学习一个可加载的模型，result.json 也不是可部署的网络权重。
 
-<!--@include: ../generated/llm-trials.md-->
+## 服务和仿真边界
 
-## 失败方式：理由听起来对，实验结果却更差
+模型请求发生在完整仿真之外。
+一次有效工具调用对应一个固定候选和一个完整 120 min 仿真；模型不会在 1200 个物理步之间插入控制动作。
+默认 15 次提案加 5 次初始试验，所以最多 20 次仿真和 24,000 个闭环步。
 
-语言模型的理由不是评分函数。参考第二轮给出“再提高一点”的理由，但真实 IAE 变差；工具返回的数字才改变下一轮上下文。模型也可能反复试很接近的参数，或在有限预算内没有超过初始样本。曲线中历史最佳折线只会下降，不能把它当作每一轮试验都改善。
+在线控制阶段只保留最终 Kp、Ki。
+PI 每 0.1 min 计算一个标量指令，LLM 调用次数为 0。
+若对象参数、负荷或延迟发生变化，当前流程不会自动重新整定，除非外部 commissioning 流程再次提供场景并启动实验。
 
-另一个边界是上下文和成本：每轮消息包含更长的历史，因此输入 token 会增长；工具仿真仍要占 CPU。模型没有看到真实 $K,\tau,L$，只看到阶跃辨识结果；若辨识错误，模型的搜索会在错误的对象描述上进行。它也只在固定标称对象上试验，不会自动学习延迟变化或跨设备的稳定性。
+服务成本和可用性来自外部接口：
+上下文消息随着历史增长，输入 token 逐轮增加，网络或服务失败会直接终止当前 run。
+代码没有声称某个 provider 的稳定性、费用、实时延迟或输出格式永远不变。
+比较命令也不会为 12 个 holdout 对象隐式发起 LLM 请求。
 
-## 练习：缩短提案预算并核对一次反馈
+## 产物和下载
 
-先跑一个不需要服务的结构检查：
+| 产物 | 作用 |
+| --- | --- |
+| result.json | 状态、最佳增益、trial、exchanges、usage 和成本 |
+| LLM.csv | 最佳候选对应的温度、输出和固定增益 |
+| metrics.json | IAE、过冷、movement |
+| search.svg | 参数提案与历史最佳 |
+| response.svg | 最佳闭环响应 |
+| explain/llm.json | 前两条已保存 exchange 的结构摘要 |
+
+本章数据下载：[完整结果](/results/08-llm/result.json)、[响应 CSV](/results/08-llm/LLM.csv)、[指标](/results/08-llm/metrics.json)。
+
+## 结果复现入口
+
+不访问服务的本地状态入口是：
 
 ```bash
-python -m hvac_pid llm --rounds 3 --output outputs/llm-not-live
+python -m hvac_pid llm --output outputs/tutorial
 ```
 
-它应生成 `status=not_run`，`cost.calls=0`，而不是生成模型结果。若已经有合法的服务配置，再显式运行：
+它写入 status=not_run、calls=0 的 result.json。
+解释命令只读取已有记录，代码明确写入 note 表示不会调用 API：
 
 ```bash
-python -m hvac_pid llm --live --rounds 3 --key-env DEEPSEEK_API_KEY --reasoning-effort none --output outputs/llm-three
-python -m hvac_pid explain --method llm --output outputs/llm-three
+python -m hvac_pid explain --method llm --output outputs/tutorial
 ```
 
-验证五个初始 trial 加三轮模型 trial 是否共 8 次仿真；读 `result.json` 的任一轮：
+参考记录的接口配置形式如下，真实密钥只应通过外部环境变量提供：
 
-1. request 中是否有上一轮完整结果；
-2. response 是否恰好有一个 `evaluate_gains` 调用；
-3. trial 的 IAE 是否来自仿真返回，而非 reason；
-4. 下一轮消息是否包含该 trial；
-5. 任何越界或服务错误是否只增加记录而不伪造仿真。
+```powershell
+$env:LLM_BASE_URL = "https://api.deepseek.com"
+$env:LLM_MODEL = "deepseek-flash"
+$env:DEEPSEEK_API_KEY = "接口密钥"
+python -m hvac_pid llm --live --key-env DEEPSEEK_API_KEY --reasoning-effort none --output outputs/live
+```
 
-练习可能产生真实接口费用，预算和服务配置由操作者决定；教程不会在 `compare` 或 `all` 中隐式发起调用。
+live 是显式外部服务入口，会产生 provider 的网络请求和可能的服务费用；本章附带数字来自已保存的 reference result.json。
+更改 rounds 会改变模型调用预算和仿真次数，更改 base-url、model 或 key-env 会改变服务配置，不能与 reference 记录混合解释。
 
-## 在线位置和 CPU 成本
-
-LLM 适合离线 commissioning 或低频人工监督的整定建议。每轮模型请求和完整仿真都发生在控制闭环外，默认 15 次提案加 5 次初始仿真，共 20 次 1200 步闭环模拟；参考 `result.json` 的本地仿真部分约为 24,000 个物理步。真正的在线控制仍是 PI 每 0.1 分钟执行一次，固定 Kp、Ki 不需要调用模型。
-
-因此 LLM 的主要成本是外部服务延迟、token 和网络可用性，而不是部署一个神经网络到控制器上。密钥管理、网络隔离和审批属于服务接入工程；本项目只保留兼容接口记录，不把它描述成设备端部署。下一章把所有方法放在统一的冻结工况和新对象测试中，分开观察收益、失败和成本。
+下一章把固定参数方法和低频在线策略放到统一工况与未见对象协议下比较。
